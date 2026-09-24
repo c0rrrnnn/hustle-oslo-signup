@@ -333,43 +333,73 @@ main {
   position: relative;
   aspect-ratio: 1 / 1;
   max-height: 280px;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(223, 128, 38, 0.45), transparent 50%),
-    radial-gradient(circle at 75% 60%, rgba(78, 131, 177, 0.5), transparent 45%),
-    linear-gradient(160deg, #3d2478 0%, var(--purple) 40%, var(--deep-blue) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  background-color: var(--purple);
+  background-image: url("assets/hero-poster.jpg");
+  background-size: cover;
+  background-position: center 42%;
 }
 
-.hero-visual-inner {
-  text-align: center;
-  padding: 1.5rem;
+.hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  display: block;
+  pointer-events: none;
+  background: transparent;
 }
 
-.hero-mark {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 1rem;
-  border-radius: 22px;
-  background:
-    linear-gradient(145deg, var(--orange), #c96e1c 45%, var(--cream) 100%);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+.hero-video::-webkit-media-controls,
+.hero-video::-webkit-media-controls-enclosure,
+.hero-video::-webkit-media-controls-panel,
+.hero-video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Bottom scrim keeps the venue chip readable over the dance floor. */
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 38%;
+  background: linear-gradient(to top, rgba(18, 10, 40, 0.62), rgba(18, 10, 40, 0));
+  pointer-events: none;
+  z-index: 1;
 }
 
 .hero-visual-label {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
+  max-width: calc(100% - 1.5rem);
   gap: 0.4rem;
   padding: 0.4rem 0.85rem;
   border-radius: var(--radius-pill);
-  background: rgba(18, 10, 40, 0.65);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(18, 10, 40, 0.86);
   color: var(--cream);
   font-size: 0.78rem;
   font-weight: 600;
-  border: 1px solid var(--border);
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(252, 248, 230, 0.28);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-video {
+    display: none;
+  }
 }
 
 .hero-body {

@@ -23,6 +23,8 @@ A preview server may already be running on port **8765** on the shared box.
 |------|---------|
 | `index.html` | Markup (semantic form, skip link, live regions) |
 | `styles.css` | Brand + WCAG-oriented styles |
+| `assets/hero.mp4` | Intro hero loop (muted, no audio). 676 KB, 768×576, H.264, faststart. Compressed from the 1.9 MB 1024×768 source. |
+| `assets/hero-poster.jpg` | First-frame still (41 KB) for reduced motion and before playback. |
 | `events.js` | Upcoming nights + ticket catalogue (edit here for new dates) |
 | `app.js` | Wizard flow (4 steps), validation, Vipps + transaction # |
 | `apps-script/Code.gs` | Google Apps Script: Sheet tabs + email notify |
