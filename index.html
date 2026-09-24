@@ -49,12 +49,49 @@
     <!-- Panel 1: Landing / hero -->
     <section class="panel active card" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
       <div class="hero-card">
-        <div class="hero-visual" aria-hidden="true">
-          <div class="hero-visual-inner">
-            <div class="hero-mark"></div>
-            <span class="hero-visual-label">Sentralen · Oslo</span>
-          </div>
+        <div class="hero-visual">
+          <video
+            id="hero-video"
+            class="hero-video"
+            muted
+            loop
+            playsinline
+            preload="none"
+            poster="assets/hero-poster.jpg"
+            disablepictureinpicture
+            disableremoteplayback
+            tabindex="-1"
+            aria-hidden="true"
+          >
+            <source src="assets/hero.mp4" type="video/mp4" />
+          </video>
+          <span class="hero-visual-label">Sentralen · Oslo</span>
         </div>
+        <script>
+          (function () {
+            var video = document.getElementById("hero-video");
+            if (!video || !window.matchMedia) return;
+            var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            function applyHeroMotion() {
+              if (motion.matches) {
+                video.removeAttribute("autoplay");
+                video.preload = "none";
+                video.pause();
+                try { video.currentTime = 0; } catch (err) {}
+              } else {
+                video.muted = true;
+                video.preload = "auto";
+                video.setAttribute("autoplay", "");
+                var pending = video.play();
+                if (pending && typeof pending.catch === "function") pending.catch(function () {});
+              }
+            }
+            applyHeroMotion();
+            if (typeof motion.addEventListener === "function") {
+              motion.addEventListener("change", applyHeroMotion);
+            }
+          })();
+        </script>
         <div class="hero-body">
           <h2 id="intro-heading">Come dance with us</h2>
           <p class="hero-meta">Friendly hustle classes and social nights. Beginners welcome.</p>
