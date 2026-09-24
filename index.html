@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Sign up for Hustle Oslo dance classes and social nights at Sentralen, Oslo." />
-  <meta name="theme-color" content="#2e195e" />
+  <meta name="theme-color" content="#120a28" />
   <title>Hustle Oslo — Class signup</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -26,10 +26,8 @@
         href="https://www.instagram.com/hustleoslo/"
         target="_blank"
         rel="noopener noreferrer"
-      >
-        <span aria-hidden="true">◎</span>
-        @hustleoslo on Instagram
-        <span class="visually-hidden">(opens in a new tab)</span>
+      >Contact
+        <span class="visually-hidden"> — @hustleoslo on Instagram (opens in a new tab)</span>
       </a>
     </div>
   </header>
@@ -42,13 +40,36 @@
       <span class="step-pill" data-step="4" aria-current="false">4 · Details</span>
     </nav>
 
-    <!-- Panel 1: Landing -->
+    <!-- Panel 1: Landing / hero -->
     <section class="panel active card" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
-      <h2 id="intro-heading">Come dance with us</h2>
-      <p class="lead">
-        Friendly hustle classes and social nights in Oslo. Beginners welcome —
-        we’ll take care of the rest.
-      </p>
+      <div class="hero-card">
+        <div class="hero-visual" aria-hidden="true">
+          <div class="hero-visual-inner">
+            <div class="hero-mark"></div>
+            <span class="hero-visual-label">Sentralen · Oslo</span>
+          </div>
+        </div>
+        <div class="hero-body">
+          <h2 id="intro-heading">Come dance with us</h2>
+          <p class="hero-meta">Friendly hustle classes and social nights. Beginners welcome.</p>
+          <span class="price-badge">From 50 kr</span>
+          <div class="hero-actions">
+            <button type="button" class="btn btn-primary" id="btn-start" data-go="2">
+              Pick a date
+            </button>
+            <a
+              class="btn btn-secondary"
+              href="https://www.instagram.com/hustleoslo/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Instagram
+              <span class="visually-hidden">(opens in a new tab)</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
       <ul class="one-liners">
         <li>
           <span class="one-liner-icon" aria-hidden="true">✓</span>
@@ -70,11 +91,6 @@
         <strong>Need to cancel?</strong>
         DM Hustle Oslo on Instagram — payment is transferable to the next class.
       </p>
-      <div class="actions">
-        <button type="button" class="btn btn-primary btn-block" id="btn-start" data-go="2">
-          Pick a date
-        </button>
-      </div>
     </section>
 
     <!-- Panel 2: Date -->
@@ -91,17 +107,20 @@
       <p class="empty-state" id="no-events" hidden>
         No upcoming nights right now — check back soon, or follow us on Instagram.
       </p>
-      <div class="actions">
+      <div class="actions actions--sticky">
         <button type="button" class="btn btn-secondary" data-go="1">Back</button>
         <button type="button" class="btn btn-primary" id="btn-to-ticket" data-go="3" disabled>
-          Continue
+          Next
         </button>
       </div>
     </section>
 
     <!-- Panel 3: Ticket — schedule ABOVE ticket choices once date chosen -->
     <section class="panel card" id="panel-3" data-panel="3" aria-labelledby="ticket-heading" hidden>
-      <h2 id="ticket-heading">Choose your ticket</h2>
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <div class="sheet-header">
+        <h2 id="ticket-heading">Select Ticket</h2>
+      </div>
       <p class="lead" id="ticket-event-summary"></p>
 
       <div id="ticket-schedule"></div>
@@ -131,21 +150,35 @@
         </fieldset>
       </div>
 
-      <div class="actions">
+      <div class="actions actions--sticky">
         <button type="button" class="btn btn-secondary" data-go="2">Back</button>
         <button type="button" class="btn btn-primary" id="btn-to-details" data-go="4" disabled>
-          Continue
+          Next
         </button>
       </div>
     </section>
 
     <!-- Panel 4: Details + Vipps payment proof -->
     <section class="panel card" id="panel-4" data-panel="4" aria-labelledby="details-heading" hidden>
-      <h2 id="details-heading">Your details</h2>
+      <h2 id="details-heading">Registration</h2>
+
+      <div class="reg-hero" id="reg-hero" aria-hidden="false">
+        <div class="reg-thumb" aria-hidden="true"></div>
+        <div class="reg-hero-text">
+          <p class="reg-hero-title" id="reg-hero-title"></p>
+          <p class="reg-hero-meta" id="reg-hero-meta"></p>
+        </div>
+      </div>
 
       <div id="details-schedule"></div>
 
-      <div class="summary-box" id="details-summary" aria-live="polite"></div>
+      <p class="section-label">Ticket</p>
+      <div class="ticket-summary-row" id="ticket-summary-row">
+        <span class="ts-name" id="ts-name"></span>
+        <span class="ts-price" id="ts-price"></span>
+      </div>
+
+      <div class="summary-box" id="details-summary" aria-live="polite" hidden></div>
 
       <form id="signup-form" novalidate>
         <p class="form-live" id="form-live" role="alert" aria-live="assertive"></p>
@@ -314,10 +347,14 @@
           </p>
         </div>
 
-        <div class="actions">
+        <div class="actions actions--sticky">
+          <div class="sticky-total" id="sticky-total">
+            <span class="st-label">Total</span>
+            <span class="st-amount" id="sticky-amount"></span>
+          </div>
           <button type="button" class="btn btn-secondary" data-go="3">Back</button>
           <button type="submit" class="btn btn-primary" id="btn-submit" disabled>
-            Submit signup
+            Continue
           </button>
         </div>
       </form>
@@ -354,7 +391,7 @@
       </p>
 
       <div class="actions">
-        <button type="button" class="btn btn-secondary" id="btn-new-signup">
+        <button type="button" class="btn btn-secondary btn-block" id="btn-new-signup">
           Book another night
         </button>
       </div>

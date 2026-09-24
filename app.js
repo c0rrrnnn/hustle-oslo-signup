@@ -225,9 +225,12 @@
       li.innerHTML = `
         <input type="radio" name="event" id="${id}" value="${escapeHtml(ev.id)}" ${checked} />
         <label for="${id}">
-          <p class="event-date">${escapeHtml(formatEventDate(ev))}</p>
-          <p class="event-meta">${escapeHtml(ev.location)} · ${escapeHtml(ev.venue)} · ${escapeHtml(ev.start)}–${escapeHtml(ev.end)}</p>
-          ${badge}
+          <span class="radio-check" aria-hidden="true"></span>
+          <span class="option-body">
+            <p class="event-date">${escapeHtml(formatEventDate(ev))}</p>
+            <p class="event-meta">${escapeHtml(ev.location)} · ${escapeHtml(ev.venue)} · ${escapeHtml(ev.start)}–${escapeHtml(ev.end)}</p>
+            ${badge}
+          </span>
         </label>`;
       list.appendChild(li);
     });
@@ -273,12 +276,19 @@
         : `<span class="price-chip"><span class="amount">${std} kr</span> <span class="tier-label">standard</span></span>
            <span class="price-chip"><span class="amount">${stu} kr</span> <span class="tier-label">student</span></span>`;
       const checked = state.ticket && state.ticket.id === t.id ? "checked" : "";
+      const priceLine = samePrice
+        ? `${std} kr`
+        : `${std} kr`;
       li.innerHTML = `
         <input type="radio" name="ticket" id="${id}" value="${escapeHtml(t.id)}" ${checked} />
         <label for="${id}">
-          <p class="ticket-name">${escapeHtml(t.name)}</p>
-          <p class="ticket-note">${escapeHtml(t.note)}</p>
-          <div class="price-tiers">${priceBits}</div>
+          <span class="radio-check" aria-hidden="true"></span>
+          <span class="option-body">
+            <p class="ticket-name">${escapeHtml(t.name)}</p>
+            <p class="ticket-price">${priceLine}</p>
+            <p class="ticket-note">${escapeHtml(t.note)}</p>
+            <div class="price-tiers">${priceBits}</div>
+          </span>
         </label>`;
       list.appendChild(li);
     });
@@ -328,6 +338,7 @@
         ? ""
         : ` (${state.priceTier})`;
     el.innerHTML = `Selected: <strong>${amt} kr</strong>${tierLabel}`;
+    updateStickyTotal();
   }
 
   // ─── Details panel ────────────────────────────────────────────────────────
@@ -335,7 +346,10 @@
     const box = $("#details-summary");
     const scheduleHost = $("#details-schedule");
     if (!state.event || !state.ticket) {
-      box.innerHTML = "";
+      if (box) {
+        box.innerHTML = "";
+        box.hidden = true;
+      }
       if (scheduleHost) scheduleHost.innerHTML = "";
       return;
     }
@@ -345,7 +359,26 @@
       state.ticket.prices.standard === state.ticket.prices.student
         ? ""
         : ` · ${state.priceTier}`;
-    box.innerHTML = `
+
+    const heroTitle = $("#reg-hero-title");
+    const heroMeta = $("#reg-hero-meta");
+    if (heroTitle) {
+      heroTitle.textContent =
+        state.event.type === "class" ? "Hustle Oslo class night" : "Hustle Oslo social night";
+    }
+    if (heroMeta) {
+      heroMeta.textContent = `${formatEventDate(state.event)}, ${state.event.start}–${state.event.end}`;
+    }
+
+    const tsName = $("#ts-name");
+    const tsPrice = $("#ts-price");
+    if (tsName) tsName.textContent = `${ticketLabel(state.ticket)}${tier}`;
+    if (tsPrice) tsPrice.textContent = `${amt} kr`;
+
+    // Keep a compact accessible summary for screen readers / fallback
+    if (box) {
+      box.hidden = true;
+      box.innerHTML = `
       <dl>
         <dt>Night</dt>
         <dd>${escapeHtml(formatEventDate(state.event))} · ${escapeHtml(state.event.location)}</dd>
@@ -354,8 +387,22 @@
         <dt>Amount</dt>
         <dd>${amt} kr · Vipps #${CONFIG.VIPPS_NUMBER}</dd>
       </dl>`;
+    }
 
     $("#details-amount").textContent = `${amt} kr`;
+    updateStickyTotal();
+  }
+
+  function updateStickyTotal() {
+    const amt = currentAmount();
+    const sticky = $("#sticky-amount");
+    const btn = $("#btn-submit");
+    if (sticky) sticky.textContent = state.ticket ? `${amt} kr` : "";
+    if (btn && state.ticket) {
+      btn.textContent = `Continue · ${amt} kr`;
+    } else if (btn) {
+      btn.textContent = "Continue";
+    }
   }
 
   function setFirstTimerVisibility() {
