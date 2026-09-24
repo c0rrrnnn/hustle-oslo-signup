@@ -33,7 +33,7 @@ A preview server may already be running on port **8765** on the shared box.
 - **Class nights:** Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00  
 - **Social-only nights:** Social 18:00–21:00  
 - Once a date is chosen, that schedule appears **above** ticket/details fields.
-- Class tickets: Beginners 150/100 · Intermediate 150/100 · Same-night bundle 220/150 · Social only 50. Class booking includes social after. Student = honour system. No caps.
+- Class tickets: Beginners class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 · Social only 50. Class booking includes social after. Student = honour system. No caps.
 - Social-only nights: 50 kr only.
 - Book anytime before **18:00** on the day (Europe/Oslo). Past nights are hidden.
 - First-timers: experience + how found are **optional** (shown unless they check “I’ve attended Hustle Oslo before”, which hides them). “Other” how-found requires a short reason only when selected.

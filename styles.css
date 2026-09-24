@@ -732,13 +732,6 @@ main {
   color: var(--cream);
 }
 
-.ticket-price {
-  margin: 0.25rem 0 0;
-  font-size: 0.95rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-
 .ticket-note {
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
@@ -749,7 +742,7 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.55rem;
+  margin-top: 0.45rem;
 }
 
 .price-chip {
@@ -775,21 +768,16 @@ main {
   font-size: 0.75rem;
 }
 
-.tier-select {
-  margin-top: 1.15rem;
-  padding: 1.05rem 1.1rem;
+/* Student | Standard — one control above the ticket options */
+.tier-segment {
+  margin: 0 0 1.15rem;
+  padding: 1.05rem 1.1rem 1.1rem;
   background: var(--glass);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
-.tier-select fieldset {
-  border: none;
-  margin: 0;
-  padding: 0;
-}
-
-.tier-select legend {
+.tier-segment legend {
   font-weight: 600;
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -799,17 +787,22 @@ main {
   padding: 0;
 }
 
-.radio-row {
+.segmented-control {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(18, 10, 40, 0.45);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
 }
 
-.radio-pill {
+.segmented-control .segment {
   position: relative;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-.radio-pill input {
+.segmented-control .segment input {
   position: absolute;
   opacity: 0;
   width: 1px;
@@ -817,41 +810,54 @@ main {
   margin: 0;
 }
 
-.radio-pill label {
+.segmented-control .segment label {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   min-height: var(--touch);
-  padding: 0.55rem 1.2rem;
+  padding: 0.55rem 0.75rem;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
   font-weight: 600;
-  font-size: 0.9rem;
-  background: rgba(18, 10, 40, 0.4);
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--cream);
+  background: transparent;
+}
+
+.segmented-control .segment label:hover {
+  background: rgba(252, 248, 230, 0.08);
+}
+
+.segmented-control .segment input:checked + label {
+  background: var(--cream);
+  color: var(--purple-deep);
+  border-color: var(--cream);
+}
+
+.segmented-control .segment input:checked + label:hover {
+  background: var(--cream);
+}
+
+.segmented-control .segment input:focus-visible + label {
+  box-shadow: var(--focus);
+}
+
+.tier-status {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+  font-weight: 600;
   color: var(--cream);
 }
 
-.radio-pill input:checked + label {
-  border-color: var(--cream);
-  background: var(--cream);
-  color: var(--purple-deep);
-}
-
-.radio-pill input:focus-visible + label {
-  box-shadow: var(--focus);
+.tier-segment .student-note {
+  margin-top: 0.4rem;
 }
 
 .student-note {
   margin: 0.75rem 0 0;
   font-size: 0.85rem;
   color: var(--muted);
-}
-
-.tier-select .deadline-hint {
-  margin: 0.65rem 0 0;
-  color: var(--cream);
-  font-weight: 600;
 }
 
 /* Registration summary row (Luma-style) */
@@ -1754,10 +1760,6 @@ main {
 
 .ticket-night .ticket-list {
   margin-top: 0.35rem;
-}
-
-.ticket-night .tier-select {
-  margin-top: 0.85rem;
 }
 
 .nights-summary-list {

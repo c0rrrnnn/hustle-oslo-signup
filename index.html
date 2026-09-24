@@ -123,6 +123,24 @@
       </div>
       <p class="lead" id="ticket-event-summary">Choose a ticket for each night you selected.</p>
 
+      <fieldset class="tier-segment" id="price-tier-segment">
+        <legend>Price</legend>
+        <div class="segmented-control">
+          <div class="segment">
+            <input type="radio" name="price-tier" id="price-tier-student" value="student" />
+            <label for="price-tier-student">Student</label>
+          </div>
+          <div class="segment">
+            <input type="radio" name="price-tier" id="price-tier-standard" value="standard" checked />
+            <label for="price-tier-standard">Standard</label>
+          </div>
+        </div>
+        <p class="tier-status" id="price-tier-status" aria-live="polite">Showing standard prices.</p>
+        <p class="student-note" id="price-tier-note">
+          Student price is on the honour system — if you’re a student, pick student. No proof needed.
+        </p>
+      </fieldset>
+
       <div id="ticket-nights" class="ticket-nights"></div>
       <p class="deadline-hint" id="selected-price" aria-live="polite"></p>
 

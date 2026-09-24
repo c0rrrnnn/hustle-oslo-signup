@@ -45,6 +45,7 @@
     calendarYear: null,
     calendarMonth: null, // 1–12
     selections: [], // [{ event, ticket, priceTier }, ...]
+    priceTier: "standard", // Student | Standard, applied to every selected night
     submitted: false,
     submitOk: null,
   };
@@ -154,6 +155,32 @@
 
   function selectionForEvent(eventId) {
     return state.selections.find((s) => s.event.id === eventId) || null;
+  }
+
+  function activePriceTier() {
+    return state.priceTier === "student" ? "student" : "standard";
+  }
+
+  /** Equal student/standard prices stay on standard (social is 50 either way). */
+  function tierForTicket(ticket) {
+    if (ticket && ticket.prices && ticket.prices.standard === ticket.prices.student) {
+      return "standard";
+    }
+    return activePriceTier();
+  }
+
+  function displayedTicketPrice(ticket) {
+    const prices = (ticket && ticket.prices) || {};
+    if (activePriceTier() === "student" && typeof prices.student === "number") {
+      return prices.student;
+    }
+    return prices.standard;
+  }
+
+  function applyPriceTierToSelections() {
+    state.selections.forEach((sel) => {
+      sel.priceTier = tierForTicket(sel.ticket);
+    });
   }
 
   function amountForSelection(sel) {
@@ -547,7 +574,7 @@
   function ensureSelectionsScaffold() {
     state.selectedEvents.forEach((ev) => {
       if (!selectionForEvent(ev.id)) {
-        state.selections.push({ event: ev, ticket: null, priceTier: "standard" });
+        state.selections.push({ event: ev, ticket: null, priceTier: activePriceTier() });
       } else {
         // Refresh event ref
         const sel = selectionForEvent(ev.id);
@@ -567,22 +594,25 @@
     if (!sel) {
       const ev = state.selectedEvents.find((e) => e.id === eventId);
       if (!ev) return;
-      sel = { event: ev, ticket: null, priceTier: "standard" };
+      sel = { event: ev, ticket: null, priceTier: activePriceTier() };
       state.selections.push(sel);
     }
     sel.ticket = ticket || null;
-    if (ticket) {
-      const same = ticket.prices.standard === ticket.prices.student;
-      if (same) sel.priceTier = "standard";
-    }
+    sel.priceTier = tierForTicket(sel.ticket);
     updateTicketUi();
   }
 
-  function setSelectionTier(eventId, tier) {
-    const sel = selectionForEvent(eventId);
-    if (!sel) return;
-    sel.priceTier = tier;
-    updateTicketUi();
+  function setGlobalPriceTier(tier) {
+    state.priceTier = tier === "student" ? "student" : "standard";
+    applyPriceTierToSelections();
+    const status = $("#price-tier-status");
+    if (status) {
+      status.textContent =
+        state.priceTier === "student"
+          ? "Showing student prices."
+          : "Showing standard prices.";
+    }
+    renderTickets();
   }
 
   function updateTicketUi() {
@@ -632,18 +662,16 @@
           ? `<span class="badge badge-class">Class night</span>`
           : `<span class="badge badge-social">Social only</span>`;
 
+      const tier = activePriceTier();
       const ticketItems = tickets
         .map((t) => {
-          const std = t.prices.standard;
-          const stu = t.prices.student;
-          const samePrice = std === stu;
+          const samePrice = t.prices.standard === t.prices.student;
+          const amount = displayedTicketPrice(t);
           const priceBits = samePrice
-            ? `<span class="price-chip"><span class="amount">${std} kr</span></span>`
-            : `<span class="price-chip"><span class="amount">${std} kr</span> <span class="tier-label">standard</span></span>
-               <span class="price-chip"><span class="amount">${stu} kr</span> <span class="tier-label">student</span></span>`;
+            ? `<span class="price-chip"><span class="amount">${amount} kr</span></span>`
+            : `<span class="price-chip"><span class="amount">${amount} kr</span> <span class="tier-label">${escapeHtml(tier)}</span></span>`;
           const checked = sel && sel.ticket && sel.ticket.id === t.id ? "checked" : "";
           const id = `ticket-${escapeHtml(ev.id)}-${escapeHtml(t.id)}`;
-          const priceLine = `${std} kr`;
           return `
             <li class="ticket-option">
               <input type="radio" name="ticket-${escapeHtml(ev.id)}" id="${id}" value="${escapeHtml(t.id)}" ${checked} />
@@ -651,22 +679,13 @@
                 <span class="radio-check" aria-hidden="true"></span>
                 <span class="option-body">
                   <p class="ticket-name">${escapeHtml(t.name)}</p>
-                  <p class="ticket-price">${priceLine}</p>
-                  <p class="ticket-note">${escapeHtml(t.note)}</p>
                   <div class="price-tiers">${priceBits}</div>
+                  <p class="ticket-note">${escapeHtml(t.note)}</p>
                 </span>
               </label>
             </li>`;
         })
         .join("");
-
-      const showTier =
-        sel &&
-        sel.ticket &&
-        sel.ticket.prices.standard !== sel.ticket.prices.student;
-      const tierStandardChecked =
-        !sel || sel.priceTier !== "student" ? "checked" : "";
-      const tierStudentChecked = sel && sel.priceTier === "student" ? "checked" : "";
 
       block.innerHTML = `
         <div class="ticket-night-header">
@@ -679,24 +698,6 @@
           <legend>Ticket type</legend>
           <ul class="ticket-list" role="list">${ticketItems}</ul>
         </fieldset>
-        <div class="tier-select" ${showTier ? "" : "hidden"}>
-          <fieldset>
-            <legend>Price</legend>
-            <div class="radio-row" role="radiogroup" aria-label="Price tier for ${escapeHtml(formatEventDate(ev))}">
-              <div class="radio-pill">
-                <input type="radio" name="priceTier-${escapeHtml(ev.id)}" id="tier-standard-${escapeHtml(ev.id)}" value="standard" ${tierStandardChecked} />
-                <label for="tier-standard-${escapeHtml(ev.id)}">Standard</label>
-              </div>
-              <div class="radio-pill">
-                <input type="radio" name="priceTier-${escapeHtml(ev.id)}" id="tier-student-${escapeHtml(ev.id)}" value="student" ${tierStudentChecked} />
-                <label for="tier-student-${escapeHtml(ev.id)}">Student</label>
-              </div>
-            </div>
-            <p class="student-note">
-              Student price is on the honour system — if you’re a student, pick student. No proof needed.
-            </p>
-          </fieldset>
-        </div>
       `;
 
       host.appendChild(block);
@@ -705,14 +706,6 @@
         if (!e.target.matches('input[type="radio"]')) return;
         const t = tickets.find((x) => x.id === e.target.value);
         setSelectionTicket(ev.id, t || null);
-        // Re-render to update tier visibility cleanly
-        renderTickets();
-      });
-
-      $$('input[name^="priceTier-"]', block).forEach((r) => {
-        r.addEventListener("change", () => {
-          setSelectionTier(ev.id, r.value);
-        });
       });
     });
 
@@ -1206,8 +1199,15 @@
     state.selectedEvents = [];
     state.calendarFocusDate = null;
     state.selections = [];
+    state.priceTier = "standard";
     state.submitted = false;
     state.submitOk = null;
+    const standardTier = $("#price-tier-standard");
+    const studentTier = $("#price-tier-student");
+    if (standardTier) standardTier.checked = true;
+    if (studentTier) studentTier.checked = false;
+    const tierStatus = $("#price-tier-status");
+    if (tierStatus) tierStatus.textContent = "Showing standard prices.";
     $("#signup-form").reset();
     $("#is-repeat").checked = false;
     const live = $("#form-live");
@@ -1273,6 +1273,11 @@
     $("#phone-help-toggle").addEventListener("click", togglePhoneHelp);
     $("#signup-form").addEventListener("submit", onFormSubmit);
     $("#btn-new-signup").addEventListener("click", resetForNewSignup);
+    $$('input[name="price-tier"]').forEach((r) => {
+      r.addEventListener("change", () => {
+        if (r.checked) setGlobalPriceTier(r.value);
+      });
+    });
 
     setFirstTimerVisibility();
     validateForm();
