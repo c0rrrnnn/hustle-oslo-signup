@@ -98,14 +98,13 @@
     <!-- Panel 2: Date -->
     <section class="panel card" id="panel-2" data-panel="2" aria-labelledby="date-heading" hidden>
       <h2 id="date-heading">Pick a night</h2>
-      <p class="lead">All nights are <strong>18:00–21:00</strong> (Europe/Oslo) at Sentralen, Oslo.</p>
+      <p class="lead">All nights are <strong>18:00–21:00</strong> (Europe/Oslo) at Sentralen, Oslo. Select one or more dates.</p>
       <p class="deadline-hint" role="note">
         Book anytime before class starts at <strong>18:00 on the day</strong>. Past nights are hidden automatically.
       </p>
-      <fieldset class="event-fieldset">
-        <legend class="visually-hidden">Upcoming dates</legend>
-        <ul class="event-list" id="event-list" role="list"></ul>
-      </fieldset>
+      <p class="lead lead--tight">Tap a day with a dot, then select one or more nights. You can book several dates in one signup.</p>
+      <div class="calendar-wrap" id="calendar-mount" role="application" aria-label="Event calendar"></div>
+      <div class="day-pills" id="day-pills" role="region" aria-live="polite" aria-label="Events for the focused day"></div>
       <p class="empty-state" id="no-events" hidden>
         No upcoming nights right now — check back soon, or follow us on Instagram.
       </p>
@@ -121,36 +120,12 @@
     <section class="panel card" id="panel-3" data-panel="3" aria-labelledby="ticket-heading" hidden>
       <span class="sheet-handle" aria-hidden="true"></span>
       <div class="sheet-header">
-        <h2 id="ticket-heading">Select Ticket</h2>
+        <h2 id="ticket-heading">Select tickets</h2>
       </div>
-      <p class="lead" id="ticket-event-summary"></p>
+      <p class="lead" id="ticket-event-summary">Choose a ticket for each night you selected.</p>
 
-      <div id="ticket-schedule"></div>
-
-      <fieldset class="ticket-fieldset">
-        <legend>Ticket type</legend>
-        <ul class="ticket-list" id="ticket-list" role="list"></ul>
-      </fieldset>
-
-      <div class="tier-select" id="tier-select" hidden>
-        <fieldset>
-          <legend>Price</legend>
-          <div class="radio-row" role="radiogroup" aria-label="Price tier">
-            <div class="radio-pill">
-              <input type="radio" name="priceTier" id="tier-standard" value="standard" checked />
-              <label for="tier-standard">Standard</label>
-            </div>
-            <div class="radio-pill">
-              <input type="radio" name="priceTier" id="tier-student" value="student" />
-              <label for="tier-student">Student</label>
-            </div>
-          </div>
-          <p class="student-note" id="student-note">
-            Student price is on the honour system — if you’re a student, pick student. No proof needed.
-          </p>
-          <p class="deadline-hint" id="selected-price" aria-live="polite"></p>
-        </fieldset>
-      </div>
+      <div id="ticket-nights" class="ticket-nights"></div>
+      <p class="deadline-hint" id="selected-price" aria-live="polite"></p>
 
       <div class="actions actions--sticky">
         <button type="button" class="btn btn-secondary" data-go="2">Back</button>

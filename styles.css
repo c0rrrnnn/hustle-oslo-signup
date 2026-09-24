@@ -1404,3 +1404,397 @@ main {
     width: 100%;
   }
 }
+
+/* ─── Calendar date picker ───────────────────────────────────────────────── */
+.lead--tight {
+  margin-bottom: 0.85rem;
+  font-size: 0.9rem;
+}
+
+.calendar-wrap {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.75rem 1rem;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.cal-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cream);
+  letter-spacing: -0.02em;
+  text-align: center;
+  flex: 1;
+}
+
+.cal-nav {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: rgba(18, 10, 40, 0.45);
+  color: var(--cream);
+  width: var(--touch);
+  height: var(--touch);
+  min-width: var(--touch);
+  min-height: var(--touch);
+  border-radius: 50%;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cal-nav:hover:not(:disabled) {
+  background: rgba(252, 248, 230, 0.12);
+}
+
+.cal-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.cal-weekday {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-soft);
+  padding: 0.25rem 0;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+}
+
+.cal-day {
+  appearance: none;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  min-height: var(--touch);
+  min-width: 0;
+  padding: 0.2rem 0.1rem 0.35rem;
+  border-radius: 12px;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  position: relative;
+}
+
+.cal-day--empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.cal-day--muted {
+  color: var(--muted-soft);
+  opacity: 0.55;
+}
+
+.cal-day--today .cal-day-num {
+  color: var(--orange);
+  font-weight: 700;
+}
+
+.cal-day--has-event {
+  cursor: pointer;
+}
+
+.cal-day--has-event:hover {
+  background: rgba(252, 248, 230, 0.08);
+}
+
+.cal-day--focused {
+  background: rgba(78, 131, 177, 0.22);
+  border-color: rgba(78, 131, 177, 0.55);
+}
+
+.cal-day--selected {
+  background: rgba(252, 248, 230, 0.14);
+  border-color: var(--cream);
+  box-shadow: 0 0 0 1px rgba(252, 248, 230, 0.2);
+}
+
+.cal-day--selected.cal-day--focused {
+  background: rgba(252, 248, 230, 0.18);
+  border-color: var(--orange);
+  box-shadow: 0 0 0 1px rgba(223, 128, 38, 0.45);
+}
+
+.cal-day:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.cal-day-num {
+  line-height: 1.1;
+}
+
+.cal-dots {
+  display: flex;
+  gap: 3px;
+  min-height: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cal-dot--class {
+  background: var(--light-blue);
+}
+
+.cal-dot--social {
+  background: var(--orange);
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
+  margin: 0.85rem 0 0;
+  padding: 0.55rem 0.15rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Day event pills */
+.day-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  min-height: 0;
+}
+
+.day-pills:empty {
+  display: none;
+}
+
+.day-pills-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.event-pill {
+  appearance: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  min-height: var(--touch);
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--cream);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.event-pill:hover {
+  border-color: var(--border-strong);
+  background: rgba(46, 25, 94, 0.65);
+}
+
+.event-pill[aria-pressed="true"] {
+  border-color: rgba(252, 248, 230, 0.4);
+  background: rgba(46, 25, 94, 0.8);
+  box-shadow: 0 0 0 1px rgba(252, 248, 230, 0.15);
+}
+
+.event-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.event-pill-check {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 0.1rem;
+  border-radius: 50%;
+  border: 2px solid rgba(252, 248, 230, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.event-pill[aria-pressed="true"] .event-pill-check {
+  background: var(--cream);
+  border-color: var(--cream);
+}
+
+.event-pill-check::after {
+  content: "";
+  display: none;
+  width: 10px;
+  height: 6px;
+  border-left: 2.5px solid #120a28;
+  border-bottom: 2.5px solid #120a28;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+.event-pill[aria-pressed="true"] .event-pill-check::after {
+  display: block;
+}
+
+.event-pill-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-pill-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--cream);
+}
+
+.event-pill-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.selected-nights-count {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--light-blue);
+}
+
+/* Multi-night ticket blocks */
+.ticket-nights {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.ticket-night {
+  padding: 1rem 1.05rem 1.1rem;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ticket-night-header {
+  margin-bottom: 0.75rem;
+}
+
+.ticket-night-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cream);
+  letter-spacing: -0.02em;
+}
+
+.ticket-night-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ticket-night .schedule-block {
+  margin-bottom: 0.85rem;
+}
+
+.ticket-night .ticket-list {
+  margin-top: 0.35rem;
+}
+
+.ticket-night .tier-select {
+  margin-top: 0.85rem;
+}
+
+.nights-summary-list {
+  list-style: none;
+  margin: 0 0 1.15rem;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.nights-summary-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.nights-summary-item .nsi-main {
+  min-width: 0;
+}
+
+.nights-summary-item .nsi-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--cream);
+}
+
+.nights-summary-item .nsi-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.nights-summary-item .nsi-price {
+  font-weight: 700;
+  color: var(--cream);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

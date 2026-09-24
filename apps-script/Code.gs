@@ -21,6 +21,10 @@
  *
  * Payload includes optional experience / howFound, optional phone,
  * and required transactionNumber (Vipps payment proof).
+ * Multi-night bookings: the website POSTs one signup object per night
+ * (same person + same transactionNumber; per-night amount). No Apps Script
+ * redeploy required for multi-select. Optional future: accept { signups: [...] }.
+ *
  */
 var MASTER_TAB = "All signups";
 var DEFAULT_NOTIFY = "hustleinoslo@gmail.com";
@@ -121,8 +125,14 @@ function ensureHeaders_(sheet) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(HEADERS);
     sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight("bold");
+    var header = sheet.getRange(1, 1, 1, HEADERS.length);
+    header.setFontWeight("bold");
+    header.setWrap(true);
   }
+  // Keep existing + future cells readable on narrow columns
+  var lastCol = Math.max(sheet.getLastColumn(), HEADERS.length);
+  var lastRow = Math.max(sheet.getLastRow(), 1);
+  sheet.getRange(1, 1, lastRow, lastCol).setWrap(true);
 }
 
 function buildTabName_(data) {
