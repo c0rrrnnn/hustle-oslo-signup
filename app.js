@@ -256,6 +256,11 @@
       if (on) panel.removeAttribute("hidden");
       else panel.setAttribute("hidden", "");
     });
+    if (step === 2) {
+      if (state.calendarYear == null) initCalendarMonth();
+      renderCalendar();
+      renderDayPills();
+    }
     $$(".step-pill").forEach((pill) => {
       const n = +pill.dataset.step;
       const active = step <= 4 && n === step;
@@ -455,13 +460,24 @@
     });
     $$(".cal-day--has-event", mount).forEach((btn) => {
       btn.addEventListener("click", () => {
-        state.calendarFocusDate = btn.dataset.date;
-        renderCalendar();
-        renderDayPills();
-        const pills = $("#day-pills");
-        if (pills) {
-          const firstPill = $(".event-pill", pills);
-          if (firstPill) firstPill.focus();
+        const dateKey = btn.dataset.date;
+        state.calendarFocusDate = dateKey;
+        // Day tap selects/deselects that night(s) — pills stay for clarity / multi-event days
+        const dayEvents = eventsByDate(dateKey);
+        if (dayEvents.length) {
+          const allOn = dayEvents.every((ev) => isEventSelected(ev));
+          if (allOn) {
+            dayEvents.forEach((ev) => {
+              if (isEventSelected(ev)) toggleSelectedEvent(ev);
+            });
+          } else {
+            dayEvents.forEach((ev) => {
+              if (!isEventSelected(ev)) toggleSelectedEvent(ev);
+            });
+          }
+        } else {
+          renderCalendar();
+          renderDayPills();
         }
       });
     });

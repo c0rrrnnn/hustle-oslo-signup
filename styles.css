@@ -239,8 +239,12 @@ main {
 }
 
 .panel.active {
-  display: block;
+  display: block !important;
   animation: fadeIn 0.25s ease;
+}
+
+.panel:not(.active) {
+  display: none !important;
 }
 
 @keyframes fadeIn {
