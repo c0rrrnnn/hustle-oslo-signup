@@ -67,13 +67,19 @@ When the URL is set, the same confirmation UI is used and the payload is `POST`e
 
 ## Deploy: GitHub Pages (static site)
 
+Primary public URL: **https://hustleoslo.com/**
+
+The GitHub Pages project URL (`https://c0rrrnnn.github.io/hustle-oslo-signup/`) still works as a fallback. Assets are relative (`styles.css`, `app.js`, `events.js`), so the same files load on both the apex custom domain and the project Pages URL.
+
+`CNAME` (repo root) is `hustleoslo.com`.
+
 1. Create a public GitHub repo (e.g. `hustle-oslo-signup`).
 2. Push the contents of this folder (you can omit nothing — `apps-script/` is documentation for Claire, harmless on Pages).
 3. Repo **Settings → Pages**:
    - Source: **Deploy from a branch**
    - Branch: `main` (or `gh-pages`), folder `/` (root)
-4. Wait a minute; open `https://<user>.github.io/<repo>/`
-5. Optional: custom domain later under Pages settings.
+   - Custom domain: `hustleoslo.com` (set by the root `CNAME` file)
+4. Wait a minute; open https://hustleoslo.com/ (fallback: `https://c0rrrnnn.github.io/hustle-oslo-signup/`).
 
 No build step. No npm. Edit `events.js` when dates change and push.
 
