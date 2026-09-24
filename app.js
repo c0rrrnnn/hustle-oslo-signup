@@ -10,7 +10,7 @@
   // Claire: paste your deployed Google Apps Script Web App URL here after deploy.
   // Leave empty until then — signup still shows confirmation + local queue.
   const CONFIG = {
-    APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwU9DQa0TEw7lQbXzBgWvpgYyb68UIiV4603B_u8RPaVIe9QRf3rzXtg-U2Sumtaib71g/exec",
+    APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec",
     VIPPS_NUMBER: "48782",
     VIPPS_NAME: "Hustle Oslo",
     TIMEZONE: "Europe/Oslo",
