@@ -53,11 +53,10 @@
           <video
             id="hero-video"
             class="hero-video"
-            autoplay
             muted
             loop
             playsinline
-            preload="metadata"
+            preload="none"
             poster="assets/hero-poster.jpg"
             disablepictureinpicture
             disableremoteplayback
@@ -76,10 +75,12 @@
             function applyHeroMotion() {
               if (motion.matches) {
                 video.removeAttribute("autoplay");
+                video.preload = "none";
                 video.pause();
                 try { video.currentTime = 0; } catch (err) {}
               } else {
                 video.muted = true;
+                video.preload = "auto";
                 video.setAttribute("autoplay", "");
                 var pending = video.play();
                 if (pending && typeof pending.catch === "function") pending.catch(function () {});
