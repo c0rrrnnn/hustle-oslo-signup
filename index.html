@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Sign up for Hustle Oslo dance classes and social nights at Sentralen, Oslo." />
+  <meta name="theme-color" content="#2e195e" />
+  <title>Hustle Oslo — Class signup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="site-header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <h1>Hustle Oslo</h1>
+      </div>
+      <p class="tagline">Dance classes &amp; social nights at Sentralen</p>
+      <a
+        class="ig-link"
+        href="https://www.instagram.com/hustleoslo/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span aria-hidden="true">◎</span>
+        @hustleoslo on Instagram
+        <span class="visually-hidden">(opens in a new tab)</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+    <nav class="steps" aria-label="Signup steps" id="step-nav">
+      <span class="step-pill active" data-step="1" aria-current="step">1 · Intro</span>
+      <span class="step-pill" data-step="2" aria-current="false">2 · Date</span>
+      <span class="step-pill" data-step="3" aria-current="false">3 · Ticket</span>
+      <span class="step-pill" data-step="4" aria-current="false">4 · Details</span>
+    </nav>
+
+    <!-- Panel 1: Landing -->
+    <section class="panel active card" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
+      <h2 id="intro-heading">Come dance with us</h2>
+      <p class="lead">
+        Friendly hustle classes and social nights in Oslo. Beginners welcome —
+        we’ll take care of the rest.
+      </p>
+      <ul class="one-liners">
+        <li>
+          <span class="one-liner-icon" aria-hidden="true">✓</span>
+          <span>No partner needed.</span>
+        </li>
+        <li>
+          <span class="one-liner-icon" aria-hidden="true">✓</span>
+          <span>Shoes you can turn in.</span>
+        </li>
+        <li>
+          <span class="one-liner-icon" aria-hidden="true">✓</span>
+          <span>Willingness to learn and have fun.</span>
+        </li>
+      </ul>
+
+      <div id="landing-schedule"></div>
+
+      <p class="cancel-note">
+        <strong>Need to cancel?</strong>
+        DM Hustle Oslo on Instagram — payment is transferable to the next class.
+      </p>
+      <div class="actions">
+        <button type="button" class="btn btn-primary btn-block" id="btn-start" data-go="2">
+          Pick a date
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel 2: Date -->
+    <section class="panel card" id="panel-2" data-panel="2" aria-labelledby="date-heading" hidden>
+      <h2 id="date-heading">Pick a night</h2>
+      <p class="lead">All nights are <strong>18:00–21:00</strong> (Europe/Oslo) at Sentralen, Oslo.</p>
+      <p class="deadline-hint" role="note">
+        Book anytime before class starts at <strong>18:00 on the day</strong>. Past nights are hidden automatically.
+      </p>
+      <fieldset class="event-fieldset">
+        <legend class="visually-hidden">Upcoming dates</legend>
+        <ul class="event-list" id="event-list" role="list"></ul>
+      </fieldset>
+      <p class="empty-state" id="no-events" hidden>
+        No upcoming nights right now — check back soon, or follow us on Instagram.
+      </p>
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" data-go="1">Back</button>
+        <button type="button" class="btn btn-primary" id="btn-to-ticket" data-go="3" disabled>
+          Continue
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel 3: Ticket — schedule ABOVE ticket choices once date chosen -->
+    <section class="panel card" id="panel-3" data-panel="3" aria-labelledby="ticket-heading" hidden>
+      <h2 id="ticket-heading">Choose your ticket</h2>
+      <p class="lead" id="ticket-event-summary"></p>
+
+      <div id="ticket-schedule"></div>
+
+      <fieldset class="ticket-fieldset">
+        <legend>Ticket type</legend>
+        <ul class="ticket-list" id="ticket-list" role="list"></ul>
+      </fieldset>
+
+      <div class="tier-select" id="tier-select" hidden>
+        <fieldset>
+          <legend>Price</legend>
+          <div class="radio-row" role="radiogroup" aria-label="Price tier">
+            <div class="radio-pill">
+              <input type="radio" name="priceTier" id="tier-standard" value="standard" checked />
+              <label for="tier-standard">Standard</label>
+            </div>
+            <div class="radio-pill">
+              <input type="radio" name="priceTier" id="tier-student" value="student" />
+              <label for="tier-student">Student</label>
+            </div>
+          </div>
+          <p class="student-note" id="student-note">
+            Student price is on the honour system — if you’re a student, pick student. No proof needed.
+          </p>
+          <p class="deadline-hint" id="selected-price" aria-live="polite"></p>
+        </fieldset>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" data-go="2">Back</button>
+        <button type="button" class="btn btn-primary" id="btn-to-details" data-go="4" disabled>
+          Continue
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel 4: Details + Vipps payment proof -->
+    <section class="panel card" id="panel-4" data-panel="4" aria-labelledby="details-heading" hidden>
+      <h2 id="details-heading">Your details</h2>
+
+      <div id="details-schedule"></div>
+
+      <div class="summary-box" id="details-summary" aria-live="polite"></div>
+
+      <form id="signup-form" novalidate>
+        <p class="form-live" id="form-live" role="alert" aria-live="assertive"></p>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="is-repeat" name="isRepeat" />
+          <label for="is-repeat">I’ve attended Hustle Oslo before</label>
+        </div>
+
+        <div class="form-group">
+          <label for="full-name">Full name <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required)</span></label>
+          <input
+            type="text"
+            id="full-name"
+            name="fullName"
+            autocomplete="name"
+            required
+            maxlength="120"
+            placeholder="Your name"
+            aria-required="true"
+            aria-describedby="err-full-name"
+          />
+          <p class="field-error" id="err-full-name" role="alert">Please enter your full name.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required)</span></label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            autocomplete="email"
+            required
+            maxlength="200"
+            placeholder="you@example.com"
+            inputmode="email"
+            aria-required="true"
+            aria-describedby="err-email"
+          />
+          <p class="field-error" id="err-email" role="alert">Please enter a valid email address.</p>
+        </div>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label for="phone">
+              Phone number
+              <span class="optional">(optional)</span>
+            </label>
+            <button
+              type="button"
+              class="help-toggle"
+              id="phone-help-toggle"
+              aria-expanded="false"
+              aria-controls="phone-help"
+            >
+              <span aria-hidden="true">?</span>
+              <span class="visually-hidden">Why we ask for your phone number</span>
+            </button>
+          </div>
+          <div class="help-panel" id="phone-help" hidden>
+            <p>
+              If you’d like to be added to the WhatsApp group for class and event updates,
+              you can share your number here. Completely optional.
+            </p>
+          </div>
+          <input
+            type="tel"
+            id="phone"
+            name="phone"
+            autocomplete="tel"
+            maxlength="40"
+            placeholder="+47 4xx xx xxx"
+            inputmode="tel"
+            aria-describedby="err-phone phone-help"
+          />
+          <p class="field-error" id="err-phone" role="alert">
+            Please enter a valid phone number (digits, spaces, + or dashes), or leave blank.
+          </p>
+        </div>
+
+        <div id="first-timer-fields" class="first-timer-fields">
+          <div class="form-group">
+            <label for="experience">
+              Experience
+              <span class="optional">(optional)</span>
+            </label>
+            <select id="experience" name="experience" aria-required="false" aria-describedby="err-experience">
+              <option value="">— Please choose —</option>
+              <option value="never">I’ve never danced before</option>
+              <option value="solo">Solo dance styles</option>
+              <option value="partner">Other partner dances</option>
+            </select>
+            <p class="field-error" id="err-experience" role="alert">Please tell us your experience level.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="how-found">
+              How did you find out about us?
+              <span class="optional">(optional)</span>
+            </label>
+            <select id="how-found" name="howFound" aria-required="false" aria-describedby="err-how-found">
+              <option value="">— Please choose —</option>
+              <option value="taken-class">I’ve taken hustle before</option>
+              <option value="friend">Friend</option>
+              <option value="social">Social media</option>
+              <option value="other">Other</option>
+            </select>
+            <p class="field-error" id="err-how-found" role="alert">Please tell us how you found us.</p>
+          </div>
+
+          <div class="form-group" id="how-found-other-wrap" hidden>
+            <label for="how-found-other">Please tell us how <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required when Other is selected)</span></label>
+            <input
+              type="text"
+              id="how-found-other"
+              name="howFoundOther"
+              maxlength="200"
+              placeholder="Short reason"
+              aria-describedby="err-how-found-other"
+            />
+            <p class="field-error" id="err-how-found-other" role="alert">
+              Please share a short reason when you pick Other.
+            </p>
+          </div>
+        </div>
+
+        <!-- Vipps: pay first, then enter transaction # -->
+        <div class="vipps-box" id="details-vipps" role="region" aria-labelledby="details-vipps-heading">
+          <h3 id="details-vipps-heading">Pay with Vipps first</h3>
+          <p class="vipps-amount" id="details-amount"></p>
+          <p>
+            Vipps:
+            <span class="vipps-number">Hustle Oslo #48782</span>
+          </p>
+          <ol class="vipps-steps">
+            <li>Open Vipps and send the amount above to <strong>Hustle Oslo #48782</strong>.</li>
+            <li>Copy the Vipps transaction number from your receipt.</li>
+            <li>Paste the transaction number below, then submit.</li>
+          </ol>
+        </div>
+
+        <div class="form-group">
+          <label for="transaction-number">
+            Vipps transaction number
+            <span class="req" aria-hidden="true">*</span>
+            <span class="visually-hidden">(required)</span>
+          </label>
+          <input
+            type="text"
+            id="transaction-number"
+            name="transactionNumber"
+            required
+            maxlength="64"
+            minlength="4"
+            placeholder="From your Vipps receipt"
+            autocomplete="off"
+            spellcheck="false"
+            aria-required="true"
+            aria-describedby="err-transaction-number transaction-hint"
+          />
+          <p class="field-hint" id="transaction-hint">
+            Find this in Vipps after you pay (receipt / transaction details).
+          </p>
+          <p class="field-error" id="err-transaction-number" role="alert">
+            Please enter the Vipps transaction number from your payment (at least 4 characters).
+          </p>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn btn-secondary" data-go="3">Back</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit" disabled>
+            Submit signup
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Confirmation (after submit — not a numbered step) -->
+    <section class="panel card" id="panel-5" data-panel="5" aria-labelledby="confirm-heading" hidden>
+      <h2 id="confirm-heading">You’re booked</h2>
+
+      <div id="submit-status" class="status-banner pending" role="status" aria-live="polite">
+        Saving your signup…
+      </div>
+
+      <div class="vipps-box">
+        <h3>Payment recorded</h3>
+        <p class="vipps-amount" id="confirm-amount"></p>
+        <p>
+          Vipps:
+          <span class="vipps-number">Hustle Oslo #48782</span>
+        </p>
+        <p class="confirm-txn">
+          Transaction #:
+          <strong id="confirm-transaction"></strong>
+        </p>
+      </div>
+
+      <div class="summary-box" id="confirm-summary"></div>
+
+      <p class="cancel-note">
+        <strong>Screenshot this page</strong> so you have your transaction number handy.
+        Need to cancel? DM us on
+        <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">Instagram<span class="visually-hidden"> (opens in a new tab)</span></a>
+        — payment is transferable to the next class.
+      </p>
+
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="btn-new-signup">
+          Book another night
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Hustle Oslo ·
+      <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a>
+      · Vipps #48782
+    </p>
+  </footer>
+
+  <script src="events.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
