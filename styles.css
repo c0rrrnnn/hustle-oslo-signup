@@ -732,13 +732,6 @@ main {
   color: var(--cream);
 }
 
-.ticket-price {
-  margin: 0.25rem 0 0;
-  font-size: 0.95rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-
 .ticket-note {
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
@@ -749,7 +742,7 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.55rem;
+  margin-top: 0.45rem;
 }
 
 .price-chip {

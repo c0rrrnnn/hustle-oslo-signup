@@ -679,9 +679,8 @@
                 <span class="radio-check" aria-hidden="true"></span>
                 <span class="option-body">
                   <p class="ticket-name">${escapeHtml(t.name)}</p>
-                  <p class="ticket-price">${amount} kr</p>
-                  <p class="ticket-note">${escapeHtml(t.note)}</p>
                   <div class="price-tiers">${priceBits}</div>
+                  <p class="ticket-note">${escapeHtml(t.note)}</p>
                 </span>
               </label>
             </li>`;
