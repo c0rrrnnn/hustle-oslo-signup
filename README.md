@@ -27,7 +27,7 @@ A preview server may already be running on port **8765** on the shared box.
 | `assets/hero-poster.jpg` | First-frame still (41 KB) for reduced motion and before playback. |
 | `events.js` | Upcoming nights + ticket catalogue (edit here for new dates) |
 | `app.js` | Wizard flow (4 steps), validation, Vipps + transaction # |
-| `apps-script/Code.gs` | Google Apps Script: Sheet tabs + email notify |
+| `apps-script/Code.gs` | Google Apps Script: Sheet tabs, organizer notify, one attendee confirmation per booking |
 | `README.md` | This file |
 
 ## Product rules (do not invent extras)
@@ -63,7 +63,7 @@ Leave `APPS_SCRIPT_URL` empty until Apps Script is deployed. The site still:
 2. Requires a Vipps transaction #, then queues the payload in `sessionStorage` under `hustleOsloSignups`  
 3. Shows confirmation with amount, Vipps #, and transaction # (plus a warning that Claire still needs to wire the backend)  
 
-When the URL is set, the same confirmation UI is used and the payload is `POST`ed as `text/plain` JSON (avoids CORS preflight issues with Apps Script). Payload includes `transactionNumber` and optional `phone`.
+When the URL is set, the same confirmation UI is used and the payload is `POST`ed as `text/plain` JSON (avoids CORS preflight issues with Apps Script). Payload includes `transactionNumber` and optional `phone`. Multi-night bookings POST one object per night. The last successful night sets `sendAttendeeConfirmation` and includes `confirmationNights` so the attendee gets one email listing the nights that saved.
 
 ---
 
@@ -131,9 +131,10 @@ No build step. No npm. Edit `events.js` when dates change and push.
 - Creates/uses tab **All signups** (master).
 - Creates/uses one tab per event (e.g. `2026-09-28 Class Kronesalen`).
 - Appends a row to both.
-- Emails `hustleinoslo@gmail.com` with name, ticket, amount, transaction #, and phone (if given).
+- Emails `hustleinoslo@gmail.com` on each night (organizer notify) with name, ticket, amount, transaction #, and phone (if given).
+- Emails the attendee **once per booking** at the address they registered, from `hustleinoslo@gmail.com` (MailApp display name **Hustle Oslo**, reply-to `hustleinoslo@gmail.com`). Several nights in one signup are listed in that single email. Nights whose POST failed are left off.
 
-Re-deploy the Web App after editing `Code.gs` (**Deploy → Manage deployments → Edit → New version**).
+Re-deploy the Web App after editing `Code.gs` (**Deploy → Manage deployments → Edit → New version**). Pasting the file is not enough: attendee confirmation is sent by the script, so a **new deployment version** is required before those emails go out. The existing Web App URL in `app.js` stays the same.
 
 ---
 
