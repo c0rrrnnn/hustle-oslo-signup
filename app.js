@@ -256,26 +256,127 @@
       </div>`;
   }
 
-  function landingScheduleHintHtml() {
-    return `
-      <div class="schedule-block schedule-block--muted" role="region" aria-label="Typical schedules">
-        <h3 class="schedule-title">What a night looks like</h3>
-        <p class="schedule-sub"><strong>Class nights</strong></p>
-        <ul class="schedule-list">
-          <li><span class="schedule-slot">Beginners</span> <time>18:00–19:00</time></li>
-          <li><span class="schedule-slot">Intermediate</span> <time>19:00–20:00</time></li>
-          <li><span class="schedule-slot">Social</span> <time>20:00–21:00</time></li>
-        </ul>
-        <p class="schedule-sub"><strong>Social-only nights</strong></p>
-        <ul class="schedule-list">
-          <li><span class="schedule-slot">Social</span> <time>18:00–21:00</time></li>
-        </ul>
-      </div>`;
+  const LANDING_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
+  ];
+
+  function upcomingDateLabel(ev) {
+    const parts = String(ev.date || "").split("-");
+    const month = LANDING_MONTHS[Number(parts[1]) - 1] || "";
+    const day = Number(parts[2]);
+    return `${month} ${day}`.trim();
+  }
+
+  function upcomingKind(ev) {
+    if (ev.type === "class") return "Class + social";
+    if (ev.type === "social") return "Social only";
+    return ev.label || "Event";
+  }
+
+  function renderUpcomingEvents() {
+    const host = $("#upcoming-events");
+    if (!host) return;
+    const empty = $("#upcoming-empty");
+    const events = upcomingEvents();
+    if (!events.length) {
+      host.innerHTML = "";
+      host.hidden = true;
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    host.hidden = false;
+    host.innerHTML = events
+      .map((ev) => {
+        const dateLabel = upcomingDateLabel(ev);
+        const kind = upcomingKind(ev);
+        return `
+          <article class="upcoming-card" role="listitem">
+            <p class="upcoming-date">${escapeHtml(dateLabel)}</p>
+            <p class="upcoming-kind">${escapeHtml(kind)}</p>
+          </article>`;
+      })
+      .join("");
+  }
+
+  function copyText(text) {
+    const fallback = () =>
+      new Promise((resolve, reject) => {
+        const previous = document.activeElement;
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.top = "0";
+        area.style.left = "0";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        try {
+          const ok = document.execCommand("copy");
+          document.body.removeChild(area);
+          if (previous && typeof previous.focus === "function") previous.focus();
+          if (ok) resolve();
+          else reject(new Error("copy failed"));
+        } catch (err) {
+          document.body.removeChild(area);
+          if (previous && typeof previous.focus === "function") previous.focus();
+          reject(err);
+        }
+      });
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).catch(() => fallback());
+    }
+    return fallback();
+  }
+
+  function initCopyAddress() {
+    const btn = $("#copy-address");
+    const status = $("#copy-status");
+    if (!btn) return;
+    let timer = null;
+    btn.addEventListener("click", () => {
+      const text =
+        btn.getAttribute("data-address") ||
+        ($("#venue-address") && $("#venue-address").textContent.trim()) ||
+        "";
+      copyText(text)
+        .then(() => {
+          btn.classList.add("is-copied");
+          btn.setAttribute("aria-label", "Address copied");
+          if (status) status.textContent = "Address copied.";
+          if (timer) window.clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            btn.classList.remove("is-copied");
+            btn.setAttribute("aria-label", "Copy address");
+            if (status) status.textContent = "";
+          }, 2000);
+        })
+        .catch(() => {
+          btn.classList.remove("is-copied");
+          btn.setAttribute("aria-label", "Copy address");
+          if (status) {
+            status.textContent = "Could not copy the address. Select it and copy manually.";
+          }
+        });
+    });
+  }
+
+  function setLandingChrome(step) {
+    const onLanding = step === 1;
+    document.body.classList.toggle("is-landing", onLanding);
+    const header = $(".site-header");
+    const nav = $("#step-nav");
+    if (header) header.hidden = onLanding;
+    if (nav) nav.hidden = onLanding;
   }
 
   // ─── Navigation ───────────────────────────────────────────────────────────
   function goTo(step) {
     state.step = step;
+    setLandingChrome(step);
     $$(".panel").forEach((panel) => {
       const n = +panel.dataset.panel;
       const on = n === step;
@@ -296,7 +397,7 @@
       pill.classList.toggle("done", done && !active);
       pill.setAttribute("aria-current", active ? "step" : "false");
     });
-    const heading = $(`#panel-${step} h2`);
+    const heading = $(`#panel-${step} h1`) || $(`#panel-${step} h2`);
     if (heading) {
       heading.setAttribute("tabindex", "-1");
       heading.focus({ preventScroll: false });
@@ -1325,8 +1426,9 @@
 
   // ─── Init ─────────────────────────────────────────────────────────────────
   function init() {
-    const landingHost = $("#landing-schedule");
-    if (landingHost) landingHost.innerHTML = landingScheduleHintHtml();
+    setLandingChrome(state.step);
+    renderUpcomingEvents();
+    initCopyAddress();
 
     initCalendarMonth();
     renderCalendar();
