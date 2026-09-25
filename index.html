@@ -17,10 +17,10 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body class="is-landing">
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="site-header">
+  <header class="site-header" hidden>
     <div class="site-header-inner">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true"></span>
@@ -39,101 +39,174 @@
   </header>
 
   <main id="main">
-    <nav class="steps" aria-label="Signup steps" id="step-nav">
+    <nav class="steps" aria-label="Signup steps" id="step-nav" hidden>
       <span class="step-pill active" data-step="1" aria-current="step">1 · Intro</span>
       <span class="step-pill" data-step="2" aria-current="false">2 · Date</span>
       <span class="step-pill" data-step="3" aria-current="false">3 · Ticket</span>
       <span class="step-pill" data-step="4" aria-current="false">4 · Details</span>
     </nav>
 
-    <!-- Panel 1: Landing / hero -->
-    <section class="panel active card" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
-      <div class="hero-card">
-        <div class="hero-visual">
-          <video
-            id="hero-video"
-            class="hero-video"
-            muted
-            loop
-            playsinline
-            preload="none"
-            poster="assets/hero-poster.jpg"
-            disablepictureinpicture
-            disableremoteplayback
-            tabindex="-1"
-            aria-hidden="true"
-          >
-            <source src="assets/hero.mp4" type="video/mp4" />
-          </video>
-          <span class="hero-visual-label">Sentralen · Oslo</span>
-        </div>
-        <script>
-          (function () {
-            var video = document.getElementById("hero-video");
-            if (!video || !window.matchMedia) return;
-            var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-            function applyHeroMotion() {
-              if (motion.matches) {
-                video.removeAttribute("autoplay");
-                video.preload = "none";
-                video.pause();
-                try { video.currentTime = 0; } catch (err) {}
-              } else {
-                video.muted = true;
-                video.preload = "auto";
-                video.setAttribute("autoplay", "");
-                var pending = video.play();
-                if (pending && typeof pending.catch === "function") pending.catch(function () {});
-              }
-            }
-            applyHeroMotion();
-            if (typeof motion.addEventListener === "function") {
-              motion.addEventListener("change", applyHeroMotion);
-            }
-          })();
-        </script>
-        <div class="hero-body">
-          <h2 id="intro-heading">Come dance with us</h2>
-          <p class="hero-meta">Friendly hustle classes and social nights. Beginners welcome.</p>
-          <span class="price-badge">From 50 kr</span>
-          <div class="hero-actions">
-            <button type="button" class="btn btn-primary" id="btn-start" data-go="2">Pick dates
-            </button>
-            <a
-              class="btn btn-secondary"
-              href="https://www.instagram.com/hustleoslo/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Instagram
-              <span class="visually-hidden">(opens in a new tab)</span>
-            </a>
-          </div>
-        </div>
-      </div>
+    <!-- Panel 1: Landing / intro -->
+    <section class="panel active landing-panel" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
+      <img
+        class="landing-logo"
+        src="assets/logo.png"
+        alt=""
+        width="818"
+        height="463"
+      />
 
-      <div class="section-stack">
-        <ul class="one-liners">
+      <div class="hero-visual">
+        <video
+          id="hero-video"
+          class="hero-video"
+          muted
+          loop
+          playsinline
+          preload="none"
+          poster="assets/hero-poster.jpg"
+          disablepictureinpicture
+          disableremoteplayback
+          tabindex="-1"
+          aria-hidden="true"
+        >
+          <source src="assets/hero.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <script>
+        (function () {
+          var video = document.getElementById("hero-video");
+          if (!video || !window.matchMedia) return;
+          var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+          function applyHeroMotion() {
+            if (motion.matches) {
+              video.removeAttribute("autoplay");
+              video.preload = "none";
+              video.pause();
+              try { video.currentTime = 0; } catch (err) {}
+            } else {
+              video.muted = true;
+              video.preload = "auto";
+              video.setAttribute("autoplay", "");
+              var pending = video.play();
+              if (pending && typeof pending.catch === "function") pending.catch(function () {});
+            }
+          }
+          applyHeroMotion();
+          if (typeof motion.addEventListener === "function") {
+            motion.addEventListener("change", applyHeroMotion);
+          }
+        })();
+      </script>
+
+      <p class="landing-kicker">Hustle Oslo</p>
+      <h1 id="intro-heading" class="landing-title">Beginner, Intermediate Class &amp; Social</h1>
+
+      <section class="landing-section" aria-labelledby="about-heading">
+        <h2 id="about-heading" class="landing-label">About event</h2>
+        <!-- Placeholder copy — Claire will replace this lorem ipsum later. -->
+        <p class="landing-about">
+          tempor elit. tincidunt Donec ex. tincidunt volutpat non, ullamcorper quis id amet, Ut luctus nibh sollicitudin. in sed quis sapien quam scelerisque porta sit.
+        </p>
+      </section>
+
+      <section class="landing-section" aria-labelledby="schedule-heading">
+        <h2 id="schedule-heading" class="landing-label">Class schedule</h2>
+        <ul class="class-schedule">
           <li>
-            <span class="one-liner-icon" aria-hidden="true">✓</span>
-            <span>No partner needed.</span>
+            <span class="class-schedule-name">Beginners</span>
+            <time datetime="18:00">18:00–19:00</time>
           </li>
           <li>
-            <span class="one-liner-icon" aria-hidden="true">✓</span>
-            <span>Shoes you can turn in.</span>
+            <span class="class-schedule-name">Intermediate</span>
+            <time datetime="19:00">19:00–20:00</time>
           </li>
           <li>
-            <span class="one-liner-icon" aria-hidden="true">✓</span>
-            <span>Willingness to learn and have fun.</span>
+            <span class="class-schedule-name">Social</span>
+            <time datetime="20:00">20:00–21:00</time>
           </li>
         </ul>
+      </section>
 
-        <div id="landing-schedule"></div>
+      <section class="landing-section" aria-labelledby="location-heading">
+        <h2 id="location-heading" class="landing-label">Location</h2>
+        <div class="address-line">
+          <p id="venue-address" class="address-text">Sentralen - Øvre Slottsgate 3, 0157 Oslo</p>
+          <button
+            type="button"
+            class="copy-address"
+            id="copy-address"
+            data-address="Sentralen - Øvre Slottsgate 3, 0157 Oslo"
+            aria-label="Copy address"
+          >
+            <svg class="icon-copy" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"></rect>
+              <path d="M5 15V5.5A1.5 1.5 0 0 1 6.5 4H15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+            </svg>
+            <svg class="icon-check" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M5 12.5 9.5 17 19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div>
+        <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+        <div class="map-frame">
+          <iframe
+            title="Map of Sentralen, Øvre Slottsgate 3, 0157 Oslo"
+            src="https://maps.google.com/maps?q=Sentralen%2C%20%C3%98vre%20Slottsgate%203%2C%200157%20Oslo&amp;ll=59.911002,10.740170&amp;z=16&amp;hl=en&amp;output=embed"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+            allowfullscreen
+          ></iframe>
+        </div>
+      </section>
 
-        <p class="cancel-note">
-          <strong>Need to cancel?</strong>
-          DM Hustle Oslo on Instagram — payment is transferable to the next class.
-        </p>
+      <section class="landing-section" aria-labelledby="upcoming-heading">
+        <h2 id="upcoming-heading" class="landing-label">Upcoming events</h2>
+        <div
+          id="upcoming-events"
+          class="upcoming-row"
+          role="list"
+          tabindex="0"
+          aria-label="Upcoming nights"
+        ></div>
+        <p id="upcoming-empty" class="upcoming-empty" hidden>No upcoming nights right now.</p>
+      </section>
+
+      <section class="landing-section" aria-labelledby="more-details-heading">
+        <h2 id="more-details-heading" class="landing-label">More Details</h2>
+        <ul class="detail-checks">
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>No partner needed</span>
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>Non-grippy shoes you can turn in</span>
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>Willingness to learn and have fun</span>
+          </li>
+        </ul>
+      </section>
+
+      <div class="landing-actions">
+        <button type="button" class="btn btn-primary" id="btn-start" data-go="2">Register for class</button>
+        <a
+          class="btn btn-secondary"
+          href="https://www.instagram.com/hustleoslo/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Contact us
+          <span class="visually-hidden"> — @hustleoslo on Instagram (opens in a new tab)</span>
+        </a>
       </div>
     </section>
 
@@ -437,9 +510,9 @@
 
   <footer class="site-footer">
     <p>
-      Hustle Oslo ·
+      Hustle Oslo •
       <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a>
-      · Vipps #48782
+      • Vipps #48782
     </p>
   </footer>
 
