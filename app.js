@@ -1042,6 +1042,60 @@
     };
   }
 
+  /** Fields the attendee confirmation email lists for one saved night. */
+  function confirmationNightFromPayload(payload) {
+    return {
+      eventId: payload.eventId,
+      eventDate: payload.eventDate,
+      eventType: payload.eventType,
+      eventLocation: payload.eventLocation,
+      eventLabel: payload.eventLabel,
+      eventVenue: payload.eventVenue,
+      eventStart: payload.eventStart,
+      eventEnd: payload.eventEnd,
+      ticketId: payload.ticketId,
+      ticketName: payload.ticketName,
+      priceTier: payload.priceTier,
+      amount: payload.amount,
+    };
+  }
+
+  function signupPayloadForQueue(payload) {
+    const copy = { ...payload };
+    delete copy.sendAttendeeConfirmation;
+    delete copy.confirmationNights;
+    delete copy.confirmationOnly;
+    delete copy.confirmationTransactionNumber;
+    return copy;
+  }
+
+  /**
+   * One email for nights that already saved, when the POST that would have
+   * carried sendAttendeeConfirmation did not confirm.
+   * Omits top-level transactionNumber so the currently deployed script
+   * (which ignores confirmation) rejects this before appending a blank row.
+   * The updated script reads confirmationTransactionNumber.
+   */
+  async function sendSucceededConfirmation(person, nights) {
+    if (!nights.length || !CONFIG.APPS_SCRIPT_URL) return;
+    const payload = {
+      timestamp: person.timestamp,
+      fullName: person.fullName,
+      email: person.email,
+      phone: person.phone,
+      sendAttendeeConfirmation: true,
+      confirmationOnly: true,
+      confirmationNights: nights,
+      confirmationTransactionNumber: person.transactionNumber,
+      vippsNumber: person.vippsNumber,
+    };
+    try {
+      await submitSignup(payload);
+    } catch (err) {
+      console.warn("[Hustle Oslo] attendee confirmation email failed", err);
+    }
+  }
+
   async function submitSignup(payload) {
     if (!CONFIG.APPS_SCRIPT_URL) {
       const queued = queueLocally(payload);
@@ -1066,24 +1120,56 @@
   }
 
   /**
-   * Multi-night: loop single-object POSTs so the live Apps Script works
-   * without redeploying. Same person + same transactionNumber; per-night amount.
+   * Multi-night: one POST per night (same person + same transactionNumber;
+   * per-night amount). Organizer notify stays one email per POST.
+   * Attendee confirmation is one email per booking: sendAttendeeConfirmation
+   * is set only on the last night in the batch, with confirmationNights
+   * covering nights saved so far plus this one. If that POST fails, or the
+   * script saves the row but reports confirmationSent: false, a
+   * confirmation-only follow-up lists only the nights that succeeded.
+   * A failed night is never included.
    */
   async function submitAllSignups() {
     const person = buildPersonFields();
+    const selections = state.selections;
     const results = [];
     let mocked = false;
-    for (const sel of state.selections) {
+    const succeededNights = [];
+
+    for (let i = 0; i < selections.length; i++) {
+      const sel = selections[i];
+      const isLast = i === selections.length - 1;
       const payload = buildPayloadForSelection(sel, person);
+      const night = confirmationNightFromPayload(payload);
+
+      if (isLast) {
+        payload.sendAttendeeConfirmation = true;
+        payload.confirmationNights = succeededNights.concat([night]);
+      }
+
       try {
         const result = await submitSignup(payload);
         if (result && result.mocked) mocked = true;
         results.push({ ok: true, payload, result });
+        succeededNights.push(night);
+        const confirmationMissed =
+          isLast &&
+          payload.sendAttendeeConfirmation === true &&
+          result &&
+          result.confirmationSent === false &&
+          !result.mocked;
+        if (confirmationMissed) {
+          await sendSucceededConfirmation(person, payload.confirmationNights);
+        }
       } catch (err) {
-        queueLocally(payload);
+        queueLocally(signupPayloadForQueue(payload));
         results.push({ ok: false, payload, error: String(err) });
+        if (isLast && succeededNights.length > 0) {
+          await sendSucceededConfirmation(person, succeededNights.slice());
+        }
       }
     }
+
     const allOk = results.every((r) => r.ok);
     const anyOk = results.some((r) => r.ok);
     return {
