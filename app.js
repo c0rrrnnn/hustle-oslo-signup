@@ -251,7 +251,7 @@
       <div class="schedule-block" role="region" aria-label="Social night schedule">
         <h3 class="schedule-title">Tonight’s schedule</h3>
         <ul class="schedule-list">
-          <li><span class="schedule-slot">Social</span> <time datetime="18:00">18:00–21:00</time></li>
+          <li><span class="schedule-slot">Social</span> <time datetime="18:00">18:00–20:00</time></li>
         </ul>
       </div>`;
   }
@@ -842,7 +842,7 @@
                     const sched =
                       s.event.type === "class"
                         ? "Beginners 18:00 · Intermediate 19:00 · Social 20:00"
-                        : "Social 18:00–21:00";
+                        : "Social 18:00–20:00";
                     return `<li><span class="schedule-slot">${escapeHtml(formatEventDate(s.event))}</span> <span>${escapeHtml(s.event.location)} · ${sched}</span></li>`;
                   })
                   .join("")}
@@ -1322,7 +1322,7 @@
         const sched =
           s.event.type === "class"
             ? "Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00"
-            : "Social 18:00–21:00";
+            : "Social 18:00–20:00";
         return `
           <dt>Night</dt>
           <dd>${escapeHtml(formatEventDate(s.event))} · ${escapeHtml(s.event.location)}</dd>
