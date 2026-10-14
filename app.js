@@ -1,16 +1,19 @@
 /**
- * Hustle Oslo — signup app (vanilla JS, no build step)
- * Vipps number #48782 (NOT Vipps Checkout). Payment reference: Vipps transaction number.
- * Flow: Intro → Date (multi calendar) → Tickets → Details (pay via Vipps + transaction #) → confirmation
+ * Hustle Oslo — signup
+ * Intro (landing) → student → dates → confirm → details → checkout → confirmation.
+ * Payments go through startPayment() only when CONFIG.PAYMENTS_ENABLED is true.
+ * Until the Cloudflare Worker exists, Pay saves the booking to Apps Script and
+ * the confirmation is marked payment pending (Vipps #48782).
+ * Card inputs are visual placeholders for a future Stripe Payment Element.
+ * TODO: do not send card numbers anywhere from this file.
  */
 (function () {
   "use strict";
 
-  // ─── CONFIG ───────────────────────────────────────────────────────────────
-  // Claire: paste your deployed Google Apps Script Web App URL here after deploy.
-  // Leave empty until then — signup still shows confirmation + local queue.
   const CONFIG = {
     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec",
+    // Flip to true only when the Cloudflare Worker can take a real payment.
+    PAYMENTS_ENABLED: false,
     VIPPS_NUMBER: "48782",
     VIPPS_NAME: "Hustle Oslo",
     TIMEZONE: "Europe/Oslo",
@@ -18,42 +21,87 @@
     CLASS_START_MINUTE: 0,
     INSTAGRAM: "https://www.instagram.com/hustleoslo/",
     LOCAL_QUEUE_KEY: "hustleOsloSignups",
+    TERMS_VERSION: "v1.0",
   };
 
   const EXPERIENCE_LABELS = {
-    never: "I’ve never danced before",
-    solo: "Solo dance styles",
-    partner: "Other partner dances",
+    new: "New to dancing",
+    some: "Some dance experience (solo or partner)",
+    "other-styles": "I dance other styles now (salsa, swing, etc.)",
+    hustle: "I’ve danced hustle before",
+    teach: "I teach dance",
   };
-  const HOW_FOUND_LABELS = {
-    "taken-class": "I’ve taken hustle before",
-    friend: "Friend",
-    social: "Social media",
+  const REFERRAL_LABELS = {
+    event: "At an event",
+    poster: "Poster around town",
+    friend: "A friend told me",
+    instagram: "Instagram",
+    "event-apps": "Event apps (Bruce, Meetup, Facebook)",
+    google: "Google search",
+    tiktok: "TikTok",
     other: "Other",
   };
+  const TICKET_LABELS = {
+    beginners: "Beginner class",
+    intermediate: "Intermediate class",
+    bundle: "2 class bundle",
+    social: "Social only",
+  };
+  const METHOD_LABEL = {
+    apple: "Apple Pay",
+    google: "Google Pay",
+    vipps: "Vipps",
+    card: "Card",
+  };
+  const MOBILE_METHODS = ["apple", "google", "vipps", "card"];
+  const DESKTOP_METHODS = ["card", "apple", "google", "vipps"];
 
   const MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
   ];
+  const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const WEEKDAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const WEEKDAYS_NARROW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+  const VIEWS = ["student", "dates", "confirm", "details", "checkout", "failed", "done"];
+  const PROGRESS = { student: 1, dates: 2, confirm: 2, details: 3, checkout: 4, failed: 4, done: 4 };
+  const HEADINGS = {
+    student: "bk-student-heading",
+    dates: "bk-dates-heading",
+    confirm: "bk-confirm-heading",
+    details: "bk-details-heading",
+    checkout: "bk-checkout-heading",
+    failed: "bk-failed-heading",
+    done: "bk-done-heading",
+  };
 
   const state = {
-    step: 1,
+    view: "student",
+    sheetOpen: false,
+    priceTier: null,
     selectedEvents: [],
+    selections: [],
     calendarFocusDate: null,
     calendarYear: null,
-    calendarMonth: null, // 1–12
-    selections: [], // [{ event, ticket, priceTier }, ...]
-    priceTier: "standard", // Student | Standard, applied to every selected night
+    calendarMonth: null,
+    paymentMethod: "apple",
+    paymentPending: true,
+    transactionNumber: "",
+    termsAcceptedAt: "",
+    submitting: false,
     submitted: false,
-    submitOk: null,
+    submitResult: null,
+    opener: null,
   };
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
-  // ─── Time helpers (Europe/Oslo) ───────────────────────────────────────────
+  const ICON_APPLE = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16.7 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-.1 2.9-2.2c.7-1 1.2-2.1 1.5-3.2-4-1.5-3.9-5.6-1.8-7.2zM14.8 6.1c.6-.8 1.1-1.9.9-3-1 .1-2.2.7-2.9 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.5 3-1.4z"/></svg>';
+  const ICON_GOOGLE = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.2 6.1 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.2 6.1 29.4 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.2-3.5 5.7-6.6 7.1l6.3 5.3C37.4 38.3 44 33 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>';
+  const ICON_CARD = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect><path d="M2 10h20" fill="none" stroke="currentColor" stroke-width="2"></path></svg>';
+
   function osloNow() {
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: CONFIG.TIMEZONE,
@@ -72,11 +120,9 @@
       d: +get("day"),
       h: +get("hour") === 24 ? 0 : +get("hour"),
       min: +get("minute"),
-      sec: +get("second"),
     };
   }
 
-  /** Past if earlier day, or same day at/after 18:00 Europe/Oslo. */
   function isEventPast(ev) {
     const now = osloNow();
     const [ey, em, ed] = ev.date.split("-").map(Number);
@@ -96,31 +142,16 @@
   }
 
   function toDateKey(y, m, d) {
-    return `${y}-${pad2(m)}-${pad2(d)}`;
+    return y + "-" + pad2(m) + "-" + pad2(d);
   }
 
   function daysInMonth(y, m) {
     return new Date(Date.UTC(y, m, 0)).getUTCDate();
   }
 
-  /** Monday=0 … Sunday=6 for calendar grid. */
   function mondayIndex(y, m, d) {
-    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // Sun=0
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
     return (dow + 6) % 7;
-  }
-
-  function formatEventDate(ev) {
-    const [y, m, d] = ev.date.split("-").map(Number);
-    const months = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-    return `${ev.weekday || ""} ${d} ${months[m - 1]} ${y}`.trim();
-  }
-
-  function sheetTabName(ev) {
-    const kind = ev.type === "class" ? "Class" : "Social";
-    return `${ev.date} ${kind} ${ev.location}`;
   }
 
   function eventsByDate(dateKey) {
@@ -128,83 +159,8 @@
   }
 
   function eventsOnMonth(y, m) {
-    const prefix = `${y}-${pad2(m)}-`;
+    const prefix = y + "-" + pad2(m) + "-";
     return upcomingEvents().filter((e) => e.date.startsWith(prefix));
-  }
-
-  function isEventSelected(ev) {
-    return state.selectedEvents.some((e) => e.id === ev.id);
-  }
-
-  function toggleSelectedEvent(ev) {
-    const idx = state.selectedEvents.findIndex((e) => e.id === ev.id);
-    if (idx >= 0) {
-      state.selectedEvents.splice(idx, 1);
-    } else {
-      state.selectedEvents.push(ev);
-      state.selectedEvents.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-    }
-    // Drop ticket selection for deselected nights
-    state.selections = state.selections.filter((s) =>
-      state.selectedEvents.some((e) => e.id === s.event.id)
-    );
-    updateDateNextButton();
-    renderCalendar();
-    renderDayPills();
-  }
-
-  function selectionForEvent(eventId) {
-    return state.selections.find((s) => s.event.id === eventId) || null;
-  }
-
-  function activePriceTier() {
-    return state.priceTier === "student" ? "student" : "standard";
-  }
-
-  /** Equal student/standard prices stay on standard (social is 50 either way). */
-  function tierForTicket(ticket) {
-    if (ticket && ticket.prices && ticket.prices.standard === ticket.prices.student) {
-      return "standard";
-    }
-    return activePriceTier();
-  }
-
-  function displayedTicketPrice(ticket) {
-    const prices = (ticket && ticket.prices) || {};
-    if (activePriceTier() === "student" && typeof prices.student === "number") {
-      return prices.student;
-    }
-    return prices.standard;
-  }
-
-  function applyPriceTierToSelections() {
-    state.selections.forEach((sel) => {
-      sel.priceTier = tierForTicket(sel.ticket);
-    });
-  }
-
-  function amountForSelection(sel) {
-    if (!sel || !sel.ticket) return 0;
-    const tier = sel.priceTier || "standard";
-    const prices = sel.ticket.prices;
-    if (tier === "student" && typeof prices.student === "number") return prices.student;
-    return prices.standard;
-  }
-
-  function currentAmount() {
-    return state.selections.reduce((sum, s) => sum + amountForSelection(s), 0);
-  }
-
-  function allTicketsChosen() {
-    if (!state.selectedEvents.length) return false;
-    return state.selectedEvents.every((ev) => {
-      const sel = selectionForEvent(ev.id);
-      return sel && sel.ticket;
-    });
-  }
-
-  function ticketLabel(ticket) {
-    return ticket ? ticket.name : "";
   }
 
   function prefersReducedMotion() {
@@ -219,7 +175,147 @@
       .replace(/"/g, "&quot;");
   }
 
-  // ─── Local queue (when Apps Script URL not set) ───────────────────────────
+  function icsEscape(s) {
+    return String(s)
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/,/g, "\\,")
+      .replace(/;/g, "\\;");
+  }
+
+  function ticketLabel(ticket) {
+    if (!ticket) return "";
+    return TICKET_LABELS[ticket.id] || ticket.name || "";
+  }
+
+  function ticketTime(ev, ticketId) {
+    if (!ev) return "";
+    if (ev.type === "social") return ev.start + "–" + ev.end;
+    if (ticketId === "beginners") return "18:00–19:00";
+    if (ticketId === "intermediate") return "19:00–20:00";
+    if (ticketId === "bundle") return "18:00–20:00";
+    return "20:00–21:00";
+  }
+
+  function ticketNote(ticket) {
+    if (!ticket || ticket.id === "social") return "";
+    if (ticket.id === "bundle") return "Includes beginner, intermediate class and social";
+    return "Includes social after class";
+  }
+
+  function venueShort(ev) {
+    return String((ev && ev.venue) || "Sentralen").split(",")[0].trim();
+  }
+
+  function venueParen(ev) {
+    return ev.location + " (" + venueShort(ev) + ")";
+  }
+
+  function venueDot(ev) {
+    return ev.location + " • " + venueShort(ev);
+  }
+
+  function formatMonthDay(ev) {
+    const parts = ev.date.split("-").map(Number);
+    return MONTHS_SHORT[parts[1] - 1] + " " + parts[2];
+  }
+
+  function formatCheckoutDate(ev) {
+    const parts = ev.date.split("-").map(Number);
+    const wd = ev.weekday || WEEKDAYS_SHORT[mondayIndex(parts[0], parts[1], parts[2])];
+    return wd + " " + parts[2] + " " + MONTHS_SHORT[parts[1] - 1];
+  }
+
+  function activePriceTier() {
+    return state.priceTier === "student" ? "student" : "standard";
+  }
+
+  function tierForTicket(ticket) {
+    if (ticket && ticket.prices && ticket.prices.standard === ticket.prices.student) return "standard";
+    return activePriceTier();
+  }
+
+  function displayedTicketPrice(ticket) {
+    const prices = (ticket && ticket.prices) || {};
+    if (activePriceTier() === "student" && typeof prices.student === "number") return prices.student;
+    return prices.standard;
+  }
+
+  function amountForSelection(sel) {
+    if (!sel || !sel.ticket) return 0;
+    const prices = sel.ticket.prices || {};
+    const tier = sel.priceTier || "standard";
+    if (tier === "student" && typeof prices.student === "number") return prices.student;
+    return prices.standard;
+  }
+
+  function currentAmount() {
+    return state.selections.reduce((sum, s) => sum + amountForSelection(s), 0);
+  }
+
+  function applyPriceTierToSelections() {
+    state.selections.forEach((sel) => {
+      sel.priceTier = tierForTicket(sel.ticket);
+    });
+  }
+
+  function selectionForEvent(eventId) {
+    return state.selections.find((s) => s.event.id === eventId) || null;
+  }
+
+  function sheetTabName(ev) {
+    const kind = ev.type === "class" ? "Class" : "Social";
+    return ev.date + " " + kind + " " + ev.location;
+  }
+
+  function wideCheckout() {
+    return state.view === "checkout" && window.matchMedia("(min-width: 601px)").matches;
+  }
+
+  function setErr(key, on) {
+    const err = document.getElementById("bk-err-" + key);
+    if (err) err.hidden = !on;
+    const input = document.getElementById(fieldId(key));
+    if (input) input.setAttribute("aria-invalid", on ? "true" : "false");
+  }
+
+  function fieldId(key) {
+    const map = {
+      name: "bk-name",
+      email: "bk-email",
+      phone: "bk-phone",
+      "referral-other": "bk-referral-other",
+      "card-number": "bk-card-number",
+      "card-expiry": "bk-card-expiry",
+      "card-cvc": "bk-card-cvc",
+      "card-name": "bk-card-name",
+    };
+    return map[key] || "";
+  }
+
+  function announce(message) {
+    const live = $("#bk-alert");
+    if (!live) return;
+    live.textContent = "";
+    if (message) {
+      window.setTimeout(() => {
+        live.textContent = message;
+      }, 30);
+    }
+  }
+
+  function isValidEmail(v) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
+  }
+
+  function isValidPhone(v) {
+    const s = String(v).trim();
+    if (!s) return true;
+    if (!/^[+\d][\d\s()./-]*$/.test(s)) return false;
+    const digits = s.replace(/\D/g, "");
+    return digits.length >= 8 && digits.length <= 15;
+  }
+
   function queueLocally(payload) {
     try {
       const raw = sessionStorage.getItem(CONFIG.LOCAL_QUEUE_KEY);
@@ -233,39 +329,12 @@
     }
   }
 
-  // ─── Schedule HTML ────────────────────────────────────────────────────────
-  function scheduleHtml(ev) {
-    if (!ev) return "";
-    if (ev.type === "class") {
-      return `
-        <div class="schedule-block" role="region" aria-label="Class night schedule">
-          <h3 class="schedule-title">Tonight’s schedule</h3>
-          <ul class="schedule-list">
-            <li><span class="schedule-slot">Beginners</span> <time datetime="18:00">18:00–19:00</time></li>
-            <li><span class="schedule-slot">Intermediate</span> <time datetime="19:00">19:00–20:00</time></li>
-            <li><span class="schedule-slot">Social</span> <time datetime="20:00">20:00–21:00</time></li>
-          </ul>
-        </div>`;
-    }
-    return `
-      <div class="schedule-block" role="region" aria-label="Social night schedule">
-        <h3 class="schedule-title">Tonight’s schedule</h3>
-        <ul class="schedule-list">
-          <li><span class="schedule-slot">Social</span> <time datetime="18:00">18:00–20:00</time></li>
-        </ul>
-      </div>`;
-  }
-
-  const LANDING_MONTHS = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
-  ];
-
   function upcomingDateLabel(ev) {
     const parts = String(ev.date || "").split("-");
-    const month = LANDING_MONTHS[Number(parts[1]) - 1] || "";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+    const month = months[Number(parts[1]) - 1] || "";
     const day = Number(parts[2]);
-    return `${month} ${day}`.trim();
+    return (month + " " + day).trim();
   }
 
   function upcomingKind(ev) {
@@ -289,13 +358,12 @@
     host.hidden = false;
     host.innerHTML = events
       .map((ev) => {
-        const dateLabel = upcomingDateLabel(ev);
-        const kind = upcomingKind(ev);
-        return `
-          <article class="upcoming-card" role="listitem">
-            <p class="upcoming-date">${escapeHtml(dateLabel)}</p>
-            <p class="upcoming-kind">${escapeHtml(kind)}</p>
-          </article>`;
+        return (
+          '<article class="upcoming-card" role="listitem">' +
+          '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>" +
+          '<p class="upcoming-kind">' + escapeHtml(upcomingKind(ev)) + "</p>" +
+          "</article>"
+        );
       })
       .join("");
   }
@@ -357,62 +425,173 @@
         .catch(() => {
           btn.classList.remove("is-copied");
           btn.setAttribute("aria-label", "Copy address");
-          if (status) {
-            status.textContent = "Could not copy the address. Select it and copy manually.";
-          }
+          if (status) status.textContent = "Could not copy the address. Select it and copy manually.";
         });
     });
   }
 
-  function setLandingChrome(step) {
-    const onLanding = step === 1;
-    document.body.classList.toggle("is-landing", onLanding);
-    const header = $(".site-header");
-    const nav = $("#step-nav");
-    if (header) header.hidden = onLanding;
-    if (nav) nav.hidden = onLanding;
+  function setInert(on) {
+    ["#main", ".site-footer", ".skip-link"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.inert = on;
+    });
   }
 
-  // ─── Navigation ───────────────────────────────────────────────────────────
-  function goTo(step) {
-    state.step = step;
-    setLandingChrome(step);
-    $$(".panel").forEach((panel) => {
-      const n = +panel.dataset.panel;
-      const on = n === step;
-      panel.classList.toggle("active", on);
-      if (on) panel.removeAttribute("hidden");
-      else panel.setAttribute("hidden", "");
+  function stepStatus(view) {
+    const n = PROGRESS[view] || 1;
+    const names = {
+      student: "Are you a student?",
+      dates: "Select a date.",
+      confirm: "Confirm selected classes.",
+      details: "Your details.",
+      checkout: "Checkout.",
+      failed: "Payment failed.",
+      done: "You’re booked.",
+    };
+    if (view === "failed" || view === "done") return names[view];
+    return "Step " + n + " of 4. " + (names[view] || "");
+  }
+
+  function go(view, opts) {
+    opts = opts || {};
+    state.view = view;
+    const sheet = $("#book-sheet");
+    if (!sheet) return;
+    sheet.classList.toggle("is-wide", wideCheckout());
+    const headingId = HEADINGS[view];
+    if (headingId) sheet.setAttribute("aria-labelledby", headingId);
+    VIEWS.forEach((name) => {
+      const step = document.getElementById("bk-step-" + name);
+      const foot = document.getElementById("bk-foot-" + name);
+      if (step) step.hidden = name !== view;
+      if (foot) foot.hidden = name !== view;
     });
-    if (step === 2) {
+    const prog = PROGRESS[view] || 1;
+    $$("#bk-prog i").forEach((bar, i) => bar.classList.toggle("on", i < prog));
+    const status = $("#bk-step-status");
+    if (status) status.textContent = stepStatus(view);
+    if (view === "dates") {
       if (state.calendarYear == null) initCalendarMonth();
       renderCalendar();
-      renderDayPills();
+      renderOptions();
     }
-    $$(".step-pill").forEach((pill) => {
-      const n = +pill.dataset.step;
-      const active = step <= 4 && n === step;
-      const done = step > 4 || n < step;
-      pill.classList.toggle("active", active);
-      pill.classList.toggle("done", done && !active);
-      pill.setAttribute("aria-current", active ? "step" : "false");
-    });
-    const heading = $(`#panel-${step} h1`) || $(`#panel-${step} h2`);
-    if (heading) {
-      heading.setAttribute("tabindex", "-1");
-      heading.focus({ preventScroll: false });
+    if (view === "confirm") renderConfirm();
+    if (view === "checkout") {
+      renderCheckout();
+      renderPayMethods();
     }
-    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    if (view === "failed") {
+      renderFailed();
+      renderPayMethods();
+    }
+    if (view === "done") renderDone();
+    updatePayChrome();
+    sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
+    if (!opts.skipFocus) {
+      const heading = document.getElementById(headingId);
+      if (heading) heading.focus({ preventScroll: true });
+    }
   }
 
-  // ─── Calendar ─────────────────────────────────────────────────────────────
+  function openSheet() {
+    const sheet = $("#book-sheet");
+    if (!sheet || state.sheetOpen) return;
+    state.sheetOpen = true;
+    state.opener = document.activeElement;
+    sheet.hidden = false;
+    document.body.classList.add("bk-open");
+    setInert(true);
+    go(state.submitted ? "student" : state.view || "student", { instant: true });
+  }
+
+  function closeSheet() {
+    if (state.submitting) return;
+    const sheet = $("#book-sheet");
+    const submitted = state.submitted;
+    if (sheet) sheet.hidden = true;
+    document.body.classList.remove("bk-open");
+    state.sheetOpen = false;
+    setInert(false);
+    if (submitted) resetBooking();
+    const backTo = state.opener && document.contains(state.opener) ? state.opener : $("#btn-start");
+    if (backTo && typeof backTo.focus === "function") backTo.focus();
+  }
+
+  function resetBooking() {
+    state.view = "student";
+    state.priceTier = null;
+    state.selections = [];
+    state.calendarFocusDate = null;
+    state.calendarYear = null;
+    state.calendarMonth = null;
+    state.paymentMethod = "apple";
+    state.paymentPending = true;
+    state.transactionNumber = "";
+    state.termsAcceptedAt = "";
+    state.submitting = false;
+    state.submitted = false;
+    state.submitResult = null;
+    const form = $("#bk-details-form");
+    if (form) form.reset();
+    ["bk-student-yes", "bk-student-no"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.classList.remove("is-on");
+      btn.setAttribute("aria-pressed", "false");
+    });
+    const repeat = $("#bk-repeat");
+    if (repeat) repeat.checked = false;
+    syncFirstTimer();
+    ["student", "name", "email", "phone", "referral-other", "pay", "card-number", "card-expiry", "card-cvc", "card-name"].forEach((key) => setErr(key, false));
+    announce("");
+    clearCardFields();
+    const help = $("#bk-phone-help");
+    const helpBtn = $("#bk-phone-help-btn");
+    if (help) help.hidden = true;
+    if (helpBtn) helpBtn.setAttribute("aria-expanded", "false");
+    ["bk-experience", "bk-referral"].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (sel) sel.classList.add("is-empty");
+    });
+    initCalendarMonth();
+  }
+
+  function onBack() {
+    if (state.view === "student" || state.view === "done") {
+      if (state.view === "done") state.submitted = true;
+      closeSheet();
+      return;
+    }
+    if (state.view === "dates") return go("student");
+    if (state.view === "confirm") return go("dates");
+    if (state.view === "details") return go("confirm");
+    if (state.view === "checkout") return go("details");
+    if (state.view === "failed") return go("checkout");
+  }
+
+  function setTier(tier) {
+    state.priceTier = tier === "student" ? "student" : "standard";
+    const yes = $("#bk-student-yes");
+    const no = $("#bk-student-no");
+    if (yes) {
+      yes.classList.toggle("is-on", state.priceTier === "student");
+      yes.setAttribute("aria-pressed", state.priceTier === "student" ? "true" : "false");
+    }
+    if (no) {
+      no.classList.toggle("is-on", state.priceTier === "standard");
+      no.setAttribute("aria-pressed", state.priceTier === "standard" ? "true" : "false");
+    }
+    setErr("student", false);
+    applyPriceTierToSelections();
+  }
+
   function initCalendarMonth() {
     const events = upcomingEvents();
     const now = osloNow();
     if (events.length) {
-      const [y, m] = events[0].date.split("-").map(Number);
-      state.calendarYear = y;
-      state.calendarMonth = m;
+      const parts = events[0].date.split("-").map(Number);
+      state.calendarYear = parts[0];
+      state.calendarMonth = parts[1];
     } else {
       state.calendarYear = now.y;
       state.calendarMonth = now.m;
@@ -432,16 +611,12 @@
 
   function canPrevMonth() {
     const b = monthBounds();
-    const key = state.calendarYear * 12 + state.calendarMonth;
-    const min = b.minY * 12 + b.minM;
-    return key > min;
+    return state.calendarYear * 12 + state.calendarMonth > b.minY * 12 + b.minM;
   }
 
   function canNextMonth() {
     const b = monthBounds();
-    const key = state.calendarYear * 12 + state.calendarMonth;
-    const max = b.maxY * 12 + b.maxM;
-    return key < max;
+    return state.calendarYear * 12 + state.calendarMonth < b.maxY * 12 + b.maxM;
   }
 
   function shiftMonth(delta) {
@@ -460,673 +635,521 @@
     renderCalendar();
   }
 
-  function updateDateNextButton() {
-    const btn = $("#btn-to-ticket");
-    const n = state.selectedEvents.length;
-    if (!btn) return;
-    btn.disabled = n < 1;
-    if (n < 1) {
-      btn.textContent = "Next";
-    } else if (n === 1) {
-      btn.textContent = "Next · 1 night";
-    } else {
-      btn.textContent = `Next · ${n} nights`;
-    }
+  function updateDatesNext() {
+    const btn = $("#bk-dates-next");
+    if (btn) btn.disabled = state.selections.length < 1;
   }
 
   function renderCalendar() {
-    const mount = $("#calendar-mount");
-    const empty = $("#no-events");
+    const mount = $("#bk-calendar");
+    const empty = $("#bk-no-events");
     if (!mount) return;
-
     const events = upcomingEvents();
     if (!events.length) {
       mount.innerHTML = "";
-      mount.hidden = true;
       if (empty) empty.hidden = false;
-      updateDateNextButton();
-      renderDayPills();
+      updateDatesNext();
       return;
     }
-    mount.hidden = false;
     if (empty) empty.hidden = true;
-
     if (state.calendarYear == null) initCalendarMonth();
-
     const y = state.calendarYear;
     const m = state.calendarMonth;
-    const now = osloNow();
-    const todayKey = toDateKey(now.y, now.m, now.d);
     const dim = daysInMonth(y, m);
     const startPad = mondayIndex(y, m, 1);
-
     const byDate = {};
     eventsOnMonth(y, m).forEach((ev) => {
       if (!byDate[ev.date]) byDate[ev.date] = [];
       byDate[ev.date].push(ev);
     });
-
-    const selectedDates = new Set(state.selectedEvents.map((e) => e.date));
-
     let cells = "";
-    for (let i = 0; i < startPad; i++) {
-      cells += `<button type="button" class="cal-day cal-day--empty" tabindex="-1" aria-hidden="true" disabled></button>`;
-    }
+    for (let i = 0; i < startPad; i++) cells += '<span class="bk-day bk-day-empty"></span>';
     for (let d = 1; d <= dim; d++) {
       const key = toDateKey(y, m, d);
       const dayEvents = byDate[key] || [];
-      const has = dayEvents.length > 0;
-      const isToday = key === todayKey;
-      const isFocused = state.calendarFocusDate === key;
-      const isSelected = selectedDates.has(key);
-      const classes = [
-        "cal-day",
-        has ? "cal-day--has-event" : "cal-day--muted",
-        isToday ? "cal-day--today" : "",
-        isFocused ? "cal-day--focused" : "",
-        isSelected ? "cal-day--selected" : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      const dots = dayEvents
-        .map(
-          (ev) =>
-            `<span class="cal-dot cal-dot--${ev.type === "class" ? "class" : "social"}" aria-hidden="true"></span>`
-        )
-        .join("");
-
-      const labelParts = [`${d} ${MONTH_NAMES[m - 1]} ${y}`];
-      if (has) {
-        labelParts.push(
-          dayEvents
-            .map((ev) => `${ev.label || ev.type} at ${ev.location}`)
-            .join(", ")
-        );
+      if (!dayEvents.length) {
+        cells += '<span class="bk-day bk-day-muted">' + d + "</span>";
+        continue;
       }
-      if (isSelected) labelParts.push("selected");
-      if (isFocused) labelParts.push("focused");
-
-      cells += `
-        <button
-          type="button"
-          class="${classes}"
-          data-date="${key}"
-          ${has ? "" : "disabled"}
-          aria-label="${escapeHtml(labelParts.join(" — "))}"
-          aria-pressed="${isSelected ? "true" : "false"}"
-          aria-current="${isFocused ? "date" : "false"}"
-        >
-          <span class="cal-day-num">${d}</span>
-          <span class="cal-dots">${dots}</span>
-        </button>`;
+      const selected = state.selections.some((s) => s.event.date === key);
+      const focused = state.calendarFocusDate === key;
+      const type = dayEvents.some((ev) => ev.type === "class") ? "class" : "social";
+      const kind = type === "class" ? "Class and social" : "Social only";
+      const label = d + " " + MONTH_NAMES[m - 1] + " " + y + ", " + kind + (selected ? ", selected" : "");
+      cells +=
+        '<button type="button" class="bk-day is-event' +
+        (selected || focused ? " is-selected" : "") +
+        '" data-action="focus-date" data-date="' + key + '" aria-pressed="' + (selected ? "true" : "false") +
+        '" aria-label="' + escapeHtml(label) + '"><span class="bk-day-num">' + d +
+        '</span><span class="bk-day-dot bk-dot-' + type + '" aria-hidden="true"></span></button>';
     }
-
-    mount.innerHTML = `
-      <div class="cal-header">
-        <button type="button" class="cal-nav" id="cal-prev" aria-label="Previous month" ${canPrevMonth() ? "" : "disabled"}>‹</button>
-        <h3 class="cal-title" id="cal-month-label">${MONTH_NAMES[m - 1]} ${y}</h3>
-        <button type="button" class="cal-nav" id="cal-next" aria-label="Next month" ${canNextMonth() ? "" : "disabled"}>›</button>
-      </div>
-      <div class="cal-weekdays" aria-hidden="true">
-        ${WEEKDAYS_SHORT.map((w) => `<div class="cal-weekday">${w}</div>`).join("")}
-      </div>
-      <div class="cal-grid" role="grid" aria-labelledby="cal-month-label">
-        ${cells}
-      </div>
-      <div class="cal-legend" aria-hidden="true">
-        <span class="cal-legend-item"><span class="cal-dot cal-dot--class"></span> Class night</span>
-        <span class="cal-legend-item"><span class="cal-dot cal-dot--social"></span> Social night</span>
-      </div>
-    `;
-
-    $("#cal-prev", mount).addEventListener("click", () => {
-      if (canPrevMonth()) shiftMonth(-1);
-    });
-    $("#cal-next", mount).addEventListener("click", () => {
-      if (canNextMonth()) shiftMonth(1);
-    });
-    $$(".cal-day--has-event", mount).forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const dateKey = btn.dataset.date;
-        state.calendarFocusDate = dateKey;
-        // Day tap selects/deselects that night(s) — pills stay for clarity / multi-event days
-        const dayEvents = eventsByDate(dateKey);
-        if (dayEvents.length) {
-          const allOn = dayEvents.every((ev) => isEventSelected(ev));
-          if (allOn) {
-            dayEvents.forEach((ev) => {
-              if (isEventSelected(ev)) toggleSelectedEvent(ev);
-            });
-          } else {
-            dayEvents.forEach((ev) => {
-              if (!isEventSelected(ev)) toggleSelectedEvent(ev);
-            });
-          }
-        } else {
-          renderCalendar();
-          renderDayPills();
-        }
-      });
-    });
-
-    updateDateNextButton();
+    mount.innerHTML =
+      '<div class="bk-cal">' +
+      '<div class="bk-cal-h">' +
+      '<button type="button" class="bk-cal-nav" data-action="cal-prev" aria-label="Previous month"' + (canPrevMonth() ? "" : " disabled") + ">&#8249;</button>" +
+      '<h3 class="bk-cal-title" id="bk-month-label">' + MONTH_NAMES[m - 1] + " " + y + "</h3>" +
+      '<button type="button" class="bk-cal-nav" data-action="cal-next" aria-label="Next month"' + (canNextMonth() ? "" : " disabled") + ">&#8250;</button>" +
+      "</div>" +
+      '<div class="bk-cal-grid" role="group" aria-labelledby="bk-month-label">' +
+      WEEKDAYS_NARROW.map((w) => '<div class="bk-wd" aria-hidden="true">' + w + "</div>").join("") +
+      cells +
+      "</div>" +
+      '<p class="bk-legend"><span><i class="bk-dot-class" aria-hidden="true"></i> Class &amp; social</span>' +
+      '<span><i class="bk-dot-social" aria-hidden="true"></i> Social only</span></p>' +
+      "</div>";
+    updateDatesNext();
   }
 
-  function renderDayPills() {
-    const host = $("#day-pills");
+  function renderOptions() {
+    const host = $("#bk-options");
     if (!host) return;
     const key = state.calendarFocusDate;
     if (!key) {
-      host.innerHTML = `<p class="day-pills-hint">Select a day with a coloured dot to see available nights.</p>`;
+      host.innerHTML = "";
+      updateDatesNext();
       return;
     }
     const dayEvents = eventsByDate(key);
     if (!dayEvents.length) {
-      host.innerHTML = `<p class="day-pills-hint">No upcoming nights on this day.</p>`;
+      host.innerHTML = "";
+      updateDatesNext();
       return;
     }
-
-    const [y, m, d] = key.split("-").map(Number);
-    const heading = `${WEEKDAYS_SHORT[mondayIndex(y, m, d)]} ${d} ${MONTH_NAMES[m - 1]}`;
-
-    host.innerHTML = `
-      <p class="day-pills-hint" id="day-pills-heading">Available on ${escapeHtml(heading)} — tap to select</p>
-      ${dayEvents
-        .map((ev) => {
-          const pressed = isEventSelected(ev);
-          const badge =
-            ev.type === "class"
-              ? `<span class="badge badge-class">Class night</span>`
-              : `<span class="badge badge-social">Social only</span>`;
-          return `
-          <button
-            type="button"
-            class="event-pill"
-            data-event-id="${escapeHtml(ev.id)}"
-            aria-pressed="${pressed ? "true" : "false"}"
-            aria-describedby="day-pills-heading"
-          >
-            <span class="event-pill-check" aria-hidden="true"></span>
-            <span class="event-pill-body">
-              <p class="event-pill-title">${escapeHtml(ev.label || (ev.type === "class" ? "Class night" : "Social night"))}</p>
-              <p class="event-pill-meta">${escapeHtml(ev.location)} · ${escapeHtml(ev.venue)} · ${escapeHtml(ev.start)}–${escapeHtml(ev.end)}</p>
-              ${badge}
-            </span>
-          </button>`;
-        })
-        .join("")}
-      ${
-        state.selectedEvents.length
-          ? `<p class="selected-nights-count" aria-live="polite">${state.selectedEvents.length} night${state.selectedEvents.length === 1 ? "" : "s"} selected</p>`
-          : ""
-      }
-    `;
-
-    $$(".event-pill", host).forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const ev = upcomingEvents().find((x) => x.id === btn.dataset.eventId);
-        if (ev) toggleSelectedEvent(ev);
-      });
-    });
-  }
-
-  // ─── Tickets (per selected night) ─────────────────────────────────────────
-  function ensureSelectionsScaffold() {
-    state.selectedEvents.forEach((ev) => {
-      if (!selectionForEvent(ev.id)) {
-        state.selections.push({ event: ev, ticket: null, priceTier: activePriceTier() });
-      } else {
-        // Refresh event ref
+    const blocks = dayEvents
+      .map((ev) => {
+        const tickets = (window.HUSTLE_TICKETS && window.HUSTLE_TICKETS[ev.type]) || [];
         const sel = selectionForEvent(ev.id);
-        sel.event = ev;
-      }
-    });
-    state.selections = state.selections.filter((s) =>
-      state.selectedEvents.some((e) => e.id === s.event.id)
-    );
-    state.selections.sort(
-      (a, b) => a.event.date.localeCompare(b.event.date) || a.event.id.localeCompare(b.event.id)
-    );
+        const options = tickets
+          .map((t) => {
+            const on = sel && sel.ticket && sel.ticket.id === t.id;
+            const id = "ticket-" + ev.id + "-" + t.id;
+            const note = ticketNote(t);
+            const badge = t.id === "bundle" ? '<span class="bk-badge">Save 15%</span>' : "";
+            const detail =
+              escapeHtml(ticketTime(ev, t.id) + " • " + venueParen(ev)) +
+              (note ? "<br>" + escapeHtml(note) : "");
+            return (
+              '<label class="bk-opt' + (on ? " is-on" : "") + '">' +
+              '<input type="radio" name="ticket-' + escapeHtml(ev.id) + '" id="' + escapeHtml(id) +
+              '" data-event-id="' + escapeHtml(ev.id) + '" value="' + escapeHtml(t.id) + '"' + (on ? " checked" : "") + ">" +
+              '<span class="bk-rd" aria-hidden="true"></span>' +
+              '<span class="bk-opt-main"><span class="bk-opt-name">' + escapeHtml(ticketLabel(t)) + badge + "</span>" +
+              "<small>" + detail + "</small></span>" +
+              '<span class="bk-opt-price">' + displayedTicketPrice(t) + " kr</span></label>"
+            );
+          })
+          .join("");
+        const legend = dayEvents.length > 1
+          ? '<p class="bk-dl">' + escapeHtml(formatCheckoutDate(ev)) + "</p>"
+          : '<h3 class="visually-hidden">Tickets for ' + escapeHtml(formatCheckoutDate(ev)) + "</h3>";
+        return legend + options;
+      })
+      .join("");
+    const n = state.selections.length;
+    host.innerHTML =
+      '<div class="bk-options">' + blocks +
+      (n ? '<p class="bk-count visually-hidden" aria-live="polite">' + n + (n === 1 ? " class selected" : " classes selected") + "</p>" : "") +
+      "</div>";
+    updateDatesNext();
   }
 
-  function setSelectionTicket(eventId, ticket) {
+  function focusDate(dateKey) {
+    state.calendarFocusDate = dateKey;
+    renderCalendar();
+    renderOptions();
+    const btn = $('#bk-calendar [data-date="' + dateKey + '"]');
+    if (btn) btn.focus();
+  }
+
+  function setTicket(eventId, ticketId) {
+    const ev = upcomingEvents().find((e) => e.id === eventId);
+    const tickets = (ev && window.HUSTLE_TICKETS && window.HUSTLE_TICKETS[ev.type]) || [];
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ev || !ticket) return;
     let sel = selectionForEvent(eventId);
     if (!sel) {
-      const ev = state.selectedEvents.find((e) => e.id === eventId);
-      if (!ev) return;
-      sel = { event: ev, ticket: null, priceTier: activePriceTier() };
+      sel = { event: ev, ticket: ticket, priceTier: tierForTicket(ticket) };
       state.selections.push(sel);
+    } else {
+      sel.event = ev;
+      sel.ticket = ticket;
+      sel.priceTier = tierForTicket(ticket);
     }
-    sel.ticket = ticket || null;
-    sel.priceTier = tierForTicket(sel.ticket);
-    updateTicketUi();
+    state.selections.sort((a, b) => a.event.date.localeCompare(b.event.date) || a.event.id.localeCompare(b.event.id));
+    const activeId = document.activeElement && document.activeElement.id;
+    renderCalendar();
+    renderOptions();
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) el.focus();
+    }
   }
 
-  function setGlobalPriceTier(tier) {
-    state.priceTier = tier === "student" ? "student" : "standard";
-    applyPriceTierToSelections();
-    const status = $("#price-tier-status");
-    if (status) {
-      status.textContent =
-        state.priceTier === "student"
-          ? "Showing student prices."
-          : "Showing standard prices.";
-    }
-    renderTickets();
+  function removeNight(eventId) {
+    state.selections = state.selections.filter((s) => s.event.id !== eventId);
+    renderConfirm();
   }
 
-  function updateTicketUi() {
-    const ready = allTicketsChosen();
-    $("#btn-to-details").disabled = !ready;
-    const el = $("#selected-price");
-    if (!el) return;
-    if (!ready) {
-      const n = state.selectedEvents.length;
-      const done = state.selections.filter((s) => s.ticket).length;
-      el.textContent =
-        n > 0
-          ? `Choose a ticket for each night (${done}/${n})`
-          : "";
-      return;
-    }
-    const amt = currentAmount();
-    const n = state.selections.length;
-    el.innerHTML = `Total: <strong>${amt} kr</strong> · ${n} night${n === 1 ? "" : "s"}`;
-  }
-
-  function renderTickets() {
-    const host = $("#ticket-nights");
-    const summary = $("#ticket-event-summary");
+  function renderConfirm() {
+    const host = $("#bk-confirm-list");
     if (!host) return;
-    ensureSelectionsScaffold();
-
-    const n = state.selectedEvents.length;
-    if (summary) {
-      summary.textContent =
-        n === 1
-          ? "Choose your ticket for this night."
-          : `Choose a ticket for each of the ${n} nights you selected.`;
-    }
-
-    host.innerHTML = "";
-    state.selectedEvents.forEach((ev) => {
-      const sel = selectionForEvent(ev.id);
-      const tickets =
-        (window.HUSTLE_TICKETS && window.HUSTLE_TICKETS[ev.type]) || [];
-      const block = document.createElement("div");
-      block.className = "ticket-night";
-      block.dataset.eventId = ev.id;
-
-      const badge =
-        ev.type === "class"
-          ? `<span class="badge badge-class">Class night</span>`
-          : `<span class="badge badge-social">Social only</span>`;
-
-      const tier = activePriceTier();
-      const ticketItems = tickets
-        .map((t) => {
-          const samePrice = t.prices.standard === t.prices.student;
-          const amount = displayedTicketPrice(t);
-          const priceBits = samePrice
-            ? `<span class="price-chip"><span class="amount">${amount} kr</span></span>`
-            : `<span class="price-chip"><span class="amount">${amount} kr</span> <span class="tier-label">${escapeHtml(tier)}</span></span>`;
-          const checked = sel && sel.ticket && sel.ticket.id === t.id ? "checked" : "";
-          const id = `ticket-${escapeHtml(ev.id)}-${escapeHtml(t.id)}`;
-          return `
-            <li class="ticket-option">
-              <input type="radio" name="ticket-${escapeHtml(ev.id)}" id="${id}" value="${escapeHtml(t.id)}" ${checked} />
-              <label for="${id}">
-                <span class="radio-check" aria-hidden="true"></span>
-                <span class="option-body">
-                  <p class="ticket-name">${escapeHtml(t.name)}</p>
-                  <div class="price-tiers">${priceBits}</div>
-                  <p class="ticket-note">${escapeHtml(t.note)}</p>
-                </span>
-              </label>
-            </li>`;
-        })
-        .join("");
-
-      block.innerHTML = `
-        <div class="ticket-night-header">
-          <p class="ticket-night-title">${escapeHtml(formatEventDate(ev))}</p>
-          <p class="ticket-night-meta">${escapeHtml(ev.location)} · ${escapeHtml(ev.start)}–${escapeHtml(ev.end)}</p>
-          ${badge}
-        </div>
-        ${scheduleHtml(ev)}
-        <fieldset class="ticket-fieldset">
-          <legend>Ticket type</legend>
-          <ul class="ticket-list" role="list">${ticketItems}</ul>
-        </fieldset>
-      `;
-
-      host.appendChild(block);
-
-      block.querySelector(".ticket-list").addEventListener("change", (e) => {
-        if (!e.target.matches('input[type="radio"]')) return;
-        const t = tickets.find((x) => x.id === e.target.value);
-        setSelectionTicket(ev.id, t || null);
-      });
-    });
-
-    updateTicketUi();
-  }
-
-  // ─── Details panel ────────────────────────────────────────────────────────
-  function renderDetailsSummary() {
-    const box = $("#details-summary");
-    const scheduleHost = $("#details-schedule");
-    if (!allTicketsChosen()) {
-      if (box) {
-        box.innerHTML = "";
-        box.hidden = true;
-      }
-      if (scheduleHost) scheduleHost.innerHTML = "";
-      return;
-    }
-
-    const n = state.selections.length;
-    const amt = currentAmount();
-
-    if (scheduleHost) {
-      // Show first night schedule; multi nights listed in summary
-      scheduleHost.innerHTML =
-        n === 1
-          ? scheduleHtml(state.selections[0].event)
-          : `<div class="schedule-block schedule-block--muted" role="region" aria-label="Selected nights">
-              <h3 class="schedule-title">Your nights</h3>
-              <ul class="schedule-list">
-                ${state.selections
-                  .map((s) => {
-                    const sched =
-                      s.event.type === "class"
-                        ? "Beginners 18:00 · Intermediate 19:00 · Social 20:00"
-                        : "Social 18:00–20:00";
-                    return `<li><span class="schedule-slot">${escapeHtml(formatEventDate(s.event))}</span> <span>${escapeHtml(s.event.location)} · ${sched}</span></li>`;
-                  })
-                  .join("")}
-              </ul>
-            </div>`;
-    }
-
-    const sectionLabel = $(".section-label");
-    if (sectionLabel) {
-      sectionLabel.textContent = n === 1 ? "Ticket" : "Tickets";
-    }
-
-    const heroTitle = $("#reg-hero-title");
-    const heroMeta = $("#reg-hero-meta");
-    if (heroTitle) {
-      heroTitle.textContent =
-        n === 1
-          ? state.selections[0].event.type === "class"
-            ? "Hustle Oslo class night"
-            : "Hustle Oslo social night"
-          : `Hustle Oslo · ${n} nights`;
-    }
-    if (heroMeta) {
-      if (n === 1) {
-        const ev = state.selections[0].event;
-        heroMeta.textContent = `${formatEventDate(ev)}, ${ev.start}–${ev.end}`;
-      } else {
-        heroMeta.textContent = state.selections
-          .map((s) => formatEventDate(s.event))
-          .join(" · ");
-      }
-    }
-
-    const tsName = $("#ts-name");
-    const tsPrice = $("#ts-price");
-    const summaryRow = $("#ticket-summary-row");
-    if (summaryRow && n > 1) {
-      // Replace single row with multi list
-      let list = $("#nights-summary-list");
-      if (!list) {
-        list = document.createElement("ul");
-        list.className = "nights-summary-list";
-        list.id = "nights-summary-list";
-        summaryRow.insertAdjacentElement("afterend", list);
-      }
-      summaryRow.hidden = true;
-      list.hidden = false;
-      list.innerHTML = state.selections
+    if (!state.selections.length) {
+      host.innerHTML = '<p class="bk-sub">No classes selected.</p>';
+    } else {
+      host.innerHTML = state.selections
         .map((s) => {
-          const tier =
-            s.ticket.prices.standard === s.ticket.prices.student
-              ? ""
-              : ` · ${s.priceTier}`;
-          return `
-            <li class="nights-summary-item">
-              <div class="nsi-main">
-                <p class="nsi-title">${escapeHtml(formatEventDate(s.event))} · ${escapeHtml(s.event.location)}</p>
-                <p class="nsi-meta">${escapeHtml(ticketLabel(s.ticket))}${escapeHtml(tier)}</p>
-              </div>
-              <span class="nsi-price">${amountForSelection(s)} kr</span>
-            </li>`;
+          const when = formatMonthDay(s.event);
+          const name = ticketLabel(s.ticket);
+          return (
+            '<p class="bk-dl">' + escapeHtml(when) + "</p>" +
+            '<article class="bk-item">' +
+            '<button type="button" class="bk-item-x" data-action="remove-night" data-event-id="' + escapeHtml(s.event.id) +
+            '" aria-label="Remove ' + escapeHtml(name) + " on " + escapeHtml(when) + '">&#10005;</button>' +
+            '<p class="bk-item-name">' + escapeHtml(name) + "</p>" +
+            '<p class="bk-item-meta">' + escapeHtml(ticketTime(s.event, s.ticket.id)) + "<br>" + escapeHtml(venueDot(s.event)) + "</p>" +
+            '<p class="bk-item-price">' + amountForSelection(s) + " kr</p></article>"
+          );
         })
         .join("");
-    } else {
-      const list = $("#nights-summary-list");
-      if (list) list.hidden = true;
-      if (summaryRow) summaryRow.hidden = false;
-      const s = state.selections[0];
-      const tier =
-        s.ticket.prices.standard === s.ticket.prices.student
-          ? ""
-          : ` · ${s.priceTier}`;
-      if (tsName) tsName.textContent = `${ticketLabel(s.ticket)}${tier}`;
-      if (tsPrice) tsPrice.textContent = `${amountForSelection(s)} kr`;
     }
-
-    if (box) {
-      box.hidden = true;
-      box.innerHTML = `
-      <dl>
-        ${state.selections
-          .map((s) => {
-            const tier =
-              s.ticket.prices.standard === s.ticket.prices.student
-                ? ""
-                : ` · ${s.priceTier}`;
-            return `
-          <dt>Night</dt>
-          <dd>${escapeHtml(formatEventDate(s.event))} · ${escapeHtml(s.event.location)} · ${escapeHtml(ticketLabel(s.ticket))}${escapeHtml(tier)} · ${amountForSelection(s)} kr</dd>`;
-          })
-          .join("")}
-        <dt>Amount</dt>
-        <dd>${amt} kr · Vipps #${CONFIG.VIPPS_NUMBER}</dd>
-      </dl>`;
-    }
-
-    $("#details-amount").textContent = `${amt} kr`;
-    updateStickyTotal();
+    const sub = $("#bk-subtotal");
+    if (sub) sub.textContent = currentAmount() + " kr";
+    const next = $("#bk-confirm-next");
+    if (next) next.disabled = state.selections.length < 1;
   }
 
-  function updateStickyTotal() {
-    const amt = currentAmount();
-    const sticky = $("#sticky-amount");
-    const btn = $("#btn-submit");
-    const ready = allTicketsChosen();
-    if (sticky) sticky.textContent = ready ? `${amt} kr` : "";
-    if (btn && ready) {
-      btn.textContent = `Continue · ${amt} kr`;
-    } else if (btn) {
-      btn.textContent = "Continue";
-    }
+  function syncSelectPlaceholder(sel) {
+    if (sel) sel.classList.toggle("is-empty", !sel.value);
   }
 
-  function setFirstTimerVisibility() {
-    const repeat = $("#is-repeat").checked;
-    const wrap = $("#first-timer-fields");
-    wrap.classList.toggle("hidden", repeat);
-    wrap.setAttribute("aria-hidden", repeat ? "true" : "false");
-    $$("select, input", wrap).forEach((el) => {
-      el.disabled = repeat;
-      if (el.id === "experience" || el.id === "how-found") {
-        el.required = false;
-        el.setAttribute("aria-required", "false");
-      }
-    });
+  function syncOther() {
+    const wrap = $("#bk-referral-other-wrap");
+    if (!wrap) return;
+    const show = !$("#bk-repeat").checked && $("#bk-referral").value === "other";
+    wrap.hidden = !show;
+    if (!show) setErr("referral-other", false);
+  }
+
+  function syncFirstTimer() {
+    const repeat = $("#bk-repeat") && $("#bk-repeat").checked;
+    const wrap = $("#bk-first-timer");
+    if (wrap) {
+      wrap.hidden = !!repeat;
+      wrap.setAttribute("aria-hidden", repeat ? "true" : "false");
+    }
     if (repeat) {
-      $("#how-found-other-wrap").hidden = true;
-      clearFieldError("how-found-other");
-      clearFieldError("experience");
-      clearFieldError("how-found");
+      const other = $("#bk-referral-other-wrap");
+      if (other) other.hidden = true;
+      setErr("referral-other", false);
     } else {
-      onHowFoundChange();
+      syncOther();
     }
-    validateForm();
   }
 
-  function onHowFoundChange() {
-    const val = $("#how-found").value;
-    const otherWrap = $("#how-found-other-wrap");
-    const show = val === "other" && !$("#is-repeat").checked;
-    otherWrap.hidden = !show;
-    const otherInput = $("#how-found-other");
-    otherInput.required = show;
-    otherInput.setAttribute("aria-required", show ? "true" : "false");
-    if (!show) {
-      otherInput.value = "";
-      clearFieldError("how-found-other");
-    }
-    validateForm();
-  }
-
-  function isValidEmail(v) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
-  }
-
-  /** Loose Norwegian / intl phone: optional +, digits, spaces, dashes; 8–15 digits. */
-  function isValidPhone(v) {
-    const s = String(v).trim();
-    if (!s) return true;
-    if (!/^[+\d][\d\s()./-]*$/.test(s)) return false;
-    const digits = s.replace(/\D/g, "");
-    return digits.length >= 8 && digits.length <= 15;
-  }
-
-  function isValidTransactionNumber(v) {
-    const s = String(v).trim();
-    return s.length >= 4 && s.length <= 64;
-  }
-
-  function showFieldError(id, show) {
-    const input = $(`#${id}`);
-    const err = $(`#err-${id}`);
-    if (input) {
-      input.setAttribute("aria-invalid", show ? "true" : "false");
-    }
-    if (err) err.classList.toggle("visible", !!show);
-  }
-
-  function clearFieldError(id) {
-    showFieldError(id, false);
-  }
-
-  function validateForm(showErrors) {
-    const name = $("#full-name").value.trim();
-    const email = $("#email").value.trim();
-    const phone = $("#phone").value.trim();
-    const repeat = $("#is-repeat").checked;
-    const howFound = $("#how-found").value;
-    const howOther = $("#how-found-other").value.trim();
-    const txn = $("#transaction-number").value.trim();
-
+  function validateDetails(showErrors) {
+    const name = $("#bk-name").value.trim();
+    const email = $("#bk-email").value.trim();
+    const phone = $("#bk-phone").value.trim();
+    const repeat = $("#bk-repeat").checked;
+    const referral = repeat ? "" : $("#bk-referral").value;
+    const other = $("#bk-referral-other").value.trim();
     const nameOk = name.length >= 2;
     const emailOk = isValidEmail(email);
     const phoneOk = isValidPhone(phone);
-    let otherOk = true;
-    if (!repeat && howFound === "other") {
-      otherOk = howOther.length >= 2;
-    }
-    const txnOk = isValidTransactionNumber(txn);
-
-    const ok = nameOk && emailOk && phoneOk && otherOk && txnOk;
-
+    const otherOk = repeat || referral !== "other" || other.length >= 2;
+    const ok = nameOk && emailOk && phoneOk && otherOk;
     if (showErrors) {
-      showFieldError("full-name", !nameOk);
-      showFieldError("email", !emailOk);
-      showFieldError("phone", !phoneOk && !!phone);
-      showFieldError("how-found-other", !otherOk && howFound === "other");
-      showFieldError("transaction-number", !txnOk);
-      const live = $("#form-live");
-      if (live) {
-        live.textContent = ok
-          ? ""
-          : "Please fix the highlighted fields before continuing.";
-      }
+      setErr("name", !nameOk);
+      setErr("email", !emailOk);
+      setErr("phone", !phoneOk);
+      setErr("referral-other", !otherOk);
+      if (!ok) announce("Please fix the highlighted fields before continuing.");
+      else announce("");
     } else {
-      if (nameOk) clearFieldError("full-name");
-      if (emailOk) clearFieldError("email");
-      if (phoneOk) clearFieldError("phone");
-      if (otherOk) clearFieldError("how-found-other");
-      if (txnOk) clearFieldError("transaction-number");
-      const live = $("#form-live");
-      if (live && ok) live.textContent = "";
+      if (nameOk) setErr("name", false);
+      if (emailOk) setErr("email", false);
+      if (phoneOk) setErr("phone", false);
+      if (otherOk) setErr("referral-other", false);
+      if (ok) announce("");
     }
-
-    $("#btn-submit").disabled = !ok;
     return ok;
   }
 
-  function togglePhoneHelp() {
-    const btn = $("#phone-help-toggle");
-    const panel = $("#phone-help");
-    if (!btn || !panel) return;
-    const open = btn.getAttribute("aria-expanded") === "true";
-    const next = !open;
-    btn.setAttribute("aria-expanded", next ? "true" : "false");
-    panel.hidden = !next;
+  function methodIcon(id) {
+    if (id === "apple") return '<span class="bk-it bk-it-ap" aria-hidden="true">' + ICON_APPLE + "</span>";
+    if (id === "google") return '<span class="bk-it bk-it-gp" aria-hidden="true">' + ICON_GOOGLE + "</span>";
+    if (id === "vipps") return '<span class="bk-it bk-it-vp" aria-hidden="true">V</span>';
+    return '<span class="bk-it bk-it-cd" aria-hidden="true">' + ICON_CARD + "</span>";
+  }
+
+  function brandMarks() {
+    return '<span class="bk-brands" aria-hidden="true"><span class="bk-brand bk-brand-visa">VISA</span><span class="bk-brand bk-brand-mc"><i></i><i></i></span></span><span class="visually-hidden">Visa and Mastercard</span>';
+  }
+
+  function renderPayMethods() {
+    const list = $("#bk-pay-list");
+    const seg = $("#bk-pay-seg");
+    const fail = $("#bk-fail-pay");
+    if (list) {
+      list.innerHTML = MOBILE_METHODS.map((id) => payRow(id, "pay-mobile")).join("");
+    }
+    if (seg) {
+      seg.innerHTML = DESKTOP_METHODS.map((id) => paySeg(id, "pay-desktop")).join("");
+    }
+    if (fail) {
+      fail.innerHTML = MOBILE_METHODS.map((id) => payRow(id, "pay-failed")).join("");
+    }
+    syncPayPressed();
+  }
+
+  function payRow(id, name) {
+    const on = state.paymentMethod === id;
+    return (
+      '<label class="bk-mrow' + (on ? " is-on" : "") + '" data-method="' + id + '">' +
+      '<input type="radio" name="' + name + '" value="' + id + '" data-pay="1"' + (on ? " checked" : "") + ">" +
+      '<span class="bk-radio" aria-hidden="true"></span>' +
+      methodIcon(id) +
+      '<span class="bk-pay-name">' + METHOD_LABEL[id] + "</span>" +
+      (id === "card" ? brandMarks() : "") +
+      "</label>"
+    );
+  }
+
+  function paySeg(id, name) {
+    const on = state.paymentMethod === id;
+    return (
+      '<label class="bk-seg-btn' + (on ? " is-on" : "") + '" data-method="' + id + '">' +
+      '<input type="radio" name="' + name + '" value="' + id + '" data-pay="1"' + (on ? " checked" : "") + ">" +
+      methodIcon(id) +
+      "<span>" + METHOD_LABEL[id] + "</span></label>"
+    );
+  }
+
+  function syncPayPressed() {
+    $$("[data-method]").forEach((el) => {
+      el.classList.toggle("is-on", el.dataset.method === state.paymentMethod);
+    });
+    $$("input[data-pay]").forEach((input) => {
+      input.checked = input.value === state.paymentMethod;
+    });
+  }
+
+  function setPaymentMethod(method) {
+    if (!METHOD_LABEL[method]) return;
+    state.paymentMethod = method;
+    syncPayPressed();
+    setErr("pay", false);
+    updatePayChrome();
+  }
+
+  function placeCardFields() {
+    const fields = $("#bk-card-fields");
+    const slot = state.view === "failed" ? $("#bk-fail-card-slot") : $("#bk-card-slot");
+    if (fields && slot && fields.parentElement !== slot) slot.appendChild(fields);
+    const show = state.paymentMethod === "card" && (state.view === "checkout" || state.view === "failed");
+    if (!fields) return;
+    fields.hidden = !show;
+    fields.classList.toggle("is-attached", show && !wideCheckout());
+  }
+
+  function updatePayChrome() {
+    const amt = currentAmount();
+    const method = state.paymentMethod || "apple";
+    const who = method === "vipps" ? "Vipps" : "Stripe";
+    const payText = $("#bk-pay-text");
+    if (payText && !state.submitting) payText.textContent = "Pay " + amt + " kr";
+    ["bk-pay-total", "bk-order-total", "bk-fail-total", "bk-subtotal"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = amt + " kr";
+    });
+    const retry = $("#bk-fail-retry-text");
+    if (retry) retry.textContent = "Try again · Pay " + amt + " kr with " + METHOD_LABEL[method];
+    const retryBtn = $("#bk-fail-retry");
+    if (retryBtn) {
+      retryBtn.classList.toggle("bk-btn-vipps", method === "vipps");
+      retryBtn.classList.toggle("bk-btn-primary", method !== "vipps");
+    }
+    $$(".bk-trust-by").forEach((el) => {
+      el.textContent = who;
+    });
+    const sheet = $("#book-sheet");
+    if (sheet) sheet.classList.toggle("is-wide", wideCheckout());
+    placeCardFields();
+  }
+
+  function renderCheckout() {
+    const lines = $("#bk-order-lines");
+    if (lines) {
+      lines.innerHTML = state.selections
+        .map((s) => {
+          return (
+            '<div class="bk-li"><span>' + escapeHtml(formatCheckoutDate(s.event)) +
+            "<small>" + escapeHtml(ticketLabel(s.ticket)) + "</small></span><span>" +
+            amountForSelection(s) + " kr</span></div>"
+          );
+        })
+        .join("");
+    }
+    const who = $("#bk-who");
+    if (who) {
+      const name = $("#bk-name").value.trim();
+      const email = $("#bk-email").value.trim();
+      who.innerHTML = escapeHtml(name) + "<small>" + escapeHtml(email) + "</small>";
+    }
+  }
+
+  function renderFailed() {
+    const lines = $("#bk-fail-lines");
+    if (lines) {
+      lines.innerHTML = state.selections
+        .map((s) => {
+          return (
+            '<div class="bk-li"><span>' + escapeHtml(formatCheckoutDate(s.event)) +
+            "<small>" + escapeHtml(ticketLabel(s.ticket) + " · " + ticketTime(s.event, s.ticket.id)) +
+            "</small></span><span>" + amountForSelection(s) + " kr</span></div>"
+          );
+        })
+        .join("");
+    }
+  }
+
+  function cardDigits() {
+    return $("#bk-card-number").value.replace(/\D/g, "");
+  }
+
+  function cardTouched() {
+    return ["bk-card-number", "bk-card-expiry", "bk-card-cvc", "bk-card-name"].some((id) => {
+      const el = document.getElementById(id);
+      return el && el.value.trim();
+    });
+  }
+
+  function validExpiry(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length !== 4) return false;
+    const month = +digits.slice(0, 2);
+    const year = 2000 + +digits.slice(2);
+    if (month < 1 || month > 12) return false;
+    return new Date(year, month, 1) > new Date();
+  }
+
+  function validateCard(showErrors) {
+    const numberOk = cardDigits().length >= 13 && cardDigits().length <= 19;
+    const expOk = validExpiry($("#bk-card-expiry").value);
+    const cvc = $("#bk-card-cvc").value.replace(/\D/g, "");
+    const cvcOk = cvc.length >= 3 && cvc.length <= 4;
+    const nameOk = $("#bk-card-name").value.trim().length >= 2;
+    const ok = numberOk && expOk && cvcOk && nameOk;
+    if (showErrors) {
+      setErr("card-number", !numberOk);
+      setErr("card-expiry", !expOk);
+      setErr("card-cvc", !cvcOk);
+      setErr("card-name", !nameOk);
+      if (!ok) announce("Check the card fields and try again.");
+    }
+    return ok;
+  }
+
+  function clearCardFields() {
+    ["bk-card-number", "bk-card-expiry", "bk-card-cvc", "bk-card-name"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    ["card-number", "card-expiry", "card-cvc", "card-name"].forEach((key) => setErr(key, false));
+  }
+
+  function formatCardNumber(input) {
+    const digits = input.value.replace(/\D/g, "").slice(0, 19);
+    const parts = digits.match(/.{1,4}/g) || [];
+    input.value = parts.join(" ");
+  }
+
+  function formatExpiry(input) {
+    const digits = input.value.replace(/\D/g, "").slice(0, 4);
+    input.value = digits.length <= 2 ? digits : digits.slice(0, 2) + " / " + digits.slice(2);
   }
 
   /**
-   * Optional email lookup hook for future “I’ve attended before” prefill.
-   * GET ?action=lookup&email=...
+   * Single payment entry point for the future Cloudflare Worker.
+   * Called only when CONFIG.PAYMENTS_ENABLED is true.
+   * TODO: POST `order` to the worker. Do not put Stripe or Vipps API keys here.
+   * Card data stays in the Stripe Payment Element (the inputs on this page are placeholders).
+   * Resolve with { ok: true, transactionNumber } or { ok: false, message }.
    */
-  async function lookupByEmail(email) {
-    if (!CONFIG.APPS_SCRIPT_URL) return { ok: false, reason: "no-url" };
-    try {
-      const url =
-        CONFIG.APPS_SCRIPT_URL +
-        "?action=lookup&email=" +
-        encodeURIComponent(email);
-      const res = await fetch(url, { method: "GET", redirect: "follow" });
-      return await res.json();
-    } catch (err) {
-      return { ok: false, reason: "network", error: String(err) };
+  async function startPayment(method, order) {
+    if (!CONFIG.PAYMENTS_ENABLED) {
+      return { ok: false, reason: "payments-disabled" };
     }
+    void method;
+    void order;
+    return {
+      ok: false,
+      reason: "not-configured",
+      message: "Payment didn’t go through. You haven’t been charged. Try again or pick another method.",
+    };
   }
-  window.HustleOsloLookup = lookupByEmail;
 
-  // ─── Submit (one POST per night — live Apps Script compatible) ────────────
+  function buildOrder() {
+    return {
+      currency: "NOK",
+      amount: currentAmount(),
+      method: state.paymentMethod,
+      customer: {
+        fullName: $("#bk-name").value.trim(),
+        email: $("#bk-email").value.trim().toLowerCase(),
+        phone: $("#bk-phone").value.trim(),
+      },
+      nights: state.selections.map((s) => ({
+        eventId: s.event.id,
+        eventDate: s.event.date,
+        eventType: s.event.type,
+        ticketId: s.ticket.id,
+        ticketName: ticketLabel(s.ticket),
+        priceTier: s.priceTier,
+        amount: amountForSelection(s),
+      })),
+    };
+  }
+
+  function showPaymentFailed(message) {
+    const el = $("#bk-fail-message");
+    if (el) {
+      el.textContent = message || "Your card was declined. You haven’t been charged. Try again or pick another method.";
+    }
+    go("failed");
+  }
+
   function buildPersonFields() {
-    const repeat = $("#is-repeat").checked;
-    const howFound = repeat ? "" : $("#how-found").value;
-    const experience = repeat ? "" : $("#experience").value;
-    const phone = $("#phone").value.trim();
-    const transactionNumber = $("#transaction-number").value.trim();
+    const repeat = $("#bk-repeat").checked;
+    const referral = repeat ? "" : $("#bk-referral").value;
+    const experience = repeat ? "" : $("#bk-experience").value;
+    const referralOther = referral === "other" ? $("#bk-referral-other").value.trim() : "";
     return {
       timestamp: new Date().toISOString(),
-      fullName: $("#full-name").value.trim(),
-      email: $("#email").value.trim().toLowerCase(),
-      phone: phone,
-      transactionNumber: transactionNumber,
+      fullName: $("#bk-name").value.trim(),
+      email: $("#bk-email").value.trim().toLowerCase(),
+      phone: $("#bk-phone").value.trim(),
+      transactionNumber: state.transactionNumber || "payment-pending",
       experience: experience,
       experienceLabel: EXPERIENCE_LABELS[experience] || "",
-      howFound: howFound,
-      howFoundLabel: HOW_FOUND_LABELS[howFound] || "",
-      howFoundOther: howFound === "other" ? $("#how-found-other").value.trim() : "",
+      howFound: referral,
+      howFoundLabel: REFERRAL_LABELS[referral] || "",
+      howFoundOther: referralOther,
+      referral: referral,
+      referralLabel: REFERRAL_LABELS[referral] || "",
+      referralOther: referralOther,
       isRepeat: repeat,
       vippsNumber: CONFIG.VIPPS_NUMBER,
       currency: "NOK",
+      paymentMethod: state.paymentMethod || "",
+      termsAccepted: true,
+      termsAcceptedAt: state.termsAcceptedAt || new Date().toISOString(),
+      termsVersion: CONFIG.TERMS_VERSION,
     };
   }
 
   function buildPayloadForSelection(sel, person) {
-    return {
-      ...person,
+    return Object.assign({}, person, {
       eventId: sel.event.id,
       eventDate: sel.event.date,
       eventType: sel.event.type,
@@ -1137,13 +1160,12 @@
       eventEnd: sel.event.end,
       sheetTabHint: sheetTabName(sel.event),
       ticketId: sel.ticket.id,
-      ticketName: sel.ticket.name,
+      ticketName: ticketLabel(sel.ticket),
       priceTier: sel.priceTier,
       amount: amountForSelection(sel),
-    };
+    });
   }
 
-  /** Fields the attendee confirmation email lists for one saved night. */
   function confirmationNightFromPayload(payload) {
     return {
       eventId: payload.eventId,
@@ -1162,7 +1184,7 @@
   }
 
   function signupPayloadForQueue(payload) {
-    const copy = { ...payload };
+    const copy = Object.assign({}, payload);
     delete copy.sendAttendeeConfirmation;
     delete copy.confirmationNights;
     delete copy.confirmationOnly;
@@ -1170,13 +1192,24 @@
     return copy;
   }
 
-  /**
-   * One email for nights that already saved, when the POST that would have
-   * carried sendAttendeeConfirmation did not confirm.
-   * Omits top-level transactionNumber so the currently deployed script
-   * (which ignores confirmation) rejects this before appending a blank row.
-   * The updated script reads confirmationTransactionNumber.
-   */
+  async function submitSignup(payload) {
+    if (!CONFIG.APPS_SCRIPT_URL) {
+      const queued = queueLocally(payload);
+      await new Promise((r) => setTimeout(r, 300));
+      return { ok: true, mocked: true, queued: queued };
+    }
+    const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
+      method: "POST",
+      mode: "cors",
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || "HTTP " + res.status);
+    return data;
+  }
+
   async function sendSucceededConfirmation(person, nights) {
     if (!nights.length || !CONFIG.APPS_SCRIPT_URL) return;
     const payload = {
@@ -1197,61 +1230,25 @@
     }
   }
 
-  async function submitSignup(payload) {
-    if (!CONFIG.APPS_SCRIPT_URL) {
-      const queued = queueLocally(payload);
-      await new Promise((r) => setTimeout(r, 300));
-      console.warn(
-        "[Hustle Oslo] APPS_SCRIPT_URL is empty — signup queued in sessionStorage. Set CONFIG.APPS_SCRIPT_URL in app.js after Apps Script deploy."
-      );
-      return { ok: true, mocked: true, queued };
-    }
-    const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
-      method: "POST",
-      mode: "cors",
-      redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
-    return data;
-  }
-
-  /**
-   * Multi-night: one POST per night (same person + same transactionNumber;
-   * per-night amount). Organizer notify stays one email per POST.
-   * Attendee confirmation is one email per booking: sendAttendeeConfirmation
-   * is set only on the last night in the batch, with confirmationNights
-   * covering nights saved so far plus this one. If that POST fails, or the
-   * script saves the row but reports confirmationSent: false, a
-   * confirmation-only follow-up lists only the nights that succeeded.
-   * A failed night is never included.
-   */
   async function submitAllSignups() {
     const person = buildPersonFields();
-    const selections = state.selections;
+    const selections = state.selections.slice();
     const results = [];
     let mocked = false;
     const succeededNights = [];
-
     for (let i = 0; i < selections.length; i++) {
       const sel = selections[i];
       const isLast = i === selections.length - 1;
       const payload = buildPayloadForSelection(sel, person);
       const night = confirmationNightFromPayload(payload);
-
       if (isLast) {
         payload.sendAttendeeConfirmation = true;
         payload.confirmationNights = succeededNights.concat([night]);
       }
-
       try {
         const result = await submitSignup(payload);
         if (result && result.mocked) mocked = true;
-        results.push({ ok: true, payload, result });
+        results.push({ ok: true, payload: payload, result: result });
         succeededNights.push(night);
         const confirmationMissed =
           isLast &&
@@ -1259,221 +1256,380 @@
           result &&
           result.confirmationSent === false &&
           !result.mocked;
-        if (confirmationMissed) {
-          await sendSucceededConfirmation(person, payload.confirmationNights);
-        }
+        if (confirmationMissed) await sendSucceededConfirmation(person, payload.confirmationNights);
       } catch (err) {
         queueLocally(signupPayloadForQueue(payload));
-        results.push({ ok: false, payload, error: String(err) });
-        if (isLast && succeededNights.length > 0) {
-          await sendSucceededConfirmation(person, succeededNights.slice());
-        }
+        results.push({ ok: false, payload: payload, error: String(err) });
+        if (isLast && succeededNights.length > 0) await sendSucceededConfirmation(person, succeededNights.slice());
       }
     }
-
     const allOk = results.every((r) => r.ok);
     const anyOk = results.some((r) => r.ok);
+    const last = results[results.length - 1];
+    const confirmationSent = !!(last && last.result && last.result.confirmationSent === true);
     return {
       ok: allOk,
       partial: anyOk && !allOk,
-      mocked,
-      results,
+      mocked: mocked,
+      confirmationSent: confirmationSent,
+      results: results,
     };
   }
 
-  function showConfirmation(submitResult) {
-    state.submitted = true;
-    state.submitOk = !!(submitResult && submitResult.ok !== false);
-
-    const amt = currentAmount();
-    $("#confirm-amount").textContent = `${amt} kr`;
-    $("#confirm-transaction").textContent =
-      $("#transaction-number").value.trim() || "—";
-
-    const status = $("#submit-status");
-    if (submitResult && submitResult.mocked) {
-      status.className = "status-banner warning";
-      status.innerHTML =
-        "<strong>You’re booked — thanks for Vippsing.</strong> " +
-        "The online signup sheet is not wired yet (Claire still needs to deploy Apps Script). " +
-        "Your details (including transaction #) were saved in this browser session. Screenshot this page and DM @hustleoslo if anything looks off.";
-    } else if (submitResult && submitResult.partial) {
-      status.className = "status-banner warning";
-      status.innerHTML =
-        "<strong>Some nights may not have saved online.</strong> Screenshot this page (transaction # + details) and DM @hustleoslo on Instagram so we can confirm you.";
-    } else if (state.submitOk) {
-      status.className = "status-banner success";
-      status.innerHTML =
-        "<strong>Signup recorded.</strong> See you on the floor — keep your Vipps transaction number handy.";
-    } else {
-      status.className = "status-banner warning";
-      status.innerHTML =
-        "<strong>We couldn’t save your signup online.</strong> Screenshot this page (transaction # + details) and DM @hustleoslo on Instagram so we can confirm you.";
-    }
-
-    const box = $("#confirm-summary");
-    const phone = $("#phone").value.trim();
-    const nightsHtml = state.selections
-      .map((s) => {
-        const tier =
-          s.ticket.prices.standard === s.ticket.prices.student
-            ? ""
-            : ` (${s.priceTier})`;
-        const sched =
-          s.event.type === "class"
-            ? "Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00"
-            : "Social 18:00–20:00";
-        return `
-          <dt>Night</dt>
-          <dd>${escapeHtml(formatEventDate(s.event))} · ${escapeHtml(s.event.location)}</dd>
-          <dt>Ticket</dt>
-          <dd>${escapeHtml(ticketLabel(s.ticket))}${escapeHtml(tier)} · ${amountForSelection(s)} kr</dd>
-          <dt>Schedule</dt>
-          <dd>${sched}</dd>`;
-      })
-      .join("");
-
-    box.innerHTML = `
-      <dl>
-        <dt>Name</dt><dd>${escapeHtml($("#full-name").value.trim())}</dd>
-        <dt>Email</dt><dd>${escapeHtml($("#email").value.trim())}</dd>
-        ${phone ? `<dt>Phone</dt><dd>${escapeHtml(phone)}</dd>` : ""}
-        ${nightsHtml}
-        <dt>Total amount</dt><dd>${amt} kr · Vipps #${CONFIG.VIPPS_NUMBER}</dd>
-        <dt>Transaction #</dt><dd>${escapeHtml($("#transaction-number").value.trim())}</dd>
-      </dl>`;
-
-    goTo(5);
+  function timeParts(sel) {
+    const range = ticketTime(sel.event, sel.ticket.id).split("–");
+    return { start: range[0], end: range[1] || range[0] };
   }
 
-  async function onFormSubmit(e) {
-    e.preventDefault();
-    if (!validateForm(true)) {
-      const firstBad = $("#signup-form [aria-invalid='true']");
-      if (firstBad) firstBad.focus();
-      return;
-    }
-    if (!allTicketsChosen()) return;
+  function buildIcs(selections) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    const events = selections
+      .map((sel) => {
+        const times = timeParts(sel);
+        const start = sel.event.date.replace(/-/g, "") + "T" + times.start.replace(":", "") + "00";
+        const end = sel.event.date.replace(/-/g, "") + "T" + times.end.replace(":", "") + "00";
+        return [
+          "BEGIN:VEVENT",
+          "UID:" + sel.event.id + "-" + sel.ticket.id + "@hustleoslo.com",
+          "DTSTAMP:" + stamp,
+          "DTSTART;TZID=Europe/Oslo:" + start,
+          "DTEND;TZID=Europe/Oslo:" + end,
+          "SUMMARY:" + icsEscape("Hustle Oslo — " + ticketLabel(sel.ticket)),
+          "LOCATION:" + icsEscape("Sentralen, Øvre Slottsgate 3, 0157 Oslo"),
+          "END:VEVENT",
+        ].join("\r\n");
+      })
+      .join("\r\n");
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hustle Oslo//Signup//EN", "CALSCALE:GREGORIAN", events, "END:VCALENDAR", ""].join("\r\n");
+  }
 
+  function downloadIcs(selections, filename) {
+    if (!selections.length) return;
+    const blob = new Blob([buildIcs(selections)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function renderDone() {
+    const result = state.submitResult;
     const amt = currentAmount();
-    $("#confirm-amount").textContent = `${amt} kr`;
-    $("#confirm-transaction").textContent = $("#transaction-number").value.trim();
-    const status = $("#submit-status");
-    status.className = "status-banner pending";
-    status.textContent =
-      state.selections.length > 1
-        ? `Saving your ${state.selections.length} signups…`
-        : "Saving your signup…";
-    goTo(5);
+    const email = $("#bk-email").value.trim();
+    const heading = $("#bk-done-heading");
+    const sub = $("#bk-done-sub");
+    const note = $("#bk-pending-note");
+    const banner = $("#bk-save-banner");
+    const mark = $("#bk-done-mark");
+    const ok = !!(result && result.ok);
+    const mocked = !!(result && result.mocked);
+    const partial = !!(result && result.partial);
+    const saved = ok || mocked || partial;
+    const emailed = !!(result && result.confirmationSent);
+    if (heading) heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
+    if (mark) mark.hidden = !saved;
+    if (sub) {
+      const sent = emailed ? " · confirmation sent to " + email : "";
+      if (state.paymentPending) sub.textContent = "Payment pending · " + amt + " kr" + sent;
+      else sub.textContent = "Paid " + amt + " kr" + sent;
+    }
+    if (note) {
+      if (state.paymentPending) {
+        note.hidden = false;
+        note.textContent =
+          "Pay " + amt + " kr with Vipps to Hustle Oslo #" + CONFIG.VIPPS_NUMBER +
+          ". You haven’t been charged online.";
+      } else {
+        note.hidden = true;
+        note.textContent = "";
+      }
+    }
+    if (banner) {
+      if (partial) {
+        banner.hidden = false;
+        banner.innerHTML = "<b>Some nights may not have saved.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
+      } else if (!saved) {
+        banner.hidden = false;
+        banner.innerHTML = "<b>We couldn’t save your signup online.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
+      } else if (mocked) {
+        banner.hidden = false;
+        banner.innerHTML = "<b>Saved in this browser only.</b> The signup sheet isn’t connected yet.";
+      } else {
+        banner.hidden = true;
+        banner.innerHTML = "";
+      }
+    }
+    const list = $("#bk-done-list");
+    if (list) {
+      list.innerHTML = state.selections
+        .map((s) => {
+          return (
+            '<article class="bk-calcard"><div><p class="bk-calcard-date">' + escapeHtml(formatCheckoutDate(s.event)) +
+            '</p><p class="bk-calcard-meta">' + escapeHtml(ticketLabel(s.ticket) + " · " + ticketTime(s.event, s.ticket.id)) +
+            "<br>" + escapeHtml(venueDot(s.event).replace(" • ", ", ")) + "</p></div>" +
+            '<button type="button" class="bk-textlink" data-action="ics-one" data-event-id="' + escapeHtml(s.event.id) +
+            '">+ Calendar</button></article>'
+          );
+        })
+        .join("");
+    }
+  }
 
-    $("#btn-submit").disabled = true;
+  function showConfirmation(result) {
+    state.submitResult = result;
+    state.submitted = true;
+    clearCardFields();
+    go("done");
+  }
+
+  async function saveAndConfirm() {
+    state.submitting = true;
+    const pay = $("#bk-pay");
+    const retry = $("#bk-fail-retry");
+    if (pay) pay.disabled = true;
+    if (retry) retry.disabled = true;
+    const payText = $("#bk-pay-text");
+    if (payText) payText.textContent = "Saving…";
+    $("#book-sheet").setAttribute("aria-busy", "true");
     try {
       const result = await submitAllSignups();
       showConfirmation(result);
     } catch (err) {
       console.error(err);
-      // Fallback: queue all
       const person = buildPersonFields();
-      state.selections.forEach((sel) => {
-        queueLocally(buildPayloadForSelection(sel, person));
-      });
+      state.selections.forEach((sel) => queueLocally(buildPayloadForSelection(sel, person)));
       showConfirmation({ ok: false, error: String(err) });
+    } finally {
+      state.submitting = false;
+      if (pay) pay.disabled = false;
+      if (retry) retry.disabled = false;
+      $("#book-sheet").setAttribute("aria-busy", "false");
+      updatePayChrome();
     }
   }
 
-  function resetForNewSignup() {
-    state.step = 1;
-    state.selectedEvents = [];
-    state.calendarFocusDate = null;
-    state.selections = [];
-    state.priceTier = "standard";
-    state.submitted = false;
-    state.submitOk = null;
-    const standardTier = $("#price-tier-standard");
-    const studentTier = $("#price-tier-student");
-    if (standardTier) standardTier.checked = true;
-    if (studentTier) studentTier.checked = false;
-    const tierStatus = $("#price-tier-status");
-    if (tierStatus) tierStatus.textContent = "Showing standard prices.";
-    $("#signup-form").reset();
-    $("#is-repeat").checked = false;
-    const live = $("#form-live");
-    if (live) live.textContent = "";
-    const helpBtn = $("#phone-help-toggle");
-    const helpPanel = $("#phone-help");
-    if (helpBtn) helpBtn.setAttribute("aria-expanded", "false");
-    if (helpPanel) helpPanel.hidden = true;
-    const list = $("#nights-summary-list");
-    if (list) {
-      list.hidden = true;
-      list.innerHTML = "";
+  async function onPay() {
+    if (state.submitting) return;
+    if (!state.selections.length) return;
+    if (!state.paymentMethod) {
+      setErr("pay", true);
+      announce("Choose how you’d like to pay.");
+      return;
     }
-    const summaryRow = $("#ticket-summary-row");
-    if (summaryRow) summaryRow.hidden = false;
-    setFirstTimerVisibility();
-    clearFieldError("full-name");
-    clearFieldError("email");
-    clearFieldError("phone");
-    clearFieldError("experience");
-    clearFieldError("how-found");
-    clearFieldError("how-found-other");
-    clearFieldError("transaction-number");
-    initCalendarMonth();
-    renderCalendar();
-    renderDayPills();
-    goTo(1);
+    setErr("pay", false);
+    if (state.paymentMethod === "card" && (CONFIG.PAYMENTS_ENABLED || cardTouched())) {
+      if (!validateCard(true)) {
+        const first = $("#bk-card-fields [aria-invalid='true']");
+        if (first) first.focus();
+        return;
+      }
+    }
+    const order = buildOrder();
+    state.termsAcceptedAt = new Date().toISOString();
+    if (CONFIG.PAYMENTS_ENABLED) {
+      let result;
+      try {
+        result = await startPayment(state.paymentMethod, order);
+      } catch (err) {
+        console.error(err);
+        showPaymentFailed("Payment didn’t go through. You haven’t been charged. Try again or pick another method.");
+        return;
+      }
+      if (!result || result.ok !== true) {
+        showPaymentFailed(result && result.message);
+        return;
+      }
+      state.transactionNumber = result.transactionNumber || "";
+      state.paymentPending = false;
+    } else {
+      state.transactionNumber = "payment-pending";
+      state.paymentPending = true;
+    }
+    await saveAndConfirm();
   }
 
-  // ─── Init ─────────────────────────────────────────────────────────────────
+  function onDetailsSubmit(e) {
+    e.preventDefault();
+    if (!validateDetails(true)) {
+      const first = $("#bk-details-form [aria-invalid='true']");
+      if (first) first.focus();
+      return;
+    }
+    go("checkout");
+  }
+
+  function visibleFocusable() {
+    const sheet = $("#book-sheet");
+    if (!sheet) return [];
+    return $$("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])", sheet).filter((el) => {
+      if (el.closest("[hidden]")) return false;
+      return el.getClientRects().length > 0;
+    });
+  }
+
+  function onKeydown(e) {
+    const sheet = $("#book-sheet");
+    if (!sheet || sheet.hidden) return;
+    if (e.key === "Escape") {
+      const help = $("#bk-phone-help");
+      const helpBtn = $("#bk-phone-help-btn");
+      if (help && !help.hidden) {
+        help.hidden = true;
+        if (helpBtn) {
+          helpBtn.setAttribute("aria-expanded", "false");
+          helpBtn.focus();
+        }
+        e.preventDefault();
+        return;
+      }
+      closeSheet();
+      e.preventDefault();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const items = visibleFocusable();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (!items.includes(active)) {
+      (e.shiftKey ? last : first).focus();
+      e.preventDefault();
+      return;
+    }
+    if (e.shiftKey && active === first) {
+      last.focus();
+      e.preventDefault();
+    } else if (!e.shiftKey && active === last) {
+      first.focus();
+      e.preventDefault();
+    }
+  }
+
+  function onSheetClick(e) {
+    const actionEl = e.target.closest("[data-action]");
+    if (!actionEl || !$("#book-sheet").contains(actionEl)) return;
+    const action = actionEl.dataset.action;
+    if (action === "phone-help") {
+      e.preventDefault();
+      const btn = $("#bk-phone-help-btn");
+      const panel = $("#bk-phone-help");
+      const open = btn.getAttribute("aria-expanded") === "true";
+      btn.setAttribute("aria-expanded", open ? "false" : "true");
+      panel.hidden = open;
+      return;
+    }
+    if (action === "close") return closeSheet();
+    if (action === "back") return onBack();
+    if (action === "student") return setTier(actionEl.dataset.value);
+    if (action === "student-next") {
+      if (!state.priceTier) {
+        setErr("student", true);
+        announce("Please choose Yes or No.");
+        return;
+      }
+      return go("dates");
+    }
+    if (action === "cal-prev") {
+      if (canPrevMonth()) shiftMonth(-1);
+      return;
+    }
+    if (action === "cal-next") {
+      if (canNextMonth()) shiftMonth(1);
+      return;
+    }
+    if (action === "focus-date") return focusDate(actionEl.dataset.date);
+    if (action === "dates-next") {
+      if (!state.selections.length) return;
+      return go("confirm");
+    }
+    if (action === "remove-night") return removeNight(actionEl.dataset.eventId);
+    if (action === "confirm-next") {
+      if (!state.selections.length) return;
+      return go("details");
+    }
+    if (action === "edit-order") return go("confirm");
+    if (action === "edit-details") return go("details");
+    if (action === "pay") return onPay();
+    if (action === "fail-back") return go("checkout");
+    if (action === "done") return closeSheet();
+    if (action === "ics-one") {
+      const sel = state.selections.find((s) => s.event.id === actionEl.dataset.eventId);
+      if (sel) downloadIcs([sel], "hustle-oslo-" + sel.event.date + ".ics");
+      return;
+    }
+    if (action === "ics-all") return downloadIcs(state.selections, "hustle-oslo.ics");
+  }
+
+  function onSheetChange(e) {
+    const t = e.target;
+    if (t.matches && t.matches("input[data-pay]")) setPaymentMethod(t.value);
+    if (t.name && String(t.name).indexOf("ticket-") === 0) setTicket(t.dataset.eventId, t.value);
+    if (t.id === "bk-repeat") syncFirstTimer();
+    if (t.id === "bk-referral") {
+      syncSelectPlaceholder(t);
+      syncOther();
+    }
+    if (t.id === "bk-experience") syncSelectPlaceholder(t);
+  }
+
+  function onSheetInput(e) {
+    const t = e.target;
+    if (t.id === "bk-name" || t.id === "bk-email" || t.id === "bk-phone" || t.id === "bk-referral-other") {
+      validateDetails(false);
+    }
+    if (t.id === "bk-card-number") formatCardNumber(t);
+    if (t.id === "bk-card-expiry") formatExpiry(t);
+  }
+
+  async function lookupByEmail(email) {
+    if (!CONFIG.APPS_SCRIPT_URL) return { ok: false, reason: "no-url" };
+    try {
+      const url = CONFIG.APPS_SCRIPT_URL + "?action=lookup&email=" + encodeURIComponent(email);
+      const res = await fetch(url, { method: "GET", redirect: "follow" });
+      return await res.json();
+    } catch (err) {
+      return { ok: false, reason: "network", error: String(err) };
+    }
+  }
+
   function init() {
-    setLandingChrome(state.step);
     renderUpcomingEvents();
     initCopyAddress();
-
     initCalendarMonth();
-    renderCalendar();
-    renderDayPills();
-
-    $$("[data-go]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const target = +btn.dataset.go;
-        if (target === 3) {
-          if (!state.selectedEvents.length) return;
-          renderTickets();
-        }
-        if (target === 4) {
-          if (!allTicketsChosen()) return;
-          renderDetailsSummary();
-          validateForm();
-        }
-        goTo(target);
+    syncFirstTimer();
+    placeCardFields();
+    const start = $("#btn-start");
+    if (start) start.addEventListener("click", openSheet);
+    const sheet = $("#book-sheet");
+    if (sheet) {
+      sheet.addEventListener("click", onSheetClick);
+      sheet.addEventListener("change", onSheetChange);
+      sheet.addEventListener("input", onSheetInput);
+    }
+    const form = $("#bk-details-form");
+    if (form) form.addEventListener("submit", onDetailsSubmit);
+    document.addEventListener("keydown", onKeydown);
+    const wide = window.matchMedia("(min-width: 601px)");
+    if (typeof wide.addEventListener === "function") {
+      wide.addEventListener("change", () => {
+        if (state.sheetOpen) updatePayChrome();
       });
-    });
-
-    $("#is-repeat").addEventListener("change", setFirstTimerVisibility);
-    $("#how-found").addEventListener("change", onHowFoundChange);
-    $("#experience").addEventListener("change", () => validateForm());
-    $("#full-name").addEventListener("input", () => validateForm());
-    $("#email").addEventListener("input", () => validateForm());
-    $("#phone").addEventListener("input", () => validateForm());
-    $("#how-found-other").addEventListener("input", () => validateForm());
-    $("#transaction-number").addEventListener("input", () => validateForm());
-    $("#phone-help-toggle").addEventListener("click", togglePhoneHelp);
-    $("#signup-form").addEventListener("submit", onFormSubmit);
-    $("#btn-new-signup").addEventListener("click", resetForNewSignup);
-    $$('input[name="price-tier"]').forEach((r) => {
-      r.addEventListener("change", () => {
-        if (r.checked) setGlobalPriceTier(r.value);
-      });
-    });
-
-    setFirstTimerVisibility();
-    validateForm();
+    }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  window.HustleOsloLookup = lookupByEmail;
+  window.HustleOslo = {
+    startPayment: startPayment,
+    showPaymentFailed: showPaymentFailed,
+    buildOrder: buildOrder,
+    config: CONFIG,
+  };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();

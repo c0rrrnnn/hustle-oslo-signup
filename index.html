@@ -39,13 +39,6 @@
   </header>
 
   <main id="main">
-    <nav class="steps" aria-label="Signup steps" id="step-nav" hidden>
-      <span class="step-pill active" data-step="1" aria-current="step">1 · Intro</span>
-      <span class="step-pill" data-step="2" aria-current="false">2 · Date</span>
-      <span class="step-pill" data-step="3" aria-current="false">3 · Ticket</span>
-      <span class="step-pill" data-step="4" aria-current="false">4 · Details</span>
-    </nav>
-
     <!-- Panel 1: Landing / intro -->
     <section class="panel active landing-panel" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
       <img
@@ -197,7 +190,7 @@
       </section>
 
       <div class="landing-actions">
-        <button type="button" class="btn btn-primary" id="btn-start" data-go="2">Register for class</button>
+        <button type="button" class="btn btn-primary" id="btn-start">Register for class</button>
         <a
           class="btn btn-secondary"
           href="https://www.instagram.com/hustleoslo/"
@@ -210,306 +203,274 @@
       </div>
     </section>
 
-    <!-- Panel 2: Date -->
-    <section class="panel card" id="panel-2" data-panel="2" aria-labelledby="date-heading" hidden>
-      <h2 id="date-heading">Pick a night</h2>
-      <p class="lead">Class nights are <strong>18:00–21:00</strong>. Social-only nights are <strong>18:00–20:00</strong> (Europe/Oslo) at Sentralen, Oslo. Select one or more dates.</p>
-      <p class="deadline-hint" role="note">
-        Book anytime before class starts at <strong>18:00 on the day</strong>. Past nights are hidden automatically.
-      </p>
-      <p class="lead lead--tight">Tap a day with a dot, then select one or more nights. You can book several dates in one signup.</p>
-      <div class="calendar-wrap" id="calendar-mount" role="application" aria-label="Event calendar"></div>
-      <div class="day-pills" id="day-pills" role="region" aria-live="polite" aria-label="Events for the focused day"></div>
-      <p class="empty-state" id="no-events" hidden>
-        No upcoming nights right now — check back soon, or follow us on Instagram.
-      </p>
-      <div class="actions actions--sticky">
-        <button type="button" class="btn btn-secondary" data-go="1">Back</button>
-        <button type="button" class="btn btn-primary" id="btn-to-ticket" data-go="3" disabled>
-          Next
-        </button>
-      </div>
-    </section>
-
-    <!-- Panel 3: Ticket — schedule ABOVE ticket choices once date chosen -->
-    <section class="panel card" id="panel-3" data-panel="3" aria-labelledby="ticket-heading" hidden>
-      <span class="sheet-handle" aria-hidden="true"></span>
-      <div class="sheet-header">
-        <h2 id="ticket-heading">Select tickets</h2>
-      </div>
-      <p class="lead" id="ticket-event-summary">Choose a ticket for each night you selected.</p>
-
-      <fieldset class="tier-segment" id="price-tier-segment">
-        <legend>Price</legend>
-        <div class="segmented-control">
-          <div class="segment">
-            <input type="radio" name="price-tier" id="price-tier-student" value="student" />
-            <label for="price-tier-student">Student</label>
-          </div>
-          <div class="segment">
-            <input type="radio" name="price-tier" id="price-tier-standard" value="standard" checked />
-            <label for="price-tier-standard">Standard</label>
-          </div>
-        </div>
-        <p class="tier-status" id="price-tier-status" aria-live="polite">Showing standard prices.</p>
-        <p class="student-note" id="price-tier-note">
-          Student price is on the honour system — if you’re a student, pick student. No proof needed.
-        </p>
-      </fieldset>
-
-      <div id="ticket-nights" class="ticket-nights"></div>
-      <p class="deadline-hint" id="selected-price" aria-live="polite"></p>
-
-      <div class="actions actions--sticky">
-        <button type="button" class="btn btn-secondary" data-go="2">Back</button>
-        <button type="button" class="btn btn-primary" id="btn-to-details" data-go="4" disabled>
-          Next
-        </button>
-      </div>
-    </section>
-
-    <!-- Panel 4: Details + Vipps payment proof -->
-    <section class="panel card" id="panel-4" data-panel="4" aria-labelledby="details-heading" hidden>
-      <h2 id="details-heading">Registration</h2>
-
-      <div class="reg-hero" id="reg-hero" aria-hidden="false">
-        <div class="reg-thumb" aria-hidden="true"></div>
-        <div class="reg-hero-text">
-          <p class="reg-hero-title" id="reg-hero-title"></p>
-          <p class="reg-hero-meta" id="reg-hero-meta"></p>
-        </div>
-      </div>
-
-      <div id="details-schedule"></div>
-
-      <p class="section-label">Ticket</p>
-      <div class="ticket-summary-row" id="ticket-summary-row">
-        <span class="ts-name" id="ts-name"></span>
-        <span class="ts-price" id="ts-price"></span>
-      </div>
-
-      <div class="summary-box" id="details-summary" aria-live="polite" hidden></div>
-
-      <form id="signup-form" novalidate>
-        <p class="form-live" id="form-live" role="alert" aria-live="assertive"></p>
-
-        <div class="checkbox-row">
-          <input type="checkbox" id="is-repeat" name="isRepeat" />
-          <label for="is-repeat">I’ve attended Hustle Oslo before</label>
-        </div>
-
-        <div class="form-group">
-          <label for="full-name">Full name <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required)</span></label>
-          <input
-            type="text"
-            id="full-name"
-            name="fullName"
-            autocomplete="name"
-            required
-            maxlength="120"
-            placeholder="Your name"
-            aria-required="true"
-            aria-describedby="err-full-name"
-          />
-          <p class="field-error" id="err-full-name" role="alert">Please enter your full name.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="email">Email <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required)</span></label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            autocomplete="email"
-            required
-            maxlength="200"
-            placeholder="you@example.com"
-            inputmode="email"
-            aria-required="true"
-            aria-describedby="err-email"
-          />
-          <p class="field-error" id="err-email" role="alert">Please enter a valid email address.</p>
-        </div>
-
-        <div class="form-group">
-          <div class="label-row">
-            <label for="phone">
-              Phone number
-              <span class="optional">(optional)</span>
-            </label>
-            <button
-              type="button"
-              class="help-toggle"
-              id="phone-help-toggle"
-              aria-expanded="false"
-              aria-controls="phone-help"
-            >
-              <span aria-hidden="true">?</span>
-              <span class="visually-hidden">Why we ask for your phone number</span>
-            </button>
-          </div>
-          <div class="help-panel" id="phone-help" hidden>
-            <p>
-              If you’d like to be added to the WhatsApp group for class and event updates,
-              you can share your number here. Completely optional.
-            </p>
-          </div>
-          <input
-            type="tel"
-            id="phone"
-            name="phone"
-            autocomplete="tel"
-            maxlength="40"
-            placeholder="+47 4xx xx xxx"
-            inputmode="tel"
-            aria-describedby="err-phone phone-help"
-          />
-          <p class="field-error" id="err-phone" role="alert">
-            Please enter a valid phone number (digits, spaces, + or dashes), or leave blank.
-          </p>
-        </div>
-
-        <div id="first-timer-fields" class="first-timer-fields">
-          <div class="form-group">
-            <label for="experience">
-              Experience
-              <span class="optional">(optional)</span>
-            </label>
-            <select id="experience" name="experience" aria-required="false" aria-describedby="err-experience">
-              <option value="">— Please choose —</option>
-              <option value="never">I’ve never danced before</option>
-              <option value="solo">Solo dance styles</option>
-              <option value="partner">Other partner dances</option>
-            </select>
-            <p class="field-error" id="err-experience" role="alert">Please tell us your experience level.</p>
-          </div>
-
-          <div class="form-group">
-            <label for="how-found">
-              How did you find out about us?
-              <span class="optional">(optional)</span>
-            </label>
-            <select id="how-found" name="howFound" aria-required="false" aria-describedby="err-how-found">
-              <option value="">— Please choose —</option>
-              <option value="taken-class">I’ve taken hustle before</option>
-              <option value="friend">Friend</option>
-              <option value="social">Social media</option>
-              <option value="other">Other</option>
-            </select>
-            <p class="field-error" id="err-how-found" role="alert">Please tell us how you found us.</p>
-          </div>
-
-          <div class="form-group" id="how-found-other-wrap" hidden>
-            <label for="how-found-other">Please tell us how <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(required when Other is selected)</span></label>
-            <input
-              type="text"
-              id="how-found-other"
-              name="howFoundOther"
-              maxlength="200"
-              placeholder="Short reason"
-              aria-describedby="err-how-found-other"
-            />
-            <p class="field-error" id="err-how-found-other" role="alert">
-              Please share a short reason when you pick Other.
-            </p>
-          </div>
-        </div>
-
-        <!-- Vipps: pay first, then enter transaction # -->
-        <div class="vipps-box" id="details-vipps" role="region" aria-labelledby="details-vipps-heading">
-          <h3 id="details-vipps-heading">Pay with Vipps first</h3>
-          <p class="vipps-amount" id="details-amount"></p>
-          <p>
-            Vipps:
-            <span class="vipps-number">Hustle Oslo #48782</span>
-          </p>
-          <ol class="vipps-steps">
-            <li>Open Vipps and send the amount above to <strong>Hustle Oslo #48782</strong>.</li>
-            <li>Copy the Vipps transaction number from your receipt.</li>
-            <li>Paste the transaction number below, then submit.</li>
-          </ol>
-        </div>
-
-        <div class="form-group">
-          <label for="transaction-number">
-            Vipps transaction number
-            <span class="req" aria-hidden="true">*</span>
-            <span class="visually-hidden">(required)</span>
-          </label>
-          <input
-            type="text"
-            id="transaction-number"
-            name="transactionNumber"
-            required
-            maxlength="64"
-            minlength="4"
-            placeholder="From your Vipps receipt"
-            autocomplete="off"
-            spellcheck="false"
-            aria-required="true"
-            aria-describedby="err-transaction-number transaction-hint"
-          />
-          <p class="field-hint" id="transaction-hint">
-            Find this in Vipps after you pay (receipt / transaction details).
-          </p>
-          <p class="field-error" id="err-transaction-number" role="alert">
-            Please enter the Vipps transaction number from your payment (at least 4 characters).
-          </p>
-        </div>
-
-        <div class="actions actions--sticky">
-          <div class="sticky-total" id="sticky-total">
-            <span class="st-label">Total</span>
-            <span class="st-amount" id="sticky-amount"></span>
-          </div>
-          <button type="button" class="btn btn-secondary" data-go="3">Back</button>
-          <div class="submit-stack">
-            <button type="submit" class="btn btn-primary" id="btn-submit" disabled>
-              Continue
-            </button>
-            <p class="agree" id="agree-note">By registering you agree to our <a href="/termsofsale" id="tos">Terms of sale<span class="vh"> (opens the Hustle Oslo terms of sale page)</span></a>.</p>
-          </div>
-        </div>
-      </form>
-    </section>
-
-    <!-- Confirmation (after submit — not a numbered step) -->
-    <section class="panel card" id="panel-5" data-panel="5" aria-labelledby="confirm-heading" hidden>
-      <h2 id="confirm-heading">You’re booked</h2>
-
-      <div id="submit-status" class="status-banner pending" role="status" aria-live="polite">
-        Saving your signup…
-      </div>
-
-      <div class="vipps-box">
-        <h3>Payment recorded</h3>
-        <p class="vipps-amount" id="confirm-amount"></p>
-        <p>
-          Vipps:
-          <span class="vipps-number">Hustle Oslo #48782</span>
-        </p>
-        <p class="confirm-txn">
-          Transaction #:
-          <strong id="confirm-transaction"></strong>
-        </p>
-      </div>
-
-      <div class="summary-box" id="confirm-summary"></div>
-
-      <p class="cancel-note">
-        <strong>Screenshot this page</strong> so you have your transaction number handy.
-        Need to cancel? DM us on
-        <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">Instagram<span class="visually-hidden"> (opens in a new tab)</span></a>
-        — payment is transferable to the next class.
-      </p>
-
-      <div class="actions">
-        <button type="button" class="btn btn-secondary btn-block" id="btn-new-signup">
-          Book another night
-        </button>
-      </div>
-    </section>
   </main>
+
+  <div id="book-sheet" class="bk-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="bk-student-heading">
+    <div class="bk-frame">
+      <header class="bk-top">
+        <div class="bk-grab" aria-hidden="true"></div>
+        <div class="bk-bar">
+          <button type="button" class="bk-icon" id="bk-back" data-action="back" aria-label="Back">&#8249;</button>
+          <p class="bk-bar-title">Book a class</p>
+          <button type="button" class="bk-icon" id="bk-close" data-action="close" aria-label="Close">&#10005;</button>
+        </div>
+        <div class="bk-prog" id="bk-prog" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
+        </div>
+      </header>
+
+      <p id="bk-step-status" class="visually-hidden" aria-live="polite"></p>
+      <p id="bk-alert" class="visually-hidden" role="alert" aria-live="assertive"></p>
+
+      <div class="bk-body">
+        <section class="bk-step" id="bk-step-student" aria-labelledby="bk-student-heading">
+          <h2 class="bk-h" id="bk-student-heading" tabindex="-1">Are you a student?</h2>
+          <div class="bk-choices" role="group" aria-label="Are you a student?">
+            <button type="button" class="bk-choice" id="bk-student-yes" data-action="student" data-value="student" aria-pressed="false">Yes</button>
+            <button type="button" class="bk-choice" id="bk-student-no" data-action="student" data-value="standard" aria-pressed="false">No</button>
+          </div>
+          <p class="bk-err" id="bk-err-student" hidden>Please choose Yes or No.</p>
+        </section>
+
+        <section class="bk-step" id="bk-step-dates" aria-labelledby="bk-dates-heading" hidden>
+          <h2 class="bk-h" id="bk-dates-heading" tabindex="-1">Select a date</h2>
+          <p class="bk-sub">Select one or more dates. Book anytime before class starts.</p>
+          <div id="bk-calendar"></div>
+          <div id="bk-options"></div>
+          <p class="bk-empty" id="bk-no-events" hidden>No upcoming nights right now — check back soon, or follow us on Instagram.</p>
+        </section>
+
+        <section class="bk-step" id="bk-step-confirm" aria-labelledby="bk-confirm-heading" hidden>
+          <h2 class="bk-h" id="bk-confirm-heading" tabindex="-1">Confirm selected classes</h2>
+          <p class="bk-sub">Select one or more dates. Book anytime before class starts.</p>
+          <div id="bk-confirm-list"></div>
+        </section>
+
+        <section class="bk-step" id="bk-step-details" aria-labelledby="bk-details-heading" hidden>
+          <h2 class="bk-h" id="bk-details-heading" tabindex="-1">Your details</h2>
+          <form id="bk-details-form" novalidate>
+            <label class="bk-return">
+              <input type="checkbox" id="bk-repeat" name="isRepeat" />
+              <span class="bk-tick" aria-hidden="true"></span>
+              <span>I’ve danced with Hustle Oslo before</span>
+            </label>
+
+            <div class="bk-field">
+              <label class="bk-label" for="bk-name">Name <span class="bk-req" aria-hidden="true">*</span><span class="visually-hidden"> (required)</span></label>
+              <input class="bk-input" type="text" id="bk-name" name="fullName" autocomplete="name" maxlength="120" placeholder="Your name" aria-required="true" aria-describedby="bk-err-name" />
+              <p class="bk-err" id="bk-err-name" hidden>Please enter your full name.</p>
+            </div>
+
+            <div class="bk-field">
+              <label class="bk-label" for="bk-email">Email <span class="bk-req" aria-hidden="true">*</span><span class="visually-hidden"> (required)</span></label>
+              <input class="bk-input" type="email" id="bk-email" name="email" autocomplete="email" maxlength="200" placeholder="you@example.com" inputmode="email" aria-required="true" aria-describedby="bk-err-email" />
+              <p class="bk-err" id="bk-err-email" hidden>Enter a full email address, like name@example.com.</p>
+            </div>
+
+            <div class="bk-field">
+              <div class="bk-label-row">
+                <label class="bk-label" for="bk-phone">Phone</label>
+                <button type="button" class="bk-q" id="bk-phone-help-btn" data-action="phone-help" aria-expanded="false" aria-controls="bk-phone-help">
+                  <span aria-hidden="true">?</span>
+                  <span class="visually-hidden">Why we ask for your phone number</span>
+                </button>
+              </div>
+              <div class="bk-popover" id="bk-phone-help" hidden>
+                <p>We’ll add you to the Hustle WhatsApp community channel where we send updates about upcoming classes, hustle outings or class cancellations. Completely optional.</p>
+              </div>
+              <input class="bk-input" type="tel" id="bk-phone" name="phone" autocomplete="tel" maxlength="40" placeholder="+47 4xx xx xxx" inputmode="tel" aria-describedby="bk-phone-help bk-err-phone" />
+              <p class="bk-err" id="bk-err-phone" hidden>Please enter a valid phone number, or leave it blank.</p>
+            </div>
+
+            <div id="bk-first-timer">
+              <div class="bk-field">
+                <label class="bk-label" for="bk-experience">What’s your experience?</label>
+                <select class="bk-select is-empty" id="bk-experience" name="experience">
+                  <option value="">Please choose</option>
+                  <option value="new">New to dancing</option>
+                  <option value="some">Some dance experience (solo or partner)</option>
+                  <option value="other-styles">I dance other styles now (salsa, swing, etc.)</option>
+                  <option value="hustle">I’ve danced hustle before</option>
+                  <option value="teach">I teach dance</option>
+                </select>
+              </div>
+
+              <div class="bk-field">
+                <label class="bk-label" for="bk-referral">How did you find out about us?</label>
+                <select class="bk-select is-empty" id="bk-referral" name="referral">
+                  <option value="">Please choose</option>
+                  <option value="event">At an event</option>
+                  <option value="poster">Poster around town</option>
+                  <option value="friend">A friend told me</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="event-apps">Event apps (Bruce, Meetup, Facebook)</option>
+                  <option value="google">Google search</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div class="bk-field" id="bk-referral-other-wrap" hidden>
+                <label class="bk-label" for="bk-referral-other">Tell us where</label>
+                <input class="bk-input" type="text" id="bk-referral-other" name="referralOther" maxlength="200" placeholder="e.g. a dance festival" aria-describedby="bk-err-referral-other" />
+                <p class="bk-err" id="bk-err-referral-other" hidden>Please tell us where you found us.</p>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="bk-step" id="bk-step-checkout" aria-labelledby="bk-checkout-heading" hidden>
+          <div class="bk-checkout-layout">
+            <h2 class="bk-h" id="bk-checkout-heading" tabindex="-1">Checkout</h2>
+            <div class="bk-summary-col">
+              <div class="bk-sum">
+                <div class="bk-sum-hd">
+                  <b>YOUR ORDER</b>
+                  <button type="button" class="bk-edit" data-action="edit-order">Edit</button>
+                </div>
+                <div id="bk-order-lines"></div>
+                <div class="bk-tot"><span>Total</span><span id="bk-order-total">0 kr</span></div>
+              </div>
+              <div class="bk-sum">
+                <div class="bk-sum-hd">
+                  <b>YOUR DETAILS</b>
+                  <button type="button" class="bk-edit" data-action="edit-details">Edit</button>
+                </div>
+                <div class="bk-li"><span id="bk-who"></span></div>
+              </div>
+            </div>
+            <div class="bk-pay-col">
+              <p class="bk-sec" id="bk-pay-heading">Pay with</p>
+              <div class="bk-pay-seg" id="bk-pay-seg" role="radiogroup" aria-labelledby="bk-pay-heading"></div>
+              <div class="bk-pay-list" id="bk-pay-list" role="radiogroup" aria-labelledby="bk-pay-heading"></div>
+              <div id="bk-card-slot"></div>
+              <p class="bk-err" id="bk-err-pay" hidden>Choose how you’d like to pay.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="bk-step" id="bk-step-failed" aria-labelledby="bk-failed-heading" hidden>
+          <h2 class="bk-h" id="bk-failed-heading" tabindex="-1">Payment failed</h2>
+          <div class="bk-banner" id="bk-fail-banner" role="alert">
+            <b>Payment didn’t go through</b>
+            <span id="bk-fail-message">Your card was declined. You haven’t been charged. Try again or pick another method.</span>
+          </div>
+          <div class="bk-sum">
+            <div class="bk-sum-hd">
+              <b>YOUR ORDER</b>
+              <button type="button" class="bk-edit" data-action="edit-order">Edit</button>
+            </div>
+            <div id="bk-fail-lines"></div>
+            <div class="bk-tot"><span>Total</span><span id="bk-fail-total">0 kr</span></div>
+          </div>
+          <p class="bk-sec">Try another way</p>
+          <div class="bk-pay-list" id="bk-fail-pay" role="radiogroup" aria-label="Try another way"></div>
+          <div id="bk-fail-card-slot"></div>
+        </section>
+
+        <section class="bk-step" id="bk-step-done" aria-labelledby="bk-done-heading" hidden>
+          <div id="bk-save-banner" class="bk-banner" hidden role="status"></div>
+          <div class="bk-center">
+            <div class="bk-ok" id="bk-done-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="30" height="30" focusable="false"><path d="M5 12.5 9.5 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <h2 class="bk-h" id="bk-done-heading" tabindex="-1">You’re booked!</h2>
+            <p class="bk-sub" id="bk-done-sub"></p>
+          </div>
+          <p class="bk-note" id="bk-pending-note" hidden></p>
+          <div class="bk-done-list" id="bk-done-list"></div>
+          <button type="button" class="bk-btn bk-btn-secondary bk-btn-block bk-ics-all" id="bk-ics-all" data-action="ics-all">Add all to calendar (.ics)</button>
+        </section>
+      </div>
+
+      <div id="bk-card-fields" class="bk-card-fields" hidden>
+        <!-- TODO: Replace these visual placeholders with the Stripe Payment Element when the Cloudflare Worker is live. Card values are never sent to Apps Script or stored. -->
+        <p id="bk-card-note" class="visually-hidden">Card fields are a preview for card payment. This form does not store or send your card number.</p>
+        <div class="bk-card-grid" role="group" aria-describedby="bk-card-note">
+          <div class="bk-field bk-field-wide">
+            <label class="bk-label-plain" for="bk-card-number">Card number</label>
+            <input class="bk-input" id="bk-card-number" type="text" inputmode="numeric" autocomplete="off" placeholder="1234 5678 9012 3456" maxlength="23" spellcheck="false" aria-describedby="bk-err-card-number" />
+            <p class="bk-err" id="bk-err-card-number" hidden>Your card number is incomplete.</p>
+          </div>
+          <div class="bk-field">
+            <label class="bk-label-plain" for="bk-card-expiry">Expiry</label>
+            <input class="bk-input" id="bk-card-expiry" type="text" inputmode="numeric" autocomplete="off" placeholder="MM / YY" maxlength="7" spellcheck="false" aria-describedby="bk-err-card-expiry" />
+            <p class="bk-err" id="bk-err-card-expiry" hidden>Enter the expiry date as MM / YY.</p>
+          </div>
+          <div class="bk-field">
+            <label class="bk-label-plain" for="bk-card-cvc">CVC</label>
+            <input class="bk-input" id="bk-card-cvc" type="text" inputmode="numeric" autocomplete="off" placeholder="123" maxlength="4" spellcheck="false" aria-describedby="bk-err-card-cvc" />
+            <p class="bk-err" id="bk-err-card-cvc" hidden>Enter the CVC.</p>
+          </div>
+          <div class="bk-field bk-field-wide">
+            <label class="bk-label-plain" for="bk-card-name">Name on card</label>
+            <input class="bk-input" id="bk-card-name" type="text" autocomplete="off" placeholder="As shown on card" maxlength="80" aria-describedby="bk-err-card-name" />
+            <p class="bk-err" id="bk-err-card-name" hidden>Enter the name on the card.</p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="bk-foot">
+        <div class="bk-foot-panel" id="bk-foot-student">
+          <div class="bk-row">
+            <button type="button" class="bk-btn bk-btn-primary bk-btn-block" data-action="student-next">Next</button>
+          </div>
+          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-dates" hidden>
+          <div class="bk-row">
+            <button type="button" class="bk-btn bk-btn-secondary" data-action="back">Back</button>
+            <button type="button" class="bk-btn bk-btn-primary" id="bk-dates-next" data-action="dates-next" disabled>Next</button>
+          </div>
+          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-confirm" hidden>
+          <div class="bk-subtotal"><span>Subtotal</span><strong id="bk-subtotal">0 kr</strong></div>
+          <div class="bk-row">
+            <button type="button" class="bk-btn bk-btn-secondary" data-action="back">Back</button>
+            <button type="button" class="bk-btn bk-btn-primary" id="bk-confirm-next" data-action="confirm-next">Continue to Payment</button>
+          </div>
+          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-details" hidden>
+          <button type="submit" class="bk-btn bk-btn-primary bk-btn-block" id="bk-details-continue" form="bk-details-form">Continue</button>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-checkout" hidden>
+          <p class="bk-trust"><svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg> Secure payment by <span class="bk-trust-by">Stripe</span> · <span class="bk-brand bk-brand-visa" aria-hidden="true">VISA</span><span class="bk-brand bk-brand-mc" aria-hidden="true"><i></i><i></i></span></p>
+          <div class="bk-totalbar">
+            <span class="bk-total-label"><small>Total</small><strong id="bk-pay-total">0 kr</strong></span>
+            <button type="button" class="bk-btn bk-btn-primary bk-btn-pay" id="bk-pay" data-action="pay">
+              <svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg>
+              <span id="bk-pay-text">Pay 0 kr</span>
+            </button>
+          </div>
+          <p class="bk-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-failed" hidden>
+          <p class="bk-trust"><svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg> Secure payment by <span class="bk-trust-by">Stripe</span> · <span class="bk-brand bk-brand-visa" aria-hidden="true">VISA</span><span class="bk-brand bk-brand-mc" aria-hidden="true"><i></i><i></i></span></p>
+          <div class="bk-row">
+            <button type="button" class="bk-btn bk-btn-secondary" data-action="fail-back">Back</button>
+            <button type="button" class="bk-btn bk-btn-vipps" id="bk-fail-retry" data-action="pay"><span id="bk-fail-retry-text">Try again · Pay 0 kr with Vipps</span></button>
+          </div>
+          <p class="bk-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-done" hidden>
+          <div class="bk-row">
+            <button type="button" class="bk-btn bk-btn-primary bk-btn-block" data-action="done">Done</button>
+          </div>
+          <p class="bk-mini">Questions? <a href="mailto:hustleinoslo@gmail.com">hustleinoslo@gmail.com</a></p>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+
 
   <footer class="site-footer" aria-label="Seller information">
     <div class="foot-inner">

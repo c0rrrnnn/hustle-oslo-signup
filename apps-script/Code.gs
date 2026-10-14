@@ -21,7 +21,10 @@
  * - Optional GET ?action=lookup&email= for future repeat-attender prefill
  *
  * Payload includes optional experience / howFound, optional phone,
- * and required transactionNumber (Vipps payment proof).
+ * and transactionNumber. While online card/Vipps checkout is not live,
+ * the site sends transactionNumber "payment-pending" and asks the
+ * attendee to Vipps the amount to #48782. Extra fields (referral,
+ * paymentMethod, terms acceptance) are appended after the original columns.
  * Multi-night bookings: the website POSTs one signup object per night
  * (same person + same transactionNumber; per-night amount). The organizer
  * notify stays one email per night. The attendee confirmation is one email
@@ -64,6 +67,12 @@ var HEADERS = [
   "How found (other)",
   "Event ID",
   "Vipps #",
+  "Referral",
+  "Referral (other)",
+  "Payment method",
+  "Terms accepted",
+  "Terms accepted at",
+  "Terms version",
 ];
 
 function doGet(e) {
@@ -162,6 +171,21 @@ function ensureHeaders_(sheet) {
     var header = sheet.getRange(1, 1, 1, HEADERS.length);
     header.setFontWeight("bold");
     header.setWrap(true);
+  } else {
+    var width = Math.max(sheet.getLastColumn(), 1);
+    var current = sheet.getRange(1, 1, 1, width).getValues()[0];
+    var match = true;
+    var limit = Math.min(current.length, HEADERS.length);
+    for (var i = 0; i < limit; i++) {
+      if (String(current[i] || "") !== String(HEADERS[i])) {
+        match = false;
+        break;
+      }
+    }
+    if (match && current.length < HEADERS.length) {
+      var extra = HEADERS.slice(current.length);
+      sheet.getRange(1, current.length + 1, 1, extra.length).setValues([extra]).setFontWeight("bold");
+    }
   }
   // Keep existing + future cells readable on narrow columns
   var lastCol = Math.max(sheet.getLastColumn(), HEADERS.length);
@@ -199,7 +223,17 @@ function buildRow_(data) {
     data.howFoundOther || "",
     data.eventId || "",
     data.vippsNumber || "48782",
+    data.referralLabel || data.referral || "",
+    data.referralOther || "",
+    data.paymentMethod || "",
+    data.termsAccepted ? "yes" : "no",
+    data.termsAcceptedAt || "",
+    data.termsVersion || "",
   ];
+}
+
+function pendingPayment_(data) {
+  return String(data.transactionNumber || "") === "payment-pending";
 }
 
 function sendNotifyEmail_(data) {
@@ -230,7 +264,13 @@ function sendNotifyEmail_(data) {
       (data.priceTier || "") +
       ")",
     "Amount: " + (data.amount != null ? data.amount + " NOK" : ""),
-    "Vipps transaction #: " + (data.transactionNumber || "—"),
+    pendingPayment_(data)
+      ? "Payment: pending — attendee was asked to Vipps Hustle Oslo #48782"
+      : "Vipps transaction #: " + (data.transactionNumber || "—"),
+    "Payment method: " + (data.paymentMethod || "—"),
+    "Terms: " +
+      (data.termsAccepted ? "accepted " + (data.termsVersion || "") : "no") +
+      (data.termsAcceptedAt ? " at " + data.termsAcceptedAt : ""),
     "Repeat attender: " + (data.isRepeat ? "yes" : "no"),
     "Experience: " + (data.experienceLabel || data.experience || "—"),
     "How found: " +
@@ -318,8 +358,16 @@ function confirmationBody_(data, nights) {
   }
 
   lines.push("");
-  lines.push("Vipps transaction #: " + (plain_(data.transactionNumber) || "—"));
-  lines.push("Vipps number: " + (plain_(data.vippsNumber) || "48782"));
+  if (pendingPayment_(data)) {
+    lines.push(
+      "Payment is still pending. Please Vipps the total to Hustle Oslo #" +
+        (plain_(data.vippsNumber) || "48782") +
+        "."
+    );
+  } else {
+    lines.push("Vipps transaction #: " + (plain_(data.transactionNumber) || "—"));
+    lines.push("Vipps number: " + (plain_(data.vippsNumber) || "48782"));
+  }
   lines.push("");
   lines.push(
     "Questions? Reply to this email or contact " + DEFAULT_NOTIFY + "."
