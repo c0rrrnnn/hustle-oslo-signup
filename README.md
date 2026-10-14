@@ -33,7 +33,7 @@ A preview server may already be running on port **8765** on the shared box.
 ## Product rules (do not invent extras)
 
 - **Class nights:** Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00  
-- **Social-only nights:** Social 18:00–21:00  
+- **Social-only nights:** Social 18:00–20:00  
 - Once a date is chosen, that schedule appears **above** ticket/details fields.
 - Class tickets: Beginners class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 · Social only 50. Class booking includes social after. Student = honour system. No caps.
 - Social-only nights: 50 kr only.

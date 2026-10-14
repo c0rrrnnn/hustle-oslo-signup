@@ -1,7 +1,7 @@
 /**
  * Hustle Oslo — upcoming events
  * Edit this file to add/remove/change class and social nights.
- * Dates are ISO (YYYY-MM-DD). All events are 18:00–21:00 Europe/Oslo at Sentralen, Oslo.
+ * Dates are ISO (YYYY-MM-DD). Class nights are 18:00–21:00 and social-only nights are 18:00–20:00, Europe/Oslo at Sentralen, Oslo.
  * Weekdays verified as Mondays in 2026.
  */
 window.HUSTLE_EVENTS = [
@@ -35,7 +35,7 @@ window.HUSTLE_EVENTS = [
     location: "Gymsalen",
     venue: "Sentralen, Oslo",
     start: "18:00",
-    end: "21:00",
+    end: "20:00",
     label: "Social night",
   },
   {
@@ -57,7 +57,7 @@ window.HUSTLE_EVENTS = [
     location: "Kronesalen",
     venue: "Sentralen, Oslo",
     start: "18:00",
-    end: "21:00",
+    end: "20:00",
     label: "Social night",
   },
   {
@@ -79,7 +79,7 @@ window.HUSTLE_EVENTS = [
     location: "Gymsalen",
     venue: "Sentralen, Oslo",
     start: "18:00",
-    end: "21:00",
+    end: "20:00",
     label: "Social night",
   },
 ];

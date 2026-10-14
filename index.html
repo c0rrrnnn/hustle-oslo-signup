@@ -213,7 +213,7 @@
     <!-- Panel 2: Date -->
     <section class="panel card" id="panel-2" data-panel="2" aria-labelledby="date-heading" hidden>
       <h2 id="date-heading">Pick a night</h2>
-      <p class="lead">All nights are <strong>18:00–21:00</strong> (Europe/Oslo) at Sentralen, Oslo. Select one or more dates.</p>
+      <p class="lead">Class nights are <strong>18:00–21:00</strong>. Social-only nights are <strong>18:00–20:00</strong> (Europe/Oslo) at Sentralen, Oslo. Select one or more dates.</p>
       <p class="deadline-hint" role="note">
         Book anytime before class starts at <strong>18:00 on the day</strong>. Past nights are hidden automatically.
       </p>
@@ -463,9 +463,12 @@
             <span class="st-amount" id="sticky-amount"></span>
           </div>
           <button type="button" class="btn btn-secondary" data-go="3">Back</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit" disabled>
-            Continue
-          </button>
+          <div class="submit-stack">
+            <button type="submit" class="btn btn-primary" id="btn-submit" disabled>
+              Continue
+            </button>
+            <p class="agree" id="agree-note">By registering you agree to our <a href="/termsofsale" id="tos">Terms of sale<span class="vh"> (opens the Hustle Oslo terms of sale page)</span></a>.</p>
+          </div>
         </div>
       </form>
     </section>
@@ -508,12 +511,21 @@
     </section>
   </main>
 
-  <footer class="site-footer">
-    <p>
-      Hustle Oslo •
-      <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a>
-      • Vipps #48782
-    </p>
+  <footer class="site-footer" aria-label="Seller information">
+    <div class="foot-inner">
+      <div>
+        <p class="foot-name">Hustle Oslo</p>
+        <p>Org.nr 937234503</p>
+        <p>c/o Claire Wu, H0203<br>Oslo gate 16, 0192 Oslo</p>
+      </div>
+      <div>
+        <p><a href="tel:+4746862806">+47 468 62 806</a></p>
+        <p><a href="mailto:hustleinoslo@gmail.com">hustleinoslo@gmail.com</a></p>
+        <p><a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener">@hustleoslo<span class="vh"> on Instagram (opens in a new tab)</span></a></p>
+      </div>
+      <nav aria-label="Legal"><p><a href="/termsofsale" data-i18n-foot>Terms of sale</a></p></nav>
+    </div>
+    <p class="foot-copy">© 2026 Hustle Oslo</p>
   </footer>
 
   <script src="events.js"></script>
