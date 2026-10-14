@@ -427,6 +427,120 @@ body.is-landing .site-footer a:hover {
   line-height: 1.45;
 }
 
+/* Prices — grid sits on #1c1c1f (terms page var(--card)).
+   Caption and the notes under the table stay unboxed, flush with landing text. */
+.price-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  background: transparent;
+}
+
+.price-table caption.landing-label {
+  caption-side: top;
+  text-align: left;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  background: transparent;
+  color: #c8c8d0;
+}
+
+.price-table th,
+.price-table td {
+  text-align: left;
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid #3a3a40;
+  vertical-align: top;
+  background: #1c1c1f;
+  color: #f4f4f5;
+  font-weight: 500;
+}
+
+.price-table thead th {
+  color: #c8c8d0;
+  font-weight: 600;
+}
+
+.price-table thead th:nth-child(2),
+.price-table thead th:nth-child(3) {
+  width: 5.6rem;
+}
+
+.price-table thead th:first-child {
+  border-top-left-radius: 12px;
+}
+
+.price-table thead th:last-child {
+  border-top-right-radius: 12px;
+}
+
+.price-table tbody th {
+  font-weight: 500;
+  color: #f4f4f5;
+}
+
+.price-table td {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.price-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.price-table tbody tr:last-child th {
+  border-bottom-left-radius: 12px;
+}
+
+.price-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 12px;
+}
+
+.landing-price-note,
+.landing-price-terms {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  color: #d6d6de;
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
+.landing-price-terms a {
+  color: #f4f4f5;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  display: inline-block;
+  padding: 0.15rem 0;
+}
+
+.landing-price-terms a:hover {
+  color: #ffffff;
+  text-decoration-thickness: 2px;
+}
+
+.landing-price-terms a:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+@media (max-width: 380px) {
+  .price-table th,
+  .price-table td {
+    padding: 0.6rem 0.45rem;
+  }
+
+  .price-table thead th:nth-child(2),
+  .price-table thead th:nth-child(3) {
+    width: 5.25rem;
+  }
+}
+
 .class-schedule {
   list-style: none;
   margin: 0;
