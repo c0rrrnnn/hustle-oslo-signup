@@ -37,7 +37,7 @@ A preview server may already be running on port **8765** on the shared box.
 - Class tickets: Beginner class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 (Save 15%) · Social only 50. Class booking includes social after. Student = honour system, chosen on the first sheet step. No caps.
 - Social-only nights: 50 kr only.
 - Book anytime before **18:00** on the day (Europe/Oslo). Past nights are hidden.
-- Flow: **Intro (landing) → Are you a student? → Select a date → Confirm selected classes → Your details → Checkout → confirmation**. Payment failure has its own retry screen for when `PAYMENTS_ENABLED` is true.
+- Flow: **Intro (landing) → Are you a student? → Select a date → Confirm selected classes → Your details → Checkout → confirmation**. On screens wider than 600px, details and checkout are one screen (details on the left, order on the right). Payment failure has its own retry screen for when `PAYMENTS_ENABLED` is true.
 - First-timers: experience and “how did you find us?” are optional, and hidden when “I’ve danced with Hustle Oslo before” is checked. “Other” reveals a short text field.
 - Optional phone, with a ? disclosure about the WhatsApp group.
 - Checkout has no terms checkbox. Paying accepts the Terms of Sale and refund policy (`/termsofsale`, version `v1.0`).

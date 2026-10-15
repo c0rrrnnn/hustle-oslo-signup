@@ -54,7 +54,7 @@
     card: "Card",
   };
   const MOBILE_METHODS = ["apple", "google", "vipps", "card"];
-  const DESKTOP_METHODS = ["card", "apple", "google", "vipps"];
+  const DESKTOP_METHODS = ["apple", "google", "vipps", "card"];
 
   const MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -268,8 +268,52 @@
     return ev.date + " " + kind + " " + ev.location;
   }
 
+  function isDesktop() {
+    return window.matchMedia("(min-width: 601px)").matches;
+  }
+
   function wideCheckout() {
-    return state.view === "checkout" && window.matchMedia("(min-width: 601px)").matches;
+    return state.view === "checkout" && isDesktop();
+  }
+
+  function orderLine(sel) {
+    return (
+      '<div class="bk-li"><span>' + escapeHtml(ticketLabel(sel.ticket)) +
+      "<small>" + escapeHtml(formatCheckoutDate(sel.event)) + "</small></span><span>" +
+      amountForSelection(sel) + " kr</span></div>"
+    );
+  }
+
+  function placeDetailsForm() {
+    const form = $("#bk-details-form");
+    const mount = $("#bk-details-mount");
+    const step = $("#bk-step-details");
+    const block = $("#bk-desk-details");
+    if (!form || !mount || !step) return;
+    if (wideCheckout()) {
+      if (form.parentElement !== mount) mount.appendChild(form);
+      if (block) block.hidden = false;
+    } else {
+      if (form.parentElement !== step) step.appendChild(form);
+      if (block) block.hidden = true;
+    }
+  }
+
+  function placePayActions() {
+    const pay = $("#bk-pay");
+    const tos = $("#bk-checkout-tos");
+    const inline = $("#bk-inline-pay");
+    const foot = $("#bk-foot-checkout");
+    if (!pay || !tos || !inline || !foot) return;
+    if (wideCheckout()) {
+      inline.hidden = false;
+      if (tos.parentElement !== inline) inline.appendChild(tos);
+      if (pay.parentElement !== inline) inline.appendChild(pay);
+    } else {
+      inline.hidden = true;
+      if (pay.parentElement !== foot) foot.appendChild(pay);
+      if (tos.parentElement !== foot) foot.appendChild(tos);
+    }
   }
 
   function setErr(key, on) {
@@ -565,7 +609,7 @@
     if (state.view === "dates") return go("student");
     if (state.view === "confirm") return go("dates");
     if (state.view === "details") return go("confirm");
-    if (state.view === "checkout") return go("details");
+    if (state.view === "checkout") return go(isDesktop() ? "confirm" : "details");
     if (state.view === "failed") return go("checkout");
   }
 
@@ -798,15 +842,15 @@
     } else {
       host.innerHTML = state.selections
         .map((s) => {
-          const when = formatMonthDay(s.event);
+          const when = formatCheckoutDate(s.event);
           const name = ticketLabel(s.ticket);
           return (
-            '<p class="bk-dl">' + escapeHtml(when) + "</p>" +
             '<article class="bk-item">' +
             '<button type="button" class="bk-item-x" data-action="remove-night" data-event-id="' + escapeHtml(s.event.id) +
             '" aria-label="Remove ' + escapeHtml(name) + " on " + escapeHtml(when) + '">&#10005;</button>' +
             '<p class="bk-item-name">' + escapeHtml(name) + "</p>" +
-            '<p class="bk-item-meta">' + escapeHtml(ticketTime(s.event, s.ticket.id)) + "<br>" + escapeHtml(venueDot(s.event)) + "</p>" +
+            '<p class="bk-item-meta">' + escapeHtml(when) + "<br>" + escapeHtml(ticketTime(s.event, s.ticket.id)) +
+            "<br>" + escapeHtml(venueDot(s.event)) + "</p>" +
             '<p class="bk-item-price">' + amountForSelection(s) + " kr</p></article>"
           );
         })
@@ -958,10 +1002,16 @@
     const who = method === "vipps" ? "Vipps" : "Stripe";
     const payText = $("#bk-pay-text");
     if (payText && !state.submitting) payText.textContent = "Pay " + amt + " kr";
-    ["bk-order-total", "bk-fail-total", "bk-subtotal"].forEach((id) => {
+    ["bk-order-total", "bk-order-sub", "bk-fail-total", "bk-subtotal"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.textContent = amt + " kr";
     });
+    const payBtn = $("#bk-pay");
+    if (payBtn) {
+      const orange = wideCheckout() && method === "vipps";
+      payBtn.classList.toggle("bk-btn-vipps", orange);
+      payBtn.classList.toggle("bk-btn-primary", !orange);
+    }
     const retry = $("#bk-fail-retry-text");
     if (retry) retry.textContent = "Try again · Pay " + amt + " kr with " + METHOD_LABEL[method];
     const retryBtn = $("#bk-fail-retry");
@@ -974,21 +1024,15 @@
     });
     const sheet = $("#book-sheet");
     if (sheet) sheet.classList.toggle("is-wide", wideCheckout());
+    placeDetailsForm();
+    placePayActions();
     placeCardFields();
   }
 
   function renderCheckout() {
     const lines = $("#bk-order-lines");
     if (lines) {
-      lines.innerHTML = state.selections
-        .map((s) => {
-          return (
-            '<div class="bk-li"><span>' + escapeHtml(formatCheckoutDate(s.event)) +
-            "<small>" + escapeHtml(ticketLabel(s.ticket)) + "</small></span><span>" +
-            amountForSelection(s) + " kr</span></div>"
-          );
-        })
-        .join("");
+      lines.innerHTML = state.selections.map(orderLine).join("");
     }
     const who = $("#bk-who");
     if (who) {
@@ -1001,15 +1045,7 @@
   function renderFailed() {
     const lines = $("#bk-fail-lines");
     if (lines) {
-      lines.innerHTML = state.selections
-        .map((s) => {
-          return (
-            '<div class="bk-li"><span>' + escapeHtml(formatCheckoutDate(s.event)) +
-            "<small>" + escapeHtml(ticketLabel(s.ticket) + " · " + ticketTime(s.event, s.ticket.id)) +
-            "</small></span><span>" + amountForSelection(s) + " kr</span></div>"
-          );
-        })
-        .join("");
+      lines.innerHTML = state.selections.map(orderLine).join("");
     }
   }
 
@@ -1368,9 +1404,9 @@
       list.innerHTML = state.selections
         .map((s) => {
           return (
-            '<article class="bk-calcard"><div><p class="bk-calcard-date">' + escapeHtml(formatCheckoutDate(s.event)) +
-            '</p><p class="bk-calcard-meta">' + escapeHtml(ticketLabel(s.ticket) + " · " + ticketTime(s.event, s.ticket.id)) +
-            "<br>" + escapeHtml(venueDot(s.event).replace(" • ", ", ")) + "</p></div>" +
+            '<article class="bk-calcard"><div><p class="bk-calcard-date">' + escapeHtml(ticketLabel(s.ticket)) +
+            '</p><p class="bk-calcard-meta">' + escapeHtml(formatCheckoutDate(s.event)) +
+            "<br>" + escapeHtml(ticketTime(s.event, s.ticket.id) + " · " + venueDot(s.event).replace(" • ", ", ")) + "</p></div>" +
             '<button type="button" class="bk-textlink" data-action="ics-one" data-event-id="' + escapeHtml(s.event.id) +
             '">+ Calendar</button></article>'
           );
@@ -1415,6 +1451,11 @@
   async function onPay() {
     if (state.submitting) return;
     if (!state.selections.length) return;
+    if (wideCheckout() && !validateDetails(true)) {
+      const first = $("#bk-details-form [aria-invalid='true']");
+      if (first) first.focus();
+      return;
+    }
     if (!state.paymentMethod) {
       setErr("pay", true);
       announce("Choose how you’d like to pay.");
@@ -1459,7 +1500,7 @@
       if (first) first.focus();
       return;
     }
-    go("checkout");
+    if (state.view !== "checkout") go("checkout");
   }
 
   function visibleFocusable() {
@@ -1550,7 +1591,7 @@
     if (action === "remove-night") return removeNight(actionEl.dataset.eventId);
     if (action === "confirm-next") {
       if (!state.selections.length) return;
-      return go("details");
+      return go(isDesktop() ? "checkout" : "details");
     }
     if (action === "edit-order") return go("confirm");
     if (action === "edit-details") return go("details");
@@ -1617,7 +1658,9 @@
     const wide = window.matchMedia("(min-width: 601px)");
     if (typeof wide.addEventListener === "function") {
       wide.addEventListener("change", () => {
-        if (state.sheetOpen) updatePayChrome();
+        if (!state.sheetOpen) return;
+        if (isDesktop() && state.view === "details") go("checkout");
+        else updatePayChrome();
       });
     }
   }

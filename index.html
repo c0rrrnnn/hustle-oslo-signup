@@ -320,18 +320,23 @@
         </section>
 
         <section class="bk-step" id="bk-step-checkout" aria-labelledby="bk-checkout-heading" hidden>
+          <div class="bk-deskbar">
+            <button type="button" class="bk-desk-back" data-action="back">&#8249; Back</button>
+            <span class="bk-secure"><svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg> Secure checkout</span>
+          </div>
+          <h2 class="bk-h" id="bk-checkout-heading" tabindex="-1">Checkout</h2>
           <div class="bk-checkout-layout">
-            <h2 class="bk-h" id="bk-checkout-heading" tabindex="-1">Checkout</h2>
             <div class="bk-summary-col">
-              <div class="bk-sum">
+              <div class="bk-sum bk-order-card">
                 <div class="bk-sum-hd">
-                  <b>YOUR ORDER</b>
+                  <b class="bk-order-title">Your order</b>
                   <button type="button" class="bk-edit" data-action="edit-order">Edit</button>
                 </div>
                 <div id="bk-order-lines"></div>
-                <div class="bk-tot"><span>Total</span><span id="bk-order-total">0 kr</span></div>
+                <div class="bk-sub2"><span>Subtotal</span><span id="bk-order-sub">0 kr</span></div>
+                <div class="bk-tot"><span>Total</span><strong id="bk-order-total">0 kr</strong></div>
               </div>
-              <div class="bk-sum">
+              <div class="bk-sum bk-who-card">
                 <div class="bk-sum-hd">
                   <b>YOUR DETAILS</b>
                   <button type="button" class="bk-edit" data-action="edit-details">Edit</button>
@@ -340,11 +345,16 @@
               </div>
             </div>
             <div class="bk-pay-col">
+              <div id="bk-desk-details" class="bk-desk-details" hidden>
+                <p class="bk-sec bk-desk-details-title">Your details</p>
+                <div id="bk-details-mount"></div>
+              </div>
               <p class="bk-sec" id="bk-pay-heading">Pay with</p>
               <div class="bk-pay-seg" id="bk-pay-seg" role="radiogroup" aria-labelledby="bk-pay-heading"></div>
               <div class="bk-pay-list" id="bk-pay-list" role="radiogroup" aria-labelledby="bk-pay-heading"></div>
               <div id="bk-card-slot"></div>
               <p class="bk-err" id="bk-err-pay" hidden>Choose how you’d like to pay.</p>
+              <div id="bk-inline-pay" hidden></div>
             </div>
           </div>
         </section>
@@ -357,7 +367,7 @@
           </div>
           <div class="bk-sum">
             <div class="bk-sum-hd">
-              <b>YOUR ORDER</b>
+              <b class="bk-order-title">Your order</b>
               <button type="button" class="bk-edit" data-action="edit-order">Edit</button>
             </div>
             <div id="bk-fail-lines"></div>
@@ -445,7 +455,7 @@
             <svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg>
             <span id="bk-pay-text">Pay 0 kr</span>
           </button>
-          <p class="bk-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          <p class="bk-tos" id="bk-checkout-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-failed" hidden>
