@@ -958,7 +958,7 @@
     const who = method === "vipps" ? "Vipps" : "Stripe";
     const payText = $("#bk-pay-text");
     if (payText && !state.submitting) payText.textContent = "Pay " + amt + " kr";
-    ["bk-pay-total", "bk-order-total", "bk-fail-total", "bk-subtotal"].forEach((id) => {
+    ["bk-order-total", "bk-fail-total", "bk-subtotal"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.textContent = amt + " kr";
     });
