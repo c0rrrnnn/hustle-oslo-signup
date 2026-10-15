@@ -378,6 +378,36 @@ body.is-landing .site-footer a:hover {
   margin-bottom: 0.25rem;
 }
 
+.site-nav {
+  background: transparent;
+  border: 0;
+  margin: 0 0 0.35rem;
+  padding: 0.2rem 0 0;
+}
+
+.site-logo,
+.bk-logo {
+  display: inline-block;
+  background: transparent;
+  border: 0;
+  line-height: 0;
+  text-decoration: none;
+}
+
+.site-logo img,
+.bk-logo img {
+  display: block;
+  height: 56px;
+  width: auto;
+}
+
+.site-logo:focus-visible,
+.bk-logo:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .landing-logo {
   display: block;
   width: min(52%, 11.75rem);
@@ -2236,6 +2266,10 @@ body.bk-open {
   padding: 10px 16px 0;
 }
 
+.bk-logo {
+  margin: 0 0 8px;
+}
+
 .bk-grab {
   width: 36px;
   height: 4px;
@@ -3368,7 +3402,9 @@ body.bk-open {
     padding-right: 40px;
   }
 
-  .bk-sheet.is-wide .bk-top,
+  .bk-sheet.is-wide .bk-grab,
+  .bk-sheet.is-wide .bk-bar,
+  .bk-sheet.is-wide .bk-prog,
   .bk-sheet.is-wide .bk-foot {
     display: none;
   }
