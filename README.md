@@ -1,7 +1,7 @@
 # Hustle Oslo — class & social signup
 
 Vanilla static signup page for Hustle Oslo classes and social nights at Sentralen.
-Payment is **existing Vipps** to **Hustle Oslo #48782** (not Vipps Checkout). Payment proof is the **Vipps transaction number**.
+The booking sheet follows Claire’s approved screens. Online card, Apple Pay, Google Pay, and Vipps checkout call `startPayment()` only when `CONFIG.PAYMENTS_ENABLED` is true. Until the Cloudflare Worker exists, that flag stays `false`: Pay still saves the booking to Apps Script and the confirmation is marked **payment pending** (pay with Vipps to **Hustle Oslo #48782**).
 
 English only · mobile-first · WCAG 2.2 AA aimed.
 
@@ -26,7 +26,7 @@ A preview server may already be running on port **8765** on the shared box.
 | `assets/hero.mp4` | Intro hero loop (muted, no audio). 676 KB, 768×576, H.264, faststart. Compressed from the 1.9 MB 1024×768 source. |
 | `assets/hero-poster.jpg` | First-frame still (41 KB) for reduced motion and before playback. |
 | `events.js` | Upcoming nights + ticket catalogue (edit here for new dates) |
-| `app.js` | Wizard flow (4 steps), validation, Vipps + transaction # |
+| `app.js` | Booking sheet, validation, Apps Script submit, `startPayment()` seam |
 | `apps-script/Code.gs` | Google Apps Script: Sheet tabs, organizer notify, one attendee confirmation per booking |
 | `README.md` | This file |
 
@@ -34,16 +34,15 @@ A preview server may already be running on port **8765** on the shared box.
 
 - **Class nights:** Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00  
 - **Social-only nights:** Social 18:00–20:00  
-- Once a date is chosen, that schedule appears **above** ticket/details fields.
-- Class tickets: Beginners class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 · Social only 50. Class booking includes social after. Student = honour system. No caps.
+- Class tickets: Beginner class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 (Save 15%) · Social only 50. Class booking includes social after. Student = honour system, chosen on the first sheet step. No caps.
 - Social-only nights: 50 kr only.
 - Book anytime before **18:00** on the day (Europe/Oslo). Past nights are hidden.
-- First-timers: experience + how found are **optional** (shown unless they check “I’ve attended Hustle Oslo before”, which hides them). “Other” how-found requires a short reason only when selected.
-- Optional phone (WhatsApp group help via accessible ? disclosure). Required Vipps **transaction #** as payment proof on the Details step.
-- Cancel: DM [@hustleoslo](https://www.instagram.com/hustleoslo/) — payment transferable to next class.
-- Flow: **Intro → Date → Ticket → Details → submit → confirmation** (no separate Pay step).
-- On Details: amount + Vipps **#48782**; user sends the amount via existing Vipps, then pastes the **transaction #** and submits. Do **not** ask them to put anything special in the Vipps message.
-- Confirmation echoes amount, Vipps #, transaction #, name, night, ticket, etc.
+- Flow: **Intro (landing) → Are you a student? → Select a date → Confirm selection → Your details → Checkout → confirmation**. On screens wider than 600px, details and checkout are one screen (details on the left, order on the right). Payment failure stays on a Checkout screen with the error banner and another attempt.
+- First-timers: experience and “how did you find us?” are optional, and hidden when “I’ve danced with Hustle Oslo before” is checked. “Other” reveals a short text field.
+- Optional phone, with a ? disclosure about the WhatsApp group.
+- Checkout has no terms checkbox. Paying accepts the Terms of Sale and refund policy (`/termsofsale`, version `v1.0`).
+- While `PAYMENTS_ENABLED` is false, Pay does not charge a card. It posts the booking with `transactionNumber: "payment-pending"` and shows a Vipps **#48782** note. Card fields are placeholders and are never submitted.
+- `startPayment(method, order)` is the only function that should talk to the future payment worker. Do not put API keys in the repo.
 
 ## Config
 
@@ -51,19 +50,16 @@ In `app.js`:
 
 ```js
 const CONFIG = {
-  APPS_SCRIPT_URL: "", // paste Web App URL after deploy
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/…/exec",
+  PAYMENTS_ENABLED: false,
   VIPPS_NUMBER: "48782",
-  ...
+  TERMS_VERSION: "v1.0",
 };
 ```
 
-Leave `APPS_SCRIPT_URL` empty until Apps Script is deployed. The site still:
+`PAYMENTS_ENABLED` stays `false` until the Cloudflare Worker exists. Pay then posts the same per-night JSON as before (`text/plain`, so Apps Script does not CORS-preflight), including the original fields plus `experience`, `referral`, `referralOther`, `paymentMethod`, `termsAccepted`, `termsAcceptedAt`, and `termsVersion`. `transactionNumber` is `payment-pending` so the currently deployed script, which still requires that field, will accept the row. `howFound` / `howFoundOther` stay filled from the referral answers.
 
-1. Shows Vipps instructions (#48782 + amount; pay first, then paste transaction #)  
-2. Requires a Vipps transaction #, then queues the payload in `sessionStorage` under `hustleOsloSignups`  
-3. Shows confirmation with amount, Vipps #, and transaction # (plus a warning that Claire still needs to wire the backend)  
-
-When the URL is set, the same confirmation UI is used and the payload is `POST`ed as `text/plain` JSON (avoids CORS preflight issues with Apps Script). Payload includes `transactionNumber` and optional `phone`. Multi-night bookings POST one object per night. The last successful night sets `sendAttendeeConfirmation` and includes `confirmationNights` so the attendee gets one email listing the nights that saved.
+Multi-night bookings POST one object per night. The last successful night sets `sendAttendeeConfirmation` and includes `confirmationNights`. Re-deploy Apps Script (**Deploy → Manage deployments → New version**) before the new columns and the “payment pending” email wording are stored. Until then, extra JSON fields are ignored and the email may show the literal transaction value `payment-pending`.
 
 ---
 
@@ -149,7 +145,7 @@ node --check app.js
 node --check events.js
 ```
 
-Manual: pick a future date → confirm schedule block appears above tickets → choose ticket → on Details see amount + Vipps **#48782** → pay in Vipps → enter transaction # → submit → confirmation echoes amount, Vipps #, transaction #, name, night, ticket.
+Manual: Register → student Yes/No → pick a dotted date and a class → confirm → details → checkout → Pay. With `PAYMENTS_ENABLED` false, confirmation says payment pending and shows Vipps **#48782**. Card numbers are not in the Apps Script payload.
 
 ## Brand
 
