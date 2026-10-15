@@ -3338,11 +3338,34 @@ body.bk-open {
 }
 
 @media (min-width: 601px) {
+  body.is-landing main {
+    max-width: 1100px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .site-footer {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .foot-inner,
+  .site-footer .foot-copy {
+    max-width: 1100px;
+    padding-left: 40px;
+    padding-right: 40px;
+    box-sizing: border-box;
+  }
+
+  .bk-frame {
+    width: min(1100px, 100%);
+  }
+
   .bk-top,
   .bk-body,
   .bk-foot {
-    padding-left: 32px;
-    padding-right: 32px;
+    padding-left: 40px;
+    padding-right: 40px;
   }
 
   .bk-sheet.is-wide .bk-top,
