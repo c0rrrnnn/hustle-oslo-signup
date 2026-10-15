@@ -92,15 +92,25 @@
         })();
       </script>
 
-      <p class="landing-kicker">Hustle Oslo</p>
       <h1 id="intro-heading" class="landing-title">Beginner, Intermediate Class &amp; Social</h1>
 
       <section class="landing-section" aria-labelledby="about-heading">
-        <h2 id="about-heading" class="landing-label">About event</h2>
-        <!-- Placeholder copy — Claire will replace this lorem ipsum later. -->
+        <h2 id="about-heading" class="landing-label">About hustle</h2>
         <p class="landing-about">
-          tempor elit. tincidunt Donec ex. tincidunt volutpat non, ullamcorper quis id amet, Ut luctus nibh sollicitudin. in sed quis sapien quam scelerisque porta sit.
+          Partner hustle dance classes and social dancing every Monday at Sentralen, Oslo. Beginners 18:00–19:00, Intermediate 19:00–20:00, then social dancing 20:00–21:00. No partner needed, just come as you are.
         </p>
+      </section>
+
+      <section class="landing-section" aria-labelledby="upcoming-heading">
+        <h2 id="upcoming-heading" class="landing-label">Upcoming events</h2>
+        <div
+          id="upcoming-events"
+          class="upcoming-row"
+          role="list"
+          tabindex="0"
+          aria-label="Upcoming nights"
+        ></div>
+        <p id="upcoming-empty" class="upcoming-empty" hidden>No upcoming nights right now.</p>
       </section>
 
       <section class="landing-section" aria-labelledby="schedule-heading">
@@ -119,6 +129,36 @@
             <time datetime="20:00">20:00–21:00</time>
           </li>
         </ul>
+      </section>
+
+      <section class="landing-section" aria-labelledby="prices-caption">
+        <table class="price-table">
+          <caption id="prices-caption" class="landing-label">Prices (NOK)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Ticket</th>
+              <th scope="col">Standard</th>
+              <th scope="col">Student</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Single class</th>
+              <td>150 kr</td>
+              <td>100 kr</td>
+            </tr>
+            <tr>
+              <th scope="row">Same-night bundle (Beginners + Intermediate back to back, same night only, can’t be split across weeks)</th>
+              <td>220 kr</td>
+              <td>150 kr</td>
+            </tr>
+            <tr>
+              <th scope="row">Social dancing only</th>
+              <td>50 kr</td>
+              <td>50 kr</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section class="landing-section" aria-labelledby="location-heading">
@@ -151,18 +191,6 @@
             allowfullscreen
           ></iframe>
         </div>
-      </section>
-
-      <section class="landing-section" aria-labelledby="upcoming-heading">
-        <h2 id="upcoming-heading" class="landing-label">Upcoming events</h2>
-        <div
-          id="upcoming-events"
-          class="upcoming-row"
-          role="list"
-          tabindex="0"
-          aria-label="Upcoming nights"
-        ></div>
-        <p id="upcoming-empty" class="upcoming-empty" hidden>No upcoming nights right now.</p>
       </section>
 
       <section class="landing-section" aria-labelledby="more-details-heading">
@@ -241,8 +269,8 @@
         </section>
 
         <section class="bk-step" id="bk-step-confirm" aria-labelledby="bk-confirm-heading" hidden>
-          <h2 class="bk-h" id="bk-confirm-heading" tabindex="-1">Confirm selected classes</h2>
-          <p class="bk-sub">Select one or more dates. Book anytime before class starts.</p>
+          <h2 class="bk-h" id="bk-confirm-heading" tabindex="-1">Confirm selection</h2>
+          <p class="bk-sub">Review the classes you’ve selected</p>
           <div id="bk-confirm-list"></div>
         </section>
 
@@ -360,7 +388,7 @@
         </section>
 
         <section class="bk-step" id="bk-step-failed" aria-labelledby="bk-failed-heading" hidden>
-          <h2 class="bk-h" id="bk-failed-heading" tabindex="-1">Payment failed</h2>
+          <h2 class="bk-h" id="bk-failed-heading" tabindex="-1">Checkout</h2>
           <div class="bk-banner" id="bk-fail-banner" role="alert">
             <b>Payment didn’t go through</b>
             <span id="bk-fail-message">Your card was declined. You haven’t been charged. Try again or pick another method.</span>
@@ -373,8 +401,8 @@
             <div id="bk-fail-lines"></div>
             <div class="bk-tot"><span>Total</span><span id="bk-fail-total">0 kr</span></div>
           </div>
-          <p class="bk-sec">Try another way</p>
-          <div class="bk-pay-list" id="bk-fail-pay" role="radiogroup" aria-label="Try another way"></div>
+          <p class="bk-sec" id="bk-fail-pay-heading">Payment methods</p>
+          <div class="bk-pay-list" id="bk-fail-pay" role="radiogroup" aria-labelledby="bk-fail-pay-heading"></div>
           <div id="bk-fail-card-slot"></div>
         </section>
 
@@ -387,7 +415,6 @@
             <h2 class="bk-h" id="bk-done-heading" tabindex="-1">You’re booked!</h2>
             <p class="bk-sub" id="bk-done-sub"></p>
           </div>
-          <p class="bk-note" id="bk-pending-note" hidden></p>
           <div class="bk-done-list" id="bk-done-list"></div>
           <button type="button" class="bk-btn bk-btn-secondary bk-btn-block bk-ics-all" id="bk-ics-all" data-action="ics-all">Add all to calendar (.ics)</button>
         </section>
@@ -422,27 +449,16 @@
 
       <footer class="bk-foot">
         <div class="bk-foot-panel" id="bk-foot-student">
-          <div class="bk-row">
-            <button type="button" class="bk-btn bk-btn-primary bk-btn-block" data-action="student-next">Next</button>
-          </div>
-          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+          <button type="button" class="bk-btn bk-btn-primary bk-btn-block" data-action="student-next">Next</button>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-dates" hidden>
-          <div class="bk-row">
-            <button type="button" class="bk-btn bk-btn-secondary" data-action="back">Back</button>
-            <button type="button" class="bk-btn bk-btn-primary" id="bk-dates-next" data-action="dates-next" disabled>Next</button>
-          </div>
-          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+          <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-dates-next" data-action="dates-next" disabled>Next</button>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-confirm" hidden>
           <div class="bk-subtotal"><span>Subtotal</span><strong id="bk-subtotal">0 kr</strong></div>
-          <div class="bk-row">
-            <button type="button" class="bk-btn bk-btn-secondary" data-action="back">Back</button>
-            <button type="button" class="bk-btn bk-btn-primary" id="bk-confirm-next" data-action="confirm-next">Continue to Payment</button>
-          </div>
-          <p class="bk-mini">Hustle Oslo • <a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> • Vipps #48782</p>
+          <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-confirm-next" data-action="confirm-next">Continue to Payment</button>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-details" hidden>
@@ -459,12 +475,11 @@
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-failed" hidden>
-          <p class="bk-trust"><svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg> Secure payment by <span class="bk-trust-by">Stripe</span> · <span class="bk-brand bk-brand-visa" aria-hidden="true">VISA</span><span class="bk-brand bk-brand-mc" aria-hidden="true"><i></i><i></i></span></p>
-          <div class="bk-row">
-            <button type="button" class="bk-btn bk-btn-secondary" data-action="fail-back">Back</button>
-            <button type="button" class="bk-btn bk-btn-vipps" id="bk-fail-retry" data-action="pay"><span id="bk-fail-retry-text">Try again · Pay 0 kr with Vipps</span></button>
-          </div>
-          <p class="bk-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          <p class="bk-tos" id="bk-fail-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          <button type="button" class="bk-btn bk-btn-primary bk-btn-block bk-btn-pay" id="bk-fail-retry" data-action="pay">
+            <svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg>
+            <span id="bk-fail-retry-text">Pay 0 kr</span>
+          </button>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-done" hidden>

@@ -2,8 +2,9 @@
  * Hustle Oslo — signup
  * Intro (landing) → student → dates → confirm → details → checkout → confirmation.
  * Payments go through startPayment() only when CONFIG.PAYMENTS_ENABLED is true.
- * Until the Cloudflare Worker exists, Pay saves the booking to Apps Script and
- * the confirmation is marked payment pending (Vipps #48782).
+ * Until the Cloudflare Worker exists, Pay saves the booking to Apps Script with
+ * transactionNumber "payment-pending". The confirmation screen only says the
+ * email was sent.
  * Card inputs are visual placeholders for a future Stripe Payment Element.
  * TODO: do not send card numbers anywhere from this file.
  */
@@ -486,10 +487,10 @@
     const names = {
       student: "Are you a student?",
       dates: "Select a date.",
-      confirm: "Confirm selected classes.",
+      confirm: "Confirm selection.",
       details: "Your details.",
       checkout: "Checkout.",
-      failed: "Payment failed.",
+      failed: "Checkout.",
       done: "You’re booked.",
     };
     if (view === "failed" || view === "done") return names[view];
@@ -1013,7 +1014,7 @@
       payBtn.classList.toggle("bk-btn-primary", !orange);
     }
     const retry = $("#bk-fail-retry-text");
-    if (retry) retry.textContent = "Try again · Pay " + amt + " kr with " + METHOD_LABEL[method];
+    if (retry) retry.textContent = "Pay " + amt + " kr";
     const retryBtn = $("#bk-fail-retry");
     if (retryBtn) {
       retryBtn.classList.toggle("bk-btn-vipps", method === "vipps");
@@ -1358,7 +1359,6 @@
     const email = $("#bk-email").value.trim();
     const heading = $("#bk-done-heading");
     const sub = $("#bk-done-sub");
-    const note = $("#bk-pending-note");
     const banner = $("#bk-save-banner");
     const mark = $("#bk-done-mark");
     const ok = !!(result && result.ok);
@@ -1369,20 +1369,9 @@
     if (heading) heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
     if (mark) mark.hidden = !saved;
     if (sub) {
-      const sent = emailed ? " · confirmation sent to " + email : "";
-      if (state.paymentPending) sub.textContent = "Payment pending · " + amt + " kr" + sent;
-      else sub.textContent = "Paid " + amt + " kr" + sent;
-    }
-    if (note) {
-      if (state.paymentPending) {
-        note.hidden = false;
-        note.textContent =
-          "Pay " + amt + " kr with Vipps to Hustle Oslo #" + CONFIG.VIPPS_NUMBER +
-          ". You haven’t been charged online.";
-      } else {
-        note.hidden = true;
-        note.textContent = "";
-      }
+      if (emailed) sub.textContent = "Confirmation sent to " + email;
+      else if (!state.paymentPending) sub.textContent = "Paid " + amt + " kr";
+      else sub.textContent = "";
     }
     if (banner) {
       if (partial) {
