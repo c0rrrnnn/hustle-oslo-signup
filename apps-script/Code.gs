@@ -7,6 +7,7 @@
  * 3. Project Settings → Script properties → add:
  *      SHEET_ID = <your spreadsheet ID from the URL>
  *      NOTIFY_EMAIL = hustleinoslo@gmail.com   (optional; defaults below)
+ *      APPS_SCRIPT_SHARED_SECRET = <same value as the worker secret>
  * 4. Deploy → New deployment → Web app
  *      Execute as: Me
  *      Who has access: Anyone
@@ -23,8 +24,14 @@
  * Payload includes optional experience / howFound, optional phone,
  * and transactionNumber. While online card/Vipps checkout is not live,
  * the site sends transactionNumber "payment-pending" and asks the
- * attendee to Vipps the amount to #48782. Extra fields (referral,
- * paymentMethod, terms acceptance) are appended after the original columns.
+ * attendee to Vipps the amount to #48782. That path does not send
+ * SHARED_SECRET and stays accepted. A request that claims a completed
+ * online payment (paymentStatus "paid", or any paymentProvider / paymentId)
+ * is rejected unless SHARED_SECRET matches the script property. The worker
+ * sends that secret only after a verified webhook and a server-side status
+ * check. Paid rows record payment provider, payment id, and status paid.
+ * Extra fields (referral, paymentMethod, terms acceptance) are appended
+ * after the original columns.
  * Multi-night bookings: the website POSTs one signup object per night
  * (same person + same transactionNumber; per-night amount). The organizer
  * notify stays one email per night. The attendee confirmation is one email
@@ -73,6 +80,9 @@ var HEADERS = [
   "Terms accepted",
   "Terms accepted at",
   "Terms version",
+  "Payment provider",
+  "Payment id",
+  "Payment status",
 ];
 
 function doGet(e) {
@@ -97,6 +107,14 @@ function doPost(e) {
   try {
     var raw = (e && e.postData && e.postData.contents) || "{}";
     var data = JSON.parse(raw);
+    if (claimsPaid_(data) && !secretOk_(data.SHARED_SECRET)) {
+      return json_({ ok: false, error: "Unauthorized" });
+    }
+    if (!claimsPaid_(data)) {
+      data.paymentProvider = "";
+      data.paymentId = "";
+      data.paymentStatus = isPendingSignup_(data) ? "pending" : "";
+    }
     if (data.confirmationOnly === true) {
       return sendAttendeeConfirmationOnly_(data);
     }
@@ -114,6 +132,16 @@ function doPost(e) {
     var tabName = data.sheetTabHint || buildTabName_(data);
     var eventSheet = getOrCreateSheet_(ss, tabName);
     ensureHeaders_(eventSheet);
+
+    if (claimsPaid_(data) && alreadyRecorded_(master, data.paymentId, data.eventId)) {
+      return json_({
+        ok: true,
+        duplicate: true,
+        transactionNumber: data.transactionNumber,
+        tab: tabName,
+        confirmationSent: data.sendAttendeeConfirmation === true,
+      });
+    }
 
     var row = buildRow_(data);
     master.appendRow(row);
@@ -229,11 +257,65 @@ function buildRow_(data) {
     data.termsAccepted ? "yes" : "no",
     data.termsAcceptedAt || "",
     data.termsVersion || "",
+    data.paymentProvider || "",
+    data.paymentId || "",
+    data.paymentStatus || "",
   ];
 }
 
+function claimsPaid_(data) {
+  var status = String(data.paymentStatus || "").toLowerCase();
+  if (status === "paid") return true;
+  if (String(data.paymentProvider || "") !== "") return true;
+  if (String(data.paymentId || "") !== "") return true;
+  return false;
+}
+
+function isPendingSignup_(data) {
+  var txn = String(data.transactionNumber || data.confirmationTransactionNumber || "");
+  return txn === "payment-pending";
+}
+
+function secretOk_(provided) {
+  var expected =
+    PropertiesService.getScriptProperties().getProperty("APPS_SCRIPT_SHARED_SECRET") || "";
+  var got = String(provided || "");
+  if (!expected || !got) return false;
+  var length = Math.max(expected.length, got.length);
+  var diff = expected.length === got.length ? 0 : 1;
+  for (var i = 0; i < length; i++) {
+    var left = i < expected.length ? expected.charCodeAt(i) : 0;
+    var right = i < got.length ? got.charCodeAt(i) : 0;
+    diff |= left ^ right;
+  }
+  return diff === 0;
+}
+
+function alreadyRecorded_(sheet, paymentId, eventId) {
+  if (!paymentId || !eventId) return false;
+  var last = sheet.getLastRow();
+  if (last < 2) return false;
+  var width = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, width).getValues()[0];
+  var payCol = headers.indexOf("Payment id");
+  var eventCol = headers.indexOf("Event ID");
+  if (payCol < 0 || eventCol < 0) return false;
+  var values = sheet.getRange(2, 1, last - 1, width).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][payCol] || "") === String(paymentId) && String(values[i][eventCol] || "") === String(eventId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function pendingPayment_(data) {
-  return String(data.transactionNumber || "") === "payment-pending";
+  if (String(data.paymentStatus || "").toLowerCase() === "paid") return false;
+  return isPendingSignup_(data) || String(data.paymentStatus || "") === "pending";
+}
+
+function paidPayment_(data) {
+  return String(data.paymentStatus || "").toLowerCase() === "paid";
 }
 
 function sendNotifyEmail_(data) {
@@ -264,9 +346,14 @@ function sendNotifyEmail_(data) {
       (data.priceTier || "") +
       ")",
     "Amount: " + (data.amount != null ? data.amount + " NOK" : ""),
-    pendingPayment_(data)
-      ? "Payment: pending — attendee was asked to Vipps Hustle Oslo #48782"
-      : "Vipps transaction #: " + (data.transactionNumber || "—"),
+    paidPayment_(data)
+      ? "Payment: paid via " + (data.paymentProvider || "—") + " · " + (data.paymentId || "—")
+      : pendingPayment_(data)
+        ? "Payment: pending — attendee was asked to Vipps Hustle Oslo #48782"
+        : "Vipps transaction #: " + (data.transactionNumber || "—"),
+    "Payment provider: " + (data.paymentProvider || "—"),
+    "Payment id: " + (data.paymentId || "—"),
+    "Payment status: " + (data.paymentStatus || (pendingPayment_(data) ? "pending" : "—")),
     "Payment method: " + (data.paymentMethod || "—"),
     "Terms: " +
       (data.termsAccepted ? "accepted " + (data.termsVersion || "") : "no") +
@@ -358,7 +445,10 @@ function confirmationBody_(data, nights) {
   }
 
   lines.push("");
-  if (pendingPayment_(data)) {
+  if (paidPayment_(data)) {
+    lines.push("Payment received via " + (plain_(data.paymentProvider) || "card") + ".");
+    lines.push("Payment id: " + (plain_(data.paymentId) || plain_(data.transactionNumber) || "—"));
+  } else if (pendingPayment_(data)) {
     lines.push(
       "Payment is still pending. Please Vipps the total to Hustle Oslo #" +
         (plain_(data.vippsNumber) || "48782") +

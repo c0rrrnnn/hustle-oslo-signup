@@ -2,19 +2,20 @@
  * Hustle Oslo — signup
  * Intro (landing) → student → dates → confirm → details → checkout → confirmation.
  * Payments go through startPayment() only when CONFIG.PAYMENTS_ENABLED is true.
- * Until the Cloudflare Worker exists, Pay saves the booking to Apps Script with
- * transactionNumber "payment-pending". The confirmation screen only says the
- * email was sent.
- * Card inputs are visual placeholders for a future Stripe Payment Element.
- * TODO: do not send card numbers anywhere from this file.
+ * The flag stays false on main: Pay saves the booking to Apps Script with
+ * transactionNumber "payment-pending". Card inputs stay visual placeholders
+ * and are never submitted. When the flag is on, startPayment talks to the
+ * test-mode worker in worker/ (Stripe Payment Element or Vipps). No API keys here.
  */
 (function () {
   "use strict";
 
   const CONFIG = {
     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec",
-    // Flip to true only when the Cloudflare Worker can take a real payment.
+    // Leave false on main. Flip locally only after worker/SETUP.md. Do not commit true.
     PAYMENTS_ENABLED: false,
+    // Deployed test worker origin, no trailing path. Empty while payments are off.
+    PAYMENTS_WORKER_URL: "",
     VIPPS_NUMBER: "48782",
     VIPPS_NAME: "Hustle Oslo",
     TIMEZONE: "Europe/Oslo",
@@ -75,6 +76,21 @@
     checkout: "bk-checkout-heading",
     failed: "bk-failed-heading",
     done: "bk-done-heading",
+  };
+
+  const PAY_FAIL = "Payment didn’t go through. You haven’t been charged. Try again or pick another method.";
+  const PAYMENT_SESSION_KEY = "hustleOsloPayment";
+  const paymentUi = {
+    idempotencyKey: "",
+    fingerprint: "",
+    prepToken: 0,
+    stripe: null,
+    elements: null,
+    element: null,
+    orderId: "",
+    complete: false,
+    js: null,
+    timer: null,
   };
 
   const state = {
@@ -531,6 +547,7 @@
     }
     if (view === "done") renderDone();
     updatePayChrome();
+    schedulePrepare();
     sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
@@ -590,6 +607,7 @@
     ["student", "name", "email", "phone", "referral-other", "pay", "card-number", "card-expiry", "card-cvc", "card-name"].forEach((key) => setErr(key, false));
     announce("");
     clearCardFields();
+    resetPaymentAttempt();
     const help = $("#bk-phone-help");
     const helpBtn = $("#bk-phone-help-btn");
     if (help) help.hidden = true;
@@ -985,16 +1003,55 @@
     syncPayPressed();
     setErr("pay", false);
     updatePayChrome();
+    schedulePrepare();
   }
 
   function placeCardFields() {
     const fields = $("#bk-card-fields");
     const slot = state.view === "failed" ? $("#bk-fail-card-slot") : $("#bk-card-slot");
     if (fields && slot && fields.parentElement !== slot) slot.appendChild(fields);
-    const show = state.paymentMethod === "card" && (state.view === "checkout" || state.view === "failed");
+    const show = !paymentsLive() && state.paymentMethod === "card" && (state.view === "checkout" || state.view === "failed");
     if (!fields) return;
     fields.hidden = !show;
     fields.classList.toggle("is-attached", show && !wideCheckout());
+  }
+
+  function paymentsLive() {
+    return CONFIG.PAYMENTS_ENABLED === true && !!CONFIG.PAYMENTS_WORKER_URL;
+  }
+
+  function isStripeMethod(method) {
+    return method === "card" || method === "apple" || method === "google";
+  }
+
+  function placePaymentHost() {
+    const host = $("#bk-payment-host");
+    if (!host) return;
+    const show = paymentsLive() && isStripeMethod(state.paymentMethod) && (state.view === "checkout" || state.view === "failed");
+    if (!show) {
+      host.hidden = true;
+      return;
+    }
+    const slot = state.view === "failed" ? $("#bk-fail-card-slot") : $("#bk-card-slot");
+    if (slot && host.parentElement !== slot) {
+      slot.appendChild(host);
+      if (paymentUi.element) {
+        try {
+          paymentUi.element.unmount();
+          paymentUi.element.mount("#bk-payment-element");
+        } catch (err) {
+          paymentUi.element = null;
+        }
+      }
+    }
+    host.hidden = false;
+  }
+
+  function setPaymentNote(text) {
+    const note = $("#bk-payment-note");
+    if (!note) return;
+    note.textContent = text || "";
+    note.hidden = !text;
   }
 
   function updatePayChrome() {
@@ -1028,6 +1085,7 @@
     placeDetailsForm();
     placePayActions();
     placeCardFields();
+    placePaymentHost();
   }
 
   function renderCheckout() {
@@ -1106,24 +1164,404 @@
     input.value = digits.length <= 2 ? digits : digits.slice(0, 2) + " / " + digits.slice(2);
   }
 
+  function workerUrl(path) {
+    return String(CONFIG.PAYMENTS_WORKER_URL || "").replace(/\/$/, "") + path;
+  }
+
+  function resetPaymentAttempt() {
+    paymentUi.prepToken += 1;
+    paymentUi.idempotencyKey = "";
+    paymentUi.fingerprint = "";
+    if (paymentUi.timer) {
+      window.clearTimeout(paymentUi.timer);
+      paymentUi.timer = null;
+    }
+    if (paymentUi.element) {
+      try {
+        paymentUi.element.unmount();
+      } catch (err) {
+        /* already unmounted */
+      }
+    }
+    paymentUi.element = null;
+    paymentUi.elements = null;
+    paymentUi.stripe = null;
+    paymentUi.orderId = "";
+    paymentUi.complete = false;
+    setPaymentNote("");
+    try {
+      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
+    } catch (err) {
+      /* private mode */
+    }
+  }
+
+  function idempotencyKeyFor(method) {
+    const provider = method === "vipps" ? "vipps" : "stripe";
+    const nights = state.selections
+      .map((sel) => sel.event.id + "|" + sel.ticket.id + "|" + (sel.priceTier || "standard"))
+      .sort()
+      .join(",");
+    const fingerprint = provider + "|" + nights;
+    if (paymentUi.fingerprint !== fingerprint || !paymentUi.idempotencyKey) {
+      paymentUi.fingerprint = fingerprint;
+      paymentUi.idempotencyKey = crypto.randomUUID();
+      if (paymentUi.element) {
+        try {
+          paymentUi.element.unmount();
+        } catch (err) {
+          /* already unmounted */
+        }
+      }
+      paymentUi.element = null;
+      paymentUi.elements = null;
+      paymentUi.stripe = null;
+      paymentUi.orderId = "";
+      paymentUi.complete = false;
+    }
+    return paymentUi.idempotencyKey;
+  }
+
+  function schedulePrepare() {
+    if (!paymentsLive()) return;
+    if (state.view !== "checkout" && state.view !== "failed") return;
+    if (paymentUi.timer) window.clearTimeout(paymentUi.timer);
+    paymentUi.timer = window.setTimeout(function () {
+      paymentUi.timer = null;
+      prepareStripeElement();
+    }, 250);
+  }
+
+  async function prepareStripeElement() {
+    if (!paymentsLive() || !isStripeMethod(state.paymentMethod)) return;
+    if (state.view !== "checkout" && state.view !== "failed") return;
+    if (!validateDetails(false)) return;
+    const token = ++paymentUi.prepToken;
+    setPaymentNote("Preparing secure payment…");
+    const created = await postCheckout(state.paymentMethod);
+    if (token !== paymentUi.prepToken) return;
+    if (!created.ok || created.status === "paid" || created.status === "reserved") {
+      setPaymentNote("");
+      return;
+    }
+    const mounted = await mountStripe(created);
+    if (token !== paymentUi.prepToken) return;
+    setPaymentNote(mounted.ok ? "" : PAY_FAIL);
+  }
+
+  async function postCheckout(method) {
+    const person = buildPersonFields();
+    const body = {
+      idempotencyKey: idempotencyKeyFor(method),
+      method: method,
+      customer: {
+        fullName: person.fullName,
+        email: person.email,
+        phone: person.phone,
+      },
+      nights: state.selections.map((sel) => ({
+        eventId: sel.event.id,
+        ticketId: sel.ticket.id,
+        priceTier: sel.priceTier,
+      })),
+      experience: person.experience,
+      experienceLabel: person.experienceLabel,
+      referral: person.referral,
+      referralLabel: person.referralLabel,
+      referralOther: person.referralOther,
+      howFound: person.howFound,
+      howFoundLabel: person.howFoundLabel,
+      howFoundOther: person.howFoundOther,
+      isRepeat: person.isRepeat,
+      termsAccepted: true,
+      termsAcceptedAt: state.termsAcceptedAt || new Date().toISOString(),
+      termsVersion: CONFIG.TERMS_VERSION,
+      returnUrl: window.location.origin + window.location.pathname,
+    };
+    try {
+      const res = await fetch(workerUrl("/checkout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        return { ok: false, message: data.message || PAY_FAIL };
+      }
+      return data;
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+  }
+
+  function loadStripeJs() {
+    if (window.Stripe) return Promise.resolve();
+    if (paymentUi.js) return paymentUi.js;
+    paymentUi.js = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/v3/";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("stripe-js"));
+      document.head.appendChild(script);
+    });
+    return paymentUi.js;
+  }
+
+  async function mountStripe(created) {
+    if (!created || !created.clientSecret || String(created.publishableKey || "").indexOf("pk_test_") !== 0) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
+      placePaymentHost();
+      return { ok: true };
+    }
+    try {
+      await loadStripeJs();
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    placePaymentHost();
+    const host = $("#bk-payment-element");
+    if (!host || !window.Stripe) return { ok: false, message: PAY_FAIL };
+    if (paymentUi.element) {
+      try {
+        paymentUi.element.unmount();
+      } catch (err) {
+        /* already unmounted */
+      }
+    }
+    const stripe = window.Stripe(created.publishableKey);
+    const elements = stripe.elements({
+      clientSecret: created.clientSecret,
+      appearance: {
+        theme: "night",
+        variables: {
+          colorPrimary: "#df8026",
+          colorBackground: "#1c1c1f",
+          colorText: "#f4f4f5",
+          borderRadius: "12px",
+          fontFamily: "DM Sans, sans-serif",
+        },
+      },
+    });
+    const method = state.paymentMethod;
+    const element = elements.create("payment", {
+      layout: "tabs",
+      wallets: {
+        applePay: method === "google" ? "never" : "auto",
+        googlePay: method === "apple" ? "never" : "auto",
+      },
+      defaultValues: {
+        billingDetails: {
+          name: $("#bk-name").value.trim(),
+          email: $("#bk-email").value.trim(),
+        },
+      },
+    });
+    element.on("change", (event) => {
+      paymentUi.complete = !!(event && event.complete);
+    });
+    element.mount("#bk-payment-element");
+    paymentUi.stripe = stripe;
+    paymentUi.elements = elements;
+    paymentUi.element = element;
+    paymentUi.orderId = created.orderId;
+    paymentUi.complete = false;
+    return { ok: true };
+  }
+
+  function resultFromOrder(data) {
+    if (data && data.status === "paid") {
+      return {
+        ok: true,
+        transactionNumber: data.paymentId || "",
+        booking: {
+          ok: !!data.appsScriptPosted,
+          confirmationSent: !!data.confirmationSent,
+          paidByWorker: true,
+        },
+      };
+    }
+    if (data && data.status === "reserved") {
+      return {
+        ok: true,
+        transactionNumber: "",
+        booking: { ok: false, pendingConfirmation: true, reserved: true, confirmationSent: false },
+      };
+    }
+    if (data && (data.status === "failed" || data.status === "cancelled")) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    return {
+      ok: true,
+      transactionNumber: "",
+      booking: { ok: false, pendingConfirmation: true, confirmationSent: false },
+    };
+  }
+
+  async function pollOrder(orderId) {
+    const deadline = Date.now() + 20000;
+    let last = null;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(workerUrl("/order/" + encodeURIComponent(orderId)));
+        last = await res.json().catch(() => ({}));
+      } catch (err) {
+        last = last || { status: "pending" };
+      }
+      if (last && (last.status === "paid" || last.status === "failed" || last.status === "reserved" || last.status === "cancelled")) {
+        return last;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    }
+    return last;
+  }
+
+  function savePaymentSession(orderId) {
+    const snapshot = {
+      orderId: orderId,
+      priceTier: state.priceTier,
+      paymentMethod: state.paymentMethod,
+      termsAcceptedAt: state.termsAcceptedAt,
+      customer: {
+        fullName: $("#bk-name") ? $("#bk-name").value.trim() : "",
+        email: $("#bk-email") ? $("#bk-email").value.trim() : "",
+        phone: $("#bk-phone") ? $("#bk-phone").value.trim() : "",
+      },
+      nights: state.selections.map((sel) => ({
+        eventId: sel.event.id,
+        ticketId: sel.ticket.id,
+        priceTier: sel.priceTier,
+      })),
+    };
+    try {
+      sessionStorage.setItem(PAYMENT_SESSION_KEY, JSON.stringify(snapshot));
+    } catch (err) {
+      /* private mode */
+    }
+  }
+
+  function selectionFromIds(eventId, ticketId, priceTier) {
+    const ev = (window.HUSTLE_EVENTS || []).find((item) => item.id === eventId);
+    if (!ev) return null;
+    const tickets = (window.HUSTLE_TICKETS && window.HUSTLE_TICKETS[ev.type]) || [];
+    const ticket = tickets.find((item) => item.id === ticketId);
+    if (!ticket) return null;
+    return { event: ev, ticket: ticket, priceTier: priceTier || "standard" };
+  }
+
+  function restorePaymentSession(orderId) {
+    let snapshot = null;
+    try {
+      snapshot = JSON.parse(sessionStorage.getItem(PAYMENT_SESSION_KEY) || "null");
+    } catch (err) {
+      snapshot = null;
+    }
+    if (!snapshot || snapshot.orderId !== orderId) {
+      state.view = "checkout";
+      return;
+    }
+    state.priceTier = snapshot.priceTier === "student" ? "student" : "standard";
+    state.paymentMethod = METHOD_LABEL[snapshot.paymentMethod] ? snapshot.paymentMethod : "card";
+    state.termsAcceptedAt = snapshot.termsAcceptedAt || "";
+    state.selections = (snapshot.nights || [])
+      .map((night) => selectionFromIds(night.eventId, night.ticketId, night.priceTier))
+      .filter(Boolean);
+    const name = $("#bk-name");
+    const email = $("#bk-email");
+    const phone = $("#bk-phone");
+    if (name) name.value = (snapshot.customer && snapshot.customer.fullName) || "";
+    if (email) email.value = (snapshot.customer && snapshot.customer.email) || "";
+    if (phone) phone.value = (snapshot.customer && snapshot.customer.phone) || "";
+    state.view = state.selections.length ? "checkout" : "student";
+  }
+
+  function stripPaymentQuery() {
+    const url = new URL(window.location.href);
+    ["order", "payment_intent", "payment_intent_client_secret", "redirect_status"].forEach((key) => {
+      url.searchParams.delete(key);
+    });
+    const next = url.pathname + (url.search ? url.search : "") + url.hash;
+    window.history.replaceState({}, "", next);
+  }
+
+  async function resumePayment(orderId) {
+    state.submitting = true;
+    const polled = await pollOrder(orderId);
+    state.submitting = false;
+    stripPaymentQuery();
+    const result = resultFromOrder(polled);
+    if (result.ok) {
+      state.transactionNumber = result.transactionNumber || "";
+      state.paymentPending = false;
+      showConfirmation(result.booking);
+      return;
+    }
+    showPaymentFailed(result.message);
+  }
+
+  function maybeResumePayment() {
+    if (!paymentsLive()) return;
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("order");
+    if (!orderId) return;
+    restorePaymentSession(orderId);
+    openSheet();
+    if (params.get("redirect_status") === "failed") {
+      stripPaymentQuery();
+      showPaymentFailed(PAY_FAIL);
+      return;
+    }
+    resumePayment(orderId);
+  }
+
   /**
-   * Single payment entry point for the future Cloudflare Worker.
+   * The only function that charges a card or starts Vipps.
    * Called only when CONFIG.PAYMENTS_ENABLED is true.
-   * TODO: POST `order` to the worker. Do not put Stripe or Vipps API keys here.
-   * Card data stays in the Stripe Payment Element (the inputs on this page are placeholders).
-   * Resolve with { ok: true, transactionNumber } or { ok: false, message }.
+   * Card data stays in the Stripe Payment Element. This file has no API keys.
+   * Resolve with { ok: true, transactionNumber, booking } or { ok: false, message }.
    */
   async function startPayment(method, order) {
     if (!CONFIG.PAYMENTS_ENABLED) {
       return { ok: false, reason: "payments-disabled" };
     }
-    void method;
+    if (!CONFIG.PAYMENTS_WORKER_URL) {
+      return { ok: false, reason: "not-configured", message: PAY_FAIL };
+    }
     void order;
-    return {
-      ok: false,
-      reason: "not-configured",
-      message: "Payment didn’t go through. You haven’t been charged. Try again or pick another method.",
-    };
+    const created = await postCheckout(method);
+    if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
+    if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
+    if (created.status === "paid" || created.status === "reserved") return resultFromOrder(created);
+    if (method === "vipps") {
+      if (!created.redirectUrl) return { ok: false, message: PAY_FAIL };
+      savePaymentSession(created.orderId);
+      window.location.assign(created.redirectUrl);
+      return { ok: true, redirecting: true };
+    }
+    const mounted = await mountStripe(created);
+    if (!mounted.ok) return { ok: false, message: mounted.message || PAY_FAIL };
+    if (!paymentUi.complete) {
+      return {
+        ok: false,
+        reason: "needs-details",
+        message: "Enter your payment details, then press Pay again.",
+      };
+    }
+    savePaymentSession(created.orderId);
+    const confirmed = await paymentUi.stripe.confirmPayment({
+      elements: paymentUi.elements,
+      confirmParams: {
+        return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(created.orderId),
+      },
+      redirect: "if_required",
+    });
+    if (confirmed.error) {
+      return { ok: false, message: confirmed.error.message || PAY_FAIL };
+    }
+    const polled = await pollOrder(created.orderId);
+    return resultFromOrder(polled);
   }
 
   function buildOrder() {
@@ -1149,6 +1587,7 @@
   }
 
   function showPaymentFailed(message) {
+    resetPaymentAttempt();
     const el = $("#bk-fail-message");
     if (el) {
       el.textContent = message || "Your card was declined. You haven’t been charged. Try again or pick another method.";
@@ -1366,10 +1805,15 @@
     const partial = !!(result && result.partial);
     const saved = ok || mocked || partial;
     const emailed = !!(result && result.confirmationSent);
-    if (heading) heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
+    const pendingConfirmation = !!(result && result.pendingConfirmation);
+    if (heading) {
+      if (pendingConfirmation) heading.textContent = "We’re confirming your payment";
+      else heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
+    }
     if (mark) mark.hidden = !saved;
     if (sub) {
       if (emailed) sub.textContent = "Confirmation sent to " + email;
+      else if (pendingConfirmation) sub.textContent = "We’re confirming your payment.";
       else if (!state.paymentPending) sub.textContent = "Paid " + amt + " kr";
       else sub.textContent = "";
     }
@@ -1379,7 +1823,13 @@
         banner.innerHTML = "<b>Some nights may not have saved.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
       } else if (!saved) {
         banner.hidden = false;
-        banner.innerHTML = "<b>We couldn’t save your signup online.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
+        if (!state.paymentPending && pendingConfirmation) {
+          banner.innerHTML = "<b>Your payment is still confirming.</b> If money left your account, don’t pay again. Email hustleinoslo@gmail.com and include a screenshot of this page.";
+        } else if (!state.paymentPending) {
+          banner.innerHTML = "<b>Your payment went through, but we couldn’t save the signup.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
+        } else {
+          banner.innerHTML = "<b>We couldn’t save your signup online.</b> Screenshot this page and email hustleinoslo@gmail.com so we can confirm you.";
+        }
       } else if (mocked) {
         banner.hidden = false;
         banner.innerHTML = "<b>Saved in this browser only.</b> The signup sheet isn’t connected yet.";
@@ -1451,30 +1901,49 @@
       return;
     }
     setErr("pay", false);
-    if (state.paymentMethod === "card" && (CONFIG.PAYMENTS_ENABLED || cardTouched())) {
+    if (!paymentsLive() && state.paymentMethod === "card" && (CONFIG.PAYMENTS_ENABLED || cardTouched())) {
       if (!validateCard(true)) {
         const first = $("#bk-card-fields [aria-invalid='true']");
         if (first) first.focus();
         return;
       }
     }
-    const order = buildOrder();
     state.termsAcceptedAt = new Date().toISOString();
+    const order = buildOrder();
     if (CONFIG.PAYMENTS_ENABLED) {
-      let result;
+      state.submitting = true;
+      const pay = $("#bk-pay");
+      const retry = $("#bk-fail-retry");
+      if (pay) pay.disabled = true;
+      if (retry) retry.disabled = true;
+      const payText = $("#bk-pay-text");
+      if (payText) payText.textContent = "Paying…";
+      $("#book-sheet").setAttribute("aria-busy", "true");
       try {
-        result = await startPayment(state.paymentMethod, order);
+        const result = await startPayment(state.paymentMethod, order);
+        if (result && result.redirecting) return;
+        if (result && result.reason === "needs-details") {
+          announce(result.message || "Enter your payment details, then press Pay again.");
+          return;
+        }
+        if (!result || result.ok !== true) {
+          showPaymentFailed(result && result.message);
+          return;
+        }
+        state.transactionNumber = result.transactionNumber || "";
+        state.paymentPending = false;
+        showConfirmation(result.booking || { ok: true, confirmationSent: false, paidByWorker: true });
       } catch (err) {
         console.error(err);
-        showPaymentFailed("Payment didn’t go through. You haven’t been charged. Try again or pick another method.");
-        return;
+        showPaymentFailed(PAY_FAIL);
+      } finally {
+        state.submitting = false;
+        if (pay) pay.disabled = false;
+        if (retry) retry.disabled = false;
+        $("#book-sheet").setAttribute("aria-busy", "false");
+        updatePayChrome();
       }
-      if (!result || result.ok !== true) {
-        showPaymentFailed(result && result.message);
-        return;
-      }
-      state.transactionNumber = result.transactionNumber || "";
-      state.paymentPending = false;
+      return;
     } else {
       state.transactionNumber = "payment-pending";
       state.paymentPending = true;
@@ -1611,6 +2080,7 @@
     const t = e.target;
     if (t.id === "bk-name" || t.id === "bk-email" || t.id === "bk-phone" || t.id === "bk-referral-other") {
       validateDetails(false);
+      schedulePrepare();
     }
     if (t.id === "bk-card-number") formatCardNumber(t);
     if (t.id === "bk-card-expiry") formatExpiry(t);
@@ -1633,6 +2103,7 @@
     initCalendarMonth();
     syncFirstTimer();
     placeCardFields();
+    maybeResumePayment();
     const start = $("#btn-start");
     if (start) start.addEventListener("click", openSheet);
     const sheet = $("#book-sheet");

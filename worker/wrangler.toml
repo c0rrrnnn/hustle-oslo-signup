@@ -1,0 +1,22 @@
+# Hustle Oslo payments — TEST MODE ONLY.
+# Do not put API keys in this file. Set them with `wrangler secret put`.
+# See SETUP.md before the first deploy.
+name = "hustle-oslo-payments"
+account_id = "5564680c05464d959eaafd052eb97998"
+main = "src/index.ts"
+compatibility_date = "2026-10-15"
+workers_dev = true
+
+[vars]
+# immediate: after a verified Vipps authorization, capture the full amount.
+# reserve: leave the payment authorized until POST /order/:id/capture.
+CAPTURE_MODE = "immediate"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec"
+PUBLIC_SITE_URL = "https://hustleoslo.com"
+ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com,https://c0rrrnnn.github.io,http://localhost:8765,http://127.0.0.1:8765"
+
+# Create with: npx wrangler kv namespace create ORDERS
+# Paste the printed id here before deploy. This placeholder is not a real namespace.
+[[kv_namespaces]]
+binding = "ORDERS"
+id = "00000000000000000000000000000000"

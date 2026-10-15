@@ -421,7 +421,7 @@
       </div>
 
       <div id="bk-card-fields" class="bk-card-fields" hidden>
-        <!-- TODO: Replace these visual placeholders with the Stripe Payment Element when the Cloudflare Worker is live. Card values are never sent to Apps Script or stored. -->
+        <!-- Placeholders while PAYMENTS_ENABLED is false. Card values are never sent to Apps Script or stored. The Stripe Payment Element mounts in #bk-payment-element only when payments are on. -->
         <p id="bk-card-note" class="visually-hidden">Card fields are a preview for card payment. This form does not store or send your card number.</p>
         <div class="bk-card-grid" role="group" aria-describedby="bk-card-note">
           <div class="bk-field bk-field-wide">
@@ -445,6 +445,11 @@
             <p class="bk-err" id="bk-err-card-name" hidden>Enter the name on the card.</p>
           </div>
         </div>
+      </div>
+
+      <div id="bk-payment-host" class="bk-payment-host" hidden>
+        <p id="bk-payment-note" class="bk-pay-note" hidden></p>
+        <div id="bk-payment-element"></div>
       </div>
 
       <footer class="bk-foot">
