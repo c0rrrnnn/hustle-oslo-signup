@@ -66,7 +66,7 @@
   const WEEKDAYS_NARROW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
   const VIEWS = ["student", "dates", "confirm", "details", "checkout", "failed", "done"];
-  const PROGRESS = { student: 1, dates: 2, confirm: 2, details: 3, checkout: 4, failed: 4, done: 4 };
+  const PROGRESS = { student: 1, dates: 2, confirm: 3, details: 3, checkout: 4, failed: 4, done: 4 };
   const HEADINGS = {
     student: "bk-student-heading",
     dates: "bk-dates-heading",
