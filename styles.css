@@ -2692,6 +2692,11 @@ body.bk-open {
   margin: 16px 0 8px;
 }
 
+#bk-confirm-list {
+  display: grid;
+  gap: 12px;
+}
+
 .bk-item {
   position: relative;
   background: #1c1c1f;
@@ -2699,6 +2704,7 @@ body.bk-open {
   border-radius: 16px;
   padding: 14px 72px 16px 14px;
   min-height: 92px;
+  margin: 0;
 }
 
 .bk-item-name {
