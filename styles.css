@@ -2212,7 +2212,9 @@ body.bk-open {
 .bk-err[hidden],
 #bk-first-timer[hidden],
 #bk-desk-details[hidden],
-#bk-inline-pay[hidden] {
+#bk-inline-pay[hidden],
+#bk-payment-host[hidden],
+#bk-payment-note[hidden] {
   display: none !important;
 }
 
@@ -3147,6 +3149,16 @@ body.bk-open {
 .bk-seg-btn.is-on .bk-it-cd {
   background: #e4e4e7;
   color: #121214;
+}
+
+.bk-payment-host {
+  margin-top: 12px;
+}
+
+.bk-pay-note {
+  margin: 0 0 8px;
+  color: #a1a1aa;
+  font-size: 0.9rem;
 }
 
 .bk-card-fields.is-attached {

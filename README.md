@@ -1,7 +1,7 @@
 # Hustle Oslo — class & social signup
 
 Vanilla static signup page for Hustle Oslo classes and social nights at Sentralen.
-The booking sheet follows Claire’s approved screens. Online card, Apple Pay, Google Pay, and Vipps checkout call `startPayment()` only when `CONFIG.PAYMENTS_ENABLED` is true. Until the Cloudflare Worker exists, that flag stays `false`: Pay still saves the booking to Apps Script and the confirmation is marked **payment pending** (pay with Vipps to **Hustle Oslo #48782**).
+The booking sheet follows Claire’s approved screens. Online card, Apple Pay, Google Pay, and Vipps checkout call `startPayment()` only when `CONFIG.PAYMENTS_ENABLED` is true. That flag stays `false` on main: Pay still saves the booking to Apps Script and the confirmation is marked **payment pending** (pay with Vipps to **Hustle Oslo #48782**). The test-mode Cloudflare Worker lives in `worker/`. Setup, keys, and the Monday pilot are in `worker/SETUP.md`. Do not put API keys in this repo.
 
 English only · mobile-first · WCAG 2.2 AA aimed.
 
@@ -26,8 +26,9 @@ A preview server may already be running on port **8765** on the shared box.
 | `assets/hero.mp4` | Intro hero loop (muted, no audio). 676 KB, 768×576, H.264, faststart. Compressed from the 1.9 MB 1024×768 source. |
 | `assets/hero-poster.jpg` | First-frame still (41 KB) for reduced motion and before playback. |
 | `events.js` | Upcoming nights + ticket catalogue (edit here for new dates) |
-| `app.js` | Booking sheet, validation, Apps Script submit, `startPayment()` seam |
+| `app.js` | Booking sheet, validation, Apps Script submit, `startPayment()` |
 | `apps-script/Code.gs` | Google Apps Script: Sheet tabs, organizer notify, one attendee confirmation per booking |
+| `worker/` | Test-mode Cloudflare Worker for Stripe and Vipps. Not deployed from this repo by itself. |
 | `README.md` | This file |
 
 ## Product rules (do not invent extras)
@@ -41,8 +42,8 @@ A preview server may already be running on port **8765** on the shared box.
 - First-timers: experience and “how did you find us?” are optional, and hidden when “I’ve danced with Hustle Oslo before” is checked. “Other” reveals a short text field.
 - Optional phone, with a ? disclosure about the WhatsApp group.
 - Checkout has no terms checkbox. Paying accepts the Terms of Sale and refund policy (`/termsofsale`, version `v1.0`).
-- While `PAYMENTS_ENABLED` is false, Pay does not charge a card. It posts the booking with `transactionNumber: "payment-pending"` and shows a Vipps **#48782** note. Card fields are placeholders and are never submitted.
-- `startPayment(method, order)` is the only function that should talk to the future payment worker. Do not put API keys in the repo.
+- While `PAYMENTS_ENABLED` is false, Pay does not charge a card. It posts the booking with `transactionNumber: "payment-pending"` and does not call the worker. Card fields are placeholders and are never submitted.
+- `startPayment(method, order)` is the only function that talks to the payment worker, and only when `PAYMENTS_ENABLED` is true and `PAYMENTS_WORKER_URL` is set. The worker prices the order. The browser never sends a price it expects to be charged. Do not put API keys in the repo.
 
 ## Config
 
@@ -52,12 +53,15 @@ In `app.js`:
 const CONFIG = {
   APPS_SCRIPT_URL: "https://script.google.com/macros/s/…/exec",
   PAYMENTS_ENABLED: false,
+  PAYMENTS_WORKER_URL: "",
   VIPPS_NUMBER: "48782",
   TERMS_VERSION: "v1.0",
 };
 ```
 
-`PAYMENTS_ENABLED` stays `false` until the Cloudflare Worker exists. Pay then posts the same per-night JSON as before (`text/plain`, so Apps Script does not CORS-preflight), including the original fields plus `experience`, `referral`, `referralOther`, `paymentMethod`, `termsAccepted`, `termsAcceptedAt`, and `termsVersion`. `transactionNumber` is `payment-pending` so the currently deployed script, which still requires that field, will accept the row. `howFound` / `howFoundOther` stay filled from the referral answers.
+`PAYMENTS_ENABLED` stays `false` on main. Pay posts the same per-night JSON as before (`text/plain`, so Apps Script does not CORS-preflight), including the original fields plus `experience`, `referral`, `referralOther`, `paymentMethod`, `termsAccepted`, `termsAcceptedAt`, and `termsVersion`. `transactionNumber` is `payment-pending` so the script accepts the row without `SHARED_SECRET`. `howFound` / `howFoundOther` stay filled from the referral answers.
+
+When the flag is later turned on, the worker — not the browser — writes the paid rows. Those requests include `SHARED_SECRET`, `paymentProvider`, `paymentId`, and `paymentStatus: "paid"`. The script rejects a paid claim that does not have the matching script property. See `worker/SETUP.md`.
 
 Multi-night bookings POST one object per night. The last successful night sets `sendAttendeeConfirmation` and includes `confirmationNights`. Re-deploy Apps Script (**Deploy → Manage deployments → New version**) before the new columns and the “payment pending” email wording are stored. Until then, extra JSON fields are ignored and the email may show the literal transaction value `payment-pending`.
 
@@ -105,6 +109,7 @@ No build step. No npm. Edit `events.js` when dates change and push.
 2. Add:
    - `SHEET_ID` = the spreadsheet ID from step A  
    - `NOTIFY_EMAIL` = `hustleinoslo@gmail.com` (optional; Code.gs defaults to this)
+   - `APPS_SCRIPT_SHARED_SECRET` = the same random value set on the worker (see `worker/SETUP.md`). Public payment-pending signups do not send it. Paid posts from the worker are rejected without it.
 
 ### D. Deploy as Web App
 
@@ -143,9 +148,10 @@ Update `events.js` only. Keep `weekday` correct (2026 class/social dates in the 
 ```bash
 node --check app.js
 node --check events.js
+cd worker && npm test
 ```
 
-Manual: Register → student Yes/No → pick a dotted date and a class → confirm → details → checkout → Pay. With `PAYMENTS_ENABLED` false, confirmation says payment pending and shows Vipps **#48782**. Card numbers are not in the Apps Script payload.
+Manual: Register → student Yes/No → pick a dotted date and a class → confirm → details → checkout → Pay. With `PAYMENTS_ENABLED` false, Pay does not call the worker. The booking is stored as `payment-pending`, and the confirmation subtitle is “Confirmation sent to {email}” when Apps Script sends the mail. Card numbers are not in the Apps Script payload. Do not point a test at the live Apps Script URL unless you mean to add a row.
 
 ## Brand
 
