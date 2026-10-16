@@ -19,4 +19,4 @@ ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com,https://c0r
 # Paste the printed id here before deploy. This placeholder is not a real namespace.
 [[kv_namespaces]]
 binding = "ORDERS"
-id = "00000000000000000000000000000000"
+id = "c37317e82269475b9656c67a0f23a0b8"
