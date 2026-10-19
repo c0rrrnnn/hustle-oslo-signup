@@ -476,7 +476,7 @@
   }
 
   function setInert(on) {
-    ["#main", ".site-footer", ".skip-link"].forEach((sel) => {
+    ["#main", ".landing-nav", ".site-footer", ".skip-link"].forEach((sel) => {
       const el = $(sel);
       if (el) el.inert = on;
     });
