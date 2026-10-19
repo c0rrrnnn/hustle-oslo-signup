@@ -273,6 +273,18 @@
     return window.matchMedia("(min-width: 601px)").matches;
   }
 
+  function drawerMode() {
+    return window.matchMedia("(min-width: 960px)").matches;
+  }
+
+  function bookingScroller(sheet) {
+    if (drawerMode()) {
+      const frame = sheet.querySelector(".bk-frame");
+      if (frame) return frame;
+    }
+    return sheet;
+  }
+
   function wideCheckout() {
     return state.view === "checkout" && isDesktop();
   }
@@ -531,7 +543,7 @@
     }
     if (view === "done") renderDone();
     updatePayChrome();
-    sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
+    bookingScroller(sheet).scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
       if (heading) heading.focus({ preventScroll: true });
