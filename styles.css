@@ -364,6 +364,7 @@ body.is-landing .site-footer {
   margin-top: 0.35rem;
   background: #161618;
   color: #b4b4bc;
+  padding-bottom: calc(1.25rem + var(--sticky-pad) + env(safe-area-inset-bottom, 0px));
 }
 
 body.is-landing .site-footer a {
@@ -374,15 +375,61 @@ body.is-landing .site-footer a:hover {
   color: #ffffff;
 }
 
-.landing-panel {
-  margin-bottom: 0.25rem;
+.landing-nav {
+  padding: 0.7rem 1.25rem 0.45rem;
+  background: #121214;
 }
 
-.landing-logo {
+.landing-nav-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.landing-nav-logo {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.landing-nav-logo img {
   display: block;
-  width: min(52%, 11.75rem);
-  height: auto;
-  margin: 0.15rem auto 0.95rem;
+  height: 4.5rem;
+  width: auto;
+}
+
+.landing-nav-contact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0.45rem 1.05rem;
+  border-radius: var(--radius-pill);
+  background: #2a2a2e;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.landing-nav-contact:hover {
+  background: #35353a;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.landing-panel {
+  margin-bottom: 0.25rem;
 }
 
 .landing-kicker {
@@ -432,8 +479,10 @@ body.is-landing .site-footer a:hover {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.875rem;
-  line-height: 1.4;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.55;
   background: transparent;
 }
 
@@ -464,7 +513,8 @@ body.is-landing .site-footer a:hover {
 
 .price-table thead th:nth-child(2),
 .price-table thead th:nth-child(3) {
-  width: 5.6rem;
+  width: 6.6rem;
+  white-space: nowrap;
 }
 
 .price-table thead th:first-child {
@@ -476,11 +526,13 @@ body.is-landing .site-footer a:hover {
 }
 
 .price-table tbody th {
-  font-weight: 500;
-  color: #f4f4f5;
+  font-weight: 600;
+  color: #ffffff;
 }
 
 .price-table td {
+  font-weight: 500;
+  color: #e4e4ea;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -505,7 +557,7 @@ body.is-landing .site-footer a:hover {
 
   .price-table thead th:nth-child(2),
   .price-table thead th:nth-child(3) {
-    width: 5.25rem;
+    width: 5.85rem;
   }
 }
 
@@ -686,9 +738,23 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-actions {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(480px, 100%);
   display: grid;
   gap: 0.7rem;
-  margin: 0.35rem 0 0.15rem;
+  margin: 0;
+  padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: #121214;
+  border-top: 1px solid #2a2a2e;
+  box-sizing: border-box;
+}
+
+body.bk-open .landing-actions {
+  visibility: hidden;
 }
 
 .landing-actions .btn {
@@ -723,12 +789,7 @@ body.is-landing .site-footer a:hover {
 
 @media (min-width: 800px) {
   body.is-landing main {
-    padding-top: 2.25rem;
-  }
-
-  .landing-logo {
-    margin-top: 0.25rem;
-    margin-bottom: 1.15rem;
+    padding-top: 0.5rem;
   }
 }
 
