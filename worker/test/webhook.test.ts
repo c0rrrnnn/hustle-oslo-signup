@@ -257,6 +257,69 @@ test("stripe webhook marks paid only after retrieve confirms the catalogue amoun
   assert.ok(recorded.calls.length > before);
 });
 
+async function firePaidStripeWebhook(
+  env: ReturnType<typeof testEnv>,
+  appsScript: (call: { url: string }) => Response | Promise<Response>,
+) {
+  const payload = stripeEvent(1);
+  const now = new Date("2026-10-15T10:05:00.000Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "succeeded",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) return appsScript(call);
+    return jsonResponse({ ok: false }, 500);
+  });
+  const response = await handleRequest(
+    new Request("https://payments.test/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+      body: payload,
+    }),
+    env,
+    { fetch: recorded.fetcher, now: () => now },
+  );
+  return { response, calls: recorded.calls };
+}
+
+async function assertSheetPostRetried(appsScript: (call: { url: string }) => Response | Promise<Response>, error: string) {
+  const { kv, env } = await seedCardOrder();
+  const { response } = await firePaidStripeWebhook(env, appsScript);
+  const body = await response.json();
+  assert.equal(response.ok, false);
+  assert.equal(response.status, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, error);
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.appsScriptPosted, false);
+  assert.equal(order?.appsScriptPostedNights, 0);
+  assert.equal(order?.status, "paid");
+}
+
+test("stripe webhook retries when Apps Script returns non-JSON", async () => {
+  await assertSheetPostRetried(
+    () => new Response("<html>Sign in</html>", { status: 200, headers: { "content-type": "text/html" } }),
+    "invalid-json",
+  );
+});
+
+test("stripe webhook retries when Apps Script returns ok false", async () => {
+  await assertSheetPostRetried(() => jsonResponse({ ok: false, error: "nope" }), "nope");
+});
+
+test("stripe webhook retries when the Apps Script post times out", async () => {
+  await assertSheetPostRetried(() => {
+    throw new Error("timeout");
+  }, "timeout");
+});
+
 function vippsPayment(state: string, captured: number, amount = 22000) {
   return {
     reference: ORDER_ID,

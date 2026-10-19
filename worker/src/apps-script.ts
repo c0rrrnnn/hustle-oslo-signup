@@ -65,6 +65,29 @@ export function appsScriptBodies(order: StoredOrder, secret: string): Record<str
   });
 }
 
+type ScriptReply = {
+  ok?: unknown;
+  error?: unknown;
+  confirmationSent?: unknown;
+  duplicate?: unknown;
+};
+
+/** A sheet write counts only when Apps Script answers 2xx JSON with ok: true. */
+async function readAppsScriptReply(
+  response: Response,
+): Promise<{ success: true; data: ScriptReply } | { success: false; error: string }> {
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return { success: false, error: response.ok ? "invalid-json" : `HTTP ${response.status}` };
+  }
+  const reply = data && typeof data === "object" ? (data as ScriptReply) : null;
+  if (response.ok && reply?.ok === true) return { success: true, data: reply };
+  if (reply && typeof reply.error === "string" && reply.error) return { success: false, error: reply.error };
+  return { success: false, error: response.ok ? "invalid-response" : `HTTP ${response.status}` };
+}
+
 export async function postPaidBooking(
   fetcher: typeof fetch,
   url: string,
@@ -82,18 +105,12 @@ export async function postPaidBooking(
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(bodies[index]),
       });
-      const data = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        confirmationSent?: boolean;
-        duplicate?: boolean;
-      };
-      if (!response.ok || data.ok === false) {
-        order.appsScriptPostedNights = index;
-        return { ok: false, confirmationSent: false, error: data.error || `HTTP ${response.status}` };
+      const parsed = await readAppsScriptReply(response);
+      if (!parsed.success) {
+        return { ok: false, confirmationSent: false, error: parsed.error };
       }
       order.appsScriptPostedNights = index + 1;
-      if (data.confirmationSent === true || data.duplicate === true) confirmationSent = true;
+      if (parsed.data.confirmationSent === true || parsed.data.duplicate === true) confirmationSent = true;
     }
     const lastIndex = bodies.length - 1;
     const lastWasPosted = order.appsScriptPostedNights > lastIndex;
@@ -118,11 +135,11 @@ export async function postPaidBooking(
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(followUp),
       });
-      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; confirmationSent?: boolean; error?: string };
-      if (!response.ok || data.ok === false) {
-        return { ok: false, confirmationSent: false, error: data.error || "confirmation" };
+      const parsed = await readAppsScriptReply(response);
+      if (!parsed.success) {
+        return { ok: false, confirmationSent: false, error: parsed.error };
       }
-      confirmationSent = data.confirmationSent === true;
+      confirmationSent = parsed.data.confirmationSent === true;
     }
     return { ok: true, confirmationSent };
   } catch (error) {
