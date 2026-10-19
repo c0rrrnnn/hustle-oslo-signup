@@ -1,6 +1,7 @@
-import { appsScriptBodies, postPaidBooking } from "./apps-script.ts";
+import { appsScriptBodies } from "./apps-script.ts";
 import { timingSafeEqual } from "./crypto.ts";
 import { markOrderPaid, newOrder, putOrder, saveStatus, getOrder } from "./orders.ts";
+import { deliverPaidBooking } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
 import { assertStripeTestKey, createPaymentIntent, decideStripe, retrievePaymentIntent, verifyStripeSignature } from "./stripe.ts";
 import type { CaptureMode, CheckoutInput, Deps, Env, PayMethod, SignupMeta, StoredOrder } from "./types.ts";
@@ -284,9 +285,38 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   return checkoutResponse(current, env, cors, false);
 }
 
-async function postBooking(env: Env, deps: Deps, order: StoredOrder) {
-  const fetcher = deps.fetch || fetch;
-  return postPaidBooking(fetcher, env.APPS_SCRIPT_URL, order, env.APPS_SCRIPT_SHARED_SECRET);
+function scheduleSheetPost(env: Env, deps: Deps, orderId: string): void {
+  const task = deliverPaidBooking(env, deps, orderId).catch((error: unknown) => {
+    console.info(
+      JSON.stringify({
+        msg: "sheet-post-failed",
+        orderId,
+        error: error instanceof Error ? error.message : "error",
+      }),
+    );
+  });
+  if (deps.waitUntil) deps.waitUntil(task);
+  else void task;
+}
+
+async function acceptPaid(
+  env: Env,
+  deps: Deps,
+  order: StoredOrder,
+  paymentId: string,
+  providerStatus: string,
+  now: Date,
+): Promise<StoredOrder> {
+  const updated = await markOrderPaid(
+    env.ORDERS,
+    order,
+    paymentId,
+    providerStatus,
+    { webhookVerified: true, serverConfirmed: true },
+    now.toISOString(),
+  );
+  if (!updated.appsScriptPosted) scheduleSheetPost(env, deps, updated.orderId);
+  return updated;
 }
 
 async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Headers): Promise<Response> {
@@ -328,16 +358,7 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
   }
   const decision = decideStripe(intent, order);
   if (decision.action === "paid") {
-    const updated = await markOrderPaid(
-      env.ORDERS,
-      order,
-      decision.paymentId,
-      "succeeded",
-      { webhookVerified: true, serverConfirmed: true },
-      now.toISOString(),
-      (current) => postBooking(env, deps, current),
-    );
-    if (!updated.appsScriptPosted) return json(500, { ok: false, error: updated.failureReason || "apps-script" }, cors);
+    await acceptPaid(env, deps, order, decision.paymentId, "succeeded", now);
     return json(200, { ok: true, status: "paid" }, cors);
   }
   if (decision.action === "failed") {
@@ -361,18 +382,7 @@ async function settleVipps(
     return { order: updated, response: json(200, { ok: true, status: "failed", reason: view.reason }, cors) };
   }
   if (view.kind === "captured") {
-    const updated = await markOrderPaid(
-      env.ORDERS,
-      order,
-      view.paymentId || order.orderId,
-      "captured",
-      { webhookVerified: true, serverConfirmed: true },
-      now.toISOString(),
-      (current) => postBooking(env, deps, current),
-    );
-    if (!updated.appsScriptPosted) {
-      return { order: updated, response: json(500, { ok: false, error: updated.failureReason || "apps-script" }, cors) };
-    }
+    const updated = await acceptPaid(env, deps, order, view.paymentId || order.orderId, "captured", now);
     return { order: updated, response: json(200, { ok: true, status: "paid" }, cors) };
   }
   if (view.kind === "authorized") {
@@ -394,18 +404,7 @@ async function settleVipps(
     if (captured.kind !== "captured") {
       return { order, response: json(500, { ok: false, error: "capture-unconfirmed" }, cors) };
     }
-    const updated = await markOrderPaid(
-      env.ORDERS,
-      order,
-      captured.paymentId || order.orderId,
-      "captured",
-      { webhookVerified: true, serverConfirmed: true },
-      now.toISOString(),
-      (current) => postBooking(env, deps, current),
-    );
-    if (!updated.appsScriptPosted) {
-      return { order: updated, response: json(500, { ok: false, error: updated.failureReason || "apps-script" }, cors) };
-    }
+    const updated = await acceptPaid(env, deps, order, captured.paymentId || order.orderId, "captured", now);
     return { order: updated, response: json(200, { ok: true, status: "paid" }, cors) };
   }
   return { order, response: json(200, { ok: true, status: "pending", reason: view.reason }, cors) };
@@ -453,7 +452,10 @@ async function onCapture(request: Request, env: Env, orderId: string, deps: Deps
   const order = await getOrder(env.ORDERS, orderId);
   if (!order) return json(404, { ok: false, error: "not-found" }, cors);
   if (order.provider !== "vipps") return json(400, { ok: false, error: "not-vipps" }, cors);
-  if (order.status === "paid" && order.appsScriptPosted) return json(200, publicOrder(order), cors);
+  if (order.status === "paid") {
+    if (!order.appsScriptPosted) scheduleSheetPost(env, deps, order.orderId);
+    return json(200, publicOrder(order), cors);
+  }
   const now = (deps.now || (() => new Date()))();
   const fetcher = deps.fetch || fetch;
   const before = await getVippsPayment(fetcher, vippsCreds(env), order.orderId, now.getTime());

@@ -1373,11 +1373,18 @@
 
   function resultFromOrder(data) {
     if (data && data.status === "paid") {
+      if (!data.appsScriptPosted) {
+        return {
+          ok: true,
+          transactionNumber: data.paymentId || "",
+          booking: { ok: false, pendingConfirmation: true, confirmationSent: false, paidByWorker: true },
+        };
+      }
       return {
         ok: true,
         transactionNumber: data.paymentId || "",
         booking: {
-          ok: !!data.appsScriptPosted,
+          ok: true,
           confirmationSent: !!data.confirmationSent,
           paidByWorker: true,
         },
@@ -1410,9 +1417,10 @@
       } catch (err) {
         last = last || { status: "pending" };
       }
-      if (last && (last.status === "paid" || last.status === "failed" || last.status === "reserved" || last.status === "cancelled")) {
+      if (last && (last.status === "failed" || last.status === "reserved" || last.status === "cancelled")) {
         return last;
       }
+      if (last && last.status === "paid" && last.appsScriptPosted) return last;
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
     return last;

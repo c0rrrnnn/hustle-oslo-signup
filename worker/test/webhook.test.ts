@@ -4,9 +4,10 @@ import test from "node:test";
 import { handleRequest } from "../src/handler.ts";
 import { clearVippsTokenCache } from "../src/vipps.ts";
 import { canMarkPaid, getOrder, markOrderPaid, newOrder } from "../src/orders.ts";
+import { retryUnpostedBookings, sheetBackoffMs } from "../src/sheet-sync.ts";
 import { verifyStripeSignature, decideStripe } from "../src/stripe.ts";
 import { interpretVipps } from "../src/vipps.ts";
-import { bundlePrice, checkoutBody, jsonResponse, memoryKv, NOW, ORDER_ID, recordFetch, testEnv } from "./helpers.ts";
+import { backgroundDeps, bundlePrice, checkoutBody, jsonResponse, memoryKv, NOW, ORDER_ID, recordFetch, testEnv } from "./helpers.ts";
 
 function sign(payload: string, secret: string, timestamp: string): string {
   const hex = createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
@@ -61,7 +62,6 @@ test("a booking is paid only when the webhook is verified and the server check a
   );
   order.paymentId = "pi_test_1";
   const kv = memoryKv();
-  let posts = 0;
   const blocked = await markOrderPaid(
     kv,
     order,
@@ -69,13 +69,21 @@ test("a booking is paid only when the webhook is verified and the server check a
     "succeeded",
     { webhookVerified: true, serverConfirmed: false },
     NOW.toISOString(),
-    async () => {
-      posts += 1;
-      return { ok: true, confirmationSent: true };
-    },
   );
   assert.equal(blocked.status, "pending");
-  assert.equal(posts, 0);
+  assert.equal((await kv.list({ prefix: "unposted:" })).keys.length, 0);
+
+  const paid = await markOrderPaid(
+    kv,
+    order,
+    "pi_test_1",
+    "succeeded",
+    { webhookVerified: true, serverConfirmed: true },
+    NOW.toISOString(),
+  );
+  assert.equal(paid.status, "paid");
+  assert.equal(paid.appsScriptPosted, false);
+  assert.equal((await kv.list({ prefix: "unposted:" })).keys[0]?.name, `unposted:${ORDER_ID}`);
 
   assert.deepEqual(
     decideStripe(
@@ -219,7 +227,7 @@ test("stripe webhook marks paid only after retrieve confirms the catalogue amoun
     }
     return jsonResponse({ ok: false }, 500);
   });
-  const deps = { fetch: recorded.fetcher, now: () => now };
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
   const first = await handleRequest(
     new Request("https://payments.test/webhooks/stripe", {
       method: "POST",
@@ -231,6 +239,7 @@ test("stripe webhook marks paid only after retrieve confirms the catalogue amoun
   );
   assert.equal(first.status, 200);
   assert.equal((await first.json()).status, "paid");
+  await deps.flush();
   assert.equal(scriptBodies.length, 1);
   assert.equal(scriptBodies[0].SHARED_SECRET, "shared-secret-value");
   assert.equal(scriptBodies[0].amount, 220);
@@ -253,6 +262,7 @@ test("stripe webhook marks paid only after retrieve confirms the catalogue amoun
     deps,
   );
   assert.equal(second.status, 200);
+  await deps.flush();
   assert.equal(scriptBodies.length, 1);
   assert.ok(recorded.calls.length > before);
 });
@@ -277,6 +287,7 @@ async function firePaidStripeWebhook(
     if (call.url === env.APPS_SCRIPT_URL) return appsScript(call);
     return jsonResponse({ ok: false }, 500);
   });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
   const response = await handleRequest(
     new Request("https://payments.test/webhooks/stripe", {
       method: "POST",
@@ -284,40 +295,170 @@ async function firePaidStripeWebhook(
       body: payload,
     }),
     env,
-    { fetch: recorded.fetcher, now: () => now },
+    deps,
   );
-  return { response, calls: recorded.calls };
+  return { response, calls: recorded.calls, deps, now };
 }
 
 async function assertSheetPostRetried(appsScript: (call: { url: string }) => Response | Promise<Response>, error: string) {
   const { kv, env } = await seedCardOrder();
-  const { response } = await firePaidStripeWebhook(env, appsScript);
+  const { response, deps, now } = await firePaidStripeWebhook(env, appsScript);
   const body = await response.json();
-  assert.equal(response.ok, false);
-  assert.equal(response.status, 500);
-  assert.equal(body.ok, false);
-  assert.equal(body.error, error);
+  assert.equal(response.status, 200);
+  assert.equal(body.status, "paid");
+  await deps.flush();
   const order = await getOrder(kv, ORDER_ID);
   assert.equal(order?.appsScriptPosted, false);
   assert.equal(order?.appsScriptPostedNights, 0);
   assert.equal(order?.status, "paid");
+  assert.equal(order?.failureReason, error);
+  assert.equal(order?.appsScriptAttempts, 1);
+  assert.equal(Date.parse(order?.appsScriptNextAttemptAt || ""), now.getTime() + sheetBackoffMs(1));
+  const listed = await kv.list({ prefix: "unposted:" });
+  assert.equal(listed.keys.some((key) => key.name === `unposted:${ORDER_ID}`), true);
 }
 
-test("stripe webhook retries when Apps Script returns non-JSON", async () => {
+test("stripe webhook acks before a non-JSON Apps Script body and leaves the night unposted", async () => {
   await assertSheetPostRetried(
     () => new Response("<html>Sign in</html>", { status: 200, headers: { "content-type": "text/html" } }),
     "invalid-json",
   );
 });
 
-test("stripe webhook retries when Apps Script returns ok false", async () => {
+test("stripe webhook acks when Apps Script returns ok false and leaves the night unposted", async () => {
   await assertSheetPostRetried(() => jsonResponse({ ok: false, error: "nope" }), "nope");
 });
 
-test("stripe webhook retries when the Apps Script post times out", async () => {
+test("stripe webhook acks when the Apps Script post times out and leaves the night unposted", async () => {
   await assertSheetPostRetried(() => {
     throw new Error("timeout");
   }, "timeout");
+});
+
+test("stripe webhook returns before Apps Script answers, then the background post confirms the row", async () => {
+  const { kv, env } = await seedCardOrder();
+  const payload = stripeEvent(1);
+  const now = new Date("2026-10-15T10:05:00.000Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+  let releaseGate: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    releaseGate = resolve;
+  });
+  let scriptCalls = 0;
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "succeeded",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) {
+      scriptCalls += 1;
+      return gate.then(() => jsonResponse({ ok: true, confirmationSent: true }));
+    }
+    return jsonResponse({ ok: false }, 500);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
+  const response = await Promise.race([
+    handleRequest(
+      new Request("https://payments.test/webhooks/stripe", {
+        method: "POST",
+        headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+        body: payload,
+      }),
+      env,
+      deps,
+    ),
+    new Promise<Response>((_resolve, reject) => {
+      setTimeout(() => reject(new Error("webhook waited on Apps Script")), 1000);
+    }),
+  ]);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "paid");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const pending = await getOrder(kv, ORDER_ID);
+  assert.equal(pending?.status, "paid");
+  assert.equal(pending?.appsScriptPosted, false);
+  assert.equal(scriptCalls, 1);
+  releaseGate();
+  await deps.flush();
+  const posted = await getOrder(kv, ORDER_ID);
+  assert.equal(posted?.appsScriptPosted, true);
+  assert.equal(posted?.confirmationSent, true);
+  assert.equal(posted?.appsScriptPostedNights, 1);
+  assert.equal((await kv.list({ prefix: "unposted:" })).keys.length, 0);
+  assert.equal(scriptCalls, 1);
+});
+
+test("cron retries an unposted paid order after backoff and does not post it twice", async () => {
+  const { kv, env } = await seedCardOrder();
+  const now = new Date("2026-10-15T10:05:00.000Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+  let scriptCalls = 0;
+  let fail = true;
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "succeeded",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) {
+      scriptCalls += 1;
+      if (fail) return jsonResponse({ ok: false, error: "later" });
+      return jsonResponse({ ok: true, confirmationSent: true });
+    }
+    return jsonResponse({ ok: false }, 500);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
+  const payload = stripeEvent(1);
+  const response = await handleRequest(
+    new Request("https://payments.test/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+      body: payload,
+    }),
+    env,
+    deps,
+  );
+  assert.equal(response.status, 200);
+  await deps.flush();
+  assert.equal(scriptCalls, 1);
+  assert.equal((await getOrder(kv, ORDER_ID))?.appsScriptPosted, false);
+
+  const early = await retryUnpostedBookings(env, {
+    fetch: recorded.fetcher,
+    now: () => new Date(now.getTime() + sheetBackoffMs(1) - 1),
+  });
+  assert.equal(early.skipped, 1);
+  assert.equal(early.posted, 0);
+  assert.equal(scriptCalls, 1);
+
+  fail = false;
+  const due = await retryUnpostedBookings(env, {
+    fetch: recorded.fetcher,
+    now: () => new Date(now.getTime() + sheetBackoffMs(1)),
+  });
+  assert.equal(due.posted, 1);
+  assert.equal(scriptCalls, 2);
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.appsScriptPosted, true);
+  assert.equal(order?.appsScriptPostedNights, 1);
+  assert.equal(order?.confirmationSent, true);
+  assert.equal((await kv.list({ prefix: "unposted:" })).keys.length, 0);
+
+  const again = await retryUnpostedBookings(env, {
+    fetch: recorded.fetcher,
+    now: () => new Date(now.getTime() + 6 * 60 * 60 * 1000),
+  });
+  assert.equal(again.checked, 0);
+  assert.equal(scriptCalls, 2);
 });
 
 function vippsPayment(state: string, captured: number, amount = 22000) {
@@ -399,6 +540,7 @@ test("vipps webhook ignores the posted amount and captures from the server payme
     amount: { currency: "NOK", value: 1 },
     success: true,
   };
+  const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
   const response = await handleRequest(
     new Request("https://payments.test/webhooks/vipps", {
       method: "POST",
@@ -406,11 +548,12 @@ test("vipps webhook ignores the posted amount and captures from the server payme
       body: JSON.stringify(webhook),
     }),
     env,
-    { fetch: seeded.recorded.fetcher, now: () => NOW },
+    deps,
   );
   assert.equal(response.status, 200);
   assert.equal((await response.json()).status, "paid");
   assert.equal(seeded.isCaptured(), true);
+  await deps.flush();
   assert.equal(seeded.scriptBodies.length, 1);
   assert.equal(seeded.scriptBodies[0].paymentProvider, "vipps");
   assert.equal(seeded.scriptBodies[0].amount, 220);
@@ -424,22 +567,25 @@ test("vipps webhook ignores the posted amount and captures from the server payme
       body: JSON.stringify(webhook),
     }),
     env,
-    { fetch: seeded.recorded.fetcher, now: () => NOW },
+    deps,
   );
   assert.equal(again.status, 200);
+  await deps.flush();
   assert.equal(seeded.scriptBodies.length, posts);
 });
 
 test("vipps reserve mode does not capture or record until the admin capture call", async () => {
   const { kv, env, seeded } = await seedVipps({ CAPTURE_MODE: "reserve" });
+  const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
   const webhook = { msn: "123456", reference: ORDER_ID, name: "AUTHORIZED", amount: { currency: "NOK", value: 1 } };
   const reserved = await handleRequest(
     new Request("https://payments.test/webhooks/vipps", { method: "POST", body: JSON.stringify(webhook) }),
     env,
-    { fetch: seeded.recorded.fetcher, now: () => NOW },
+    deps,
   );
   assert.equal((await reserved.json()).status, "reserved");
   assert.equal(seeded.isCaptured(), false);
+  await deps.flush();
   assert.equal(seeded.scriptBodies.length, 0);
   assert.equal((await getOrder(kv, ORDER_ID))?.status, "reserved");
 
@@ -449,7 +595,7 @@ test("vipps reserve mode does not capture or record until the admin capture call
       headers: { authorization: "Bearer wrong" },
     }),
     env,
-    { fetch: seeded.recorded.fetcher, now: () => NOW },
+    deps,
   );
   assert.equal(denied.status, 401);
   assert.equal(seeded.isCaptured(), false);
@@ -460,12 +606,13 @@ test("vipps reserve mode does not capture or record until the admin capture call
       headers: { authorization: "Bearer admin-secret-value" },
     }),
     env,
-    { fetch: seeded.recorded.fetcher, now: () => NOW },
+    deps,
   );
   const body = await captured.json();
   assert.equal(captured.status, 200, JSON.stringify(body));
   assert.equal(body.status, "paid");
   assert.equal(seeded.isCaptured(), true);
+  await deps.flush();
   assert.equal(seeded.scriptBodies.length, 1);
   assert.equal(seeded.scriptBodies[0].paymentStatus, "paid");
 });

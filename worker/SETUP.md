@@ -70,6 +70,8 @@ Use **test mode** the whole time. In the Stripe Dashboard the test-mode switch i
 
 The worker verifies the `Stripe-Signature` header, then retrieves the PaymentIntent from Stripe. The amount on the webhook body is not what gets marked paid. The retrieved PaymentIntent must be `succeeded`, in `nok`, and equal to the catalogue total.
 
+The webhook answers as soon as that order is marked paid in KV. It does not wait for the spreadsheet. The Apps Script write starts in the background (`waitUntil`). A write counts only when Apps Script returns HTTP 2xx and `{ "ok": true }`. Anything else leaves `appsScriptPosted` false. A Cron Trigger in `wrangler.toml` runs every 5 minutes and retries those orders. After each failure the next try waits longer: 5 minutes, 15, 30, 60, then 3 hours, then 6 hours. Nights that already posted are not sent again, and Apps Script still ignores a duplicate payment id and event id. Stripe and Vipps do not need to retry just because the sheet was slow.
+
 Test card: `4242 4242 4242 4242`, any future expiry, any CVC, any name. Declined card: `4000 0000 0000 0002`.
 
 ## 3. Vipps test sales unit
@@ -200,7 +202,7 @@ The public site keeps posting `payment-pending` with no secret. That still works
 
 New columns, added on the right when the header row still matches: **Payment provider**, **Payment id**, **Payment status**. A paid row looks like `stripe` / `pi_…` / `paid`, or `vipps` / the Vipps reference / `paid`. A payment-pending row has status `pending` and blank provider and id.
 
-The worker writes one row per night after the payment is confirmed. The browser does not write that booking. A repeated webhook does not add a second row for the same payment id and event id.
+The worker writes one row per night after the payment is confirmed. That write can finish after the webhook has already returned. The browser does not write that booking. A repeated webhook does not add a second row for the same payment id and event id. If the first write fails or is too slow, the 5-minute cron tries again.
 
 ## 8. Try it locally without changing main
 
@@ -241,7 +243,7 @@ Put `CAPTURE_MODE` back to `immediate` and deploy again when you are done. The d
 - [ ] Local preview only: one Stripe payment with `4242 4242 4242 4242` for a future night. The sheet row is `paid`, provider `stripe`, payment id `pi_…`, amount equal to the catalogue (not a number you typed). The attendee email says payment received.
 - [ ] Card `4000 0000 0000 0002` shows the existing Checkout failure screen (“Payment didn’t go through”). No paid row.
 - [ ] One Vipps test-app payment. The browser goes to `apitest.vipps.no` and returns to the site. The row is `paid`, provider `vipps`. Captured amount in the Vipps test portal equals the catalogue total.
-- [ ] Send the same Stripe webhook again from the Stripe dashboard (“Resend”). The sheet does not gain a second row.
+- [ ] Send the same Stripe webhook again from the Stripe dashboard (“Resend”). The sheet does not gain a second row. A slow sheet (the write plus the emails) still gets a fast webhook response; if the row is missing, wait for the 5-minute cron rather than expecting Stripe to time out and retry.
 - [ ] Public https://hustleoslo.com/ still has payments off. View source or `app.js`: `PAYMENTS_ENABLED: false` and `PAYMENTS_WORKER_URL: ""`. A normal signup still stores `payment-pending` and does not call the worker.
 - [ ] `git status` shows no `.dev.vars`, no keys, and no `PAYMENTS_ENABLED: true`.
 

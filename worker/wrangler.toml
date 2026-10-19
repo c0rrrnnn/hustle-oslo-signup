@@ -7,6 +7,10 @@ main = "src/index.ts"
 compatibility_date = "2026-10-15"
 workers_dev = true
 
+# Paid orders whose sheet write is not confirmed yet are retried on this schedule.
+[triggers]
+crons = ["*/5 * * * *"]
+
 [vars]
 # immediate: after a verified Vipps authorization, capture the full amount.
 # reserve: leave the payment authorized until POST /order/:id/capture.

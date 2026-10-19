@@ -4,6 +4,24 @@ export function orderKey(orderId: string): string {
   return `order:${orderId}`;
 }
 
+export function unpostedKey(orderId: string): string {
+  return `unposted:${orderId}`;
+}
+
+export async function listUnpostedOrderIds(kv: OrderKv): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await kv.list({ prefix: "unposted:", cursor });
+    for (const key of page.keys) {
+      if (key.name.startsWith("unposted:")) ids.push(key.name.slice("unposted:".length));
+    }
+    if (page.list_complete || !page.cursor || page.cursor === cursor) break;
+    cursor = page.cursor;
+  } while (cursor);
+  return ids;
+}
+
 export async function getOrder(kv: OrderKv, orderId: string): Promise<StoredOrder | null> {
   const raw = await kv.get(orderKey(orderId));
   if (!raw) return null;
@@ -57,6 +75,10 @@ export function newOrder(input: CheckoutInput, captureMode: StoredOrder["capture
     providerStatus: null,
     appsScriptPosted: false,
     appsScriptPostedNights: 0,
+    appsScriptAttempts: 0,
+    appsScriptNextAttemptAt: null,
+    appsScriptLeaseUntil: null,
+    appsScriptLeaseToken: null,
     confirmationSent: false,
     failureReason: null,
   };
@@ -82,7 +104,8 @@ export async function saveStatus(
 
 /**
  * The only writer that sets status to paid. Both gates must already be true.
- * A second call does not post the booking again once appsScriptPosted is set.
+ * The Apps Script write is separate: a paid order with appsScriptPosted false
+ * stays on the unposted index until that write is confirmed.
  */
 export async function markOrderPaid(
   kv: OrderKv,
@@ -91,25 +114,18 @@ export async function markOrderPaid(
   providerStatus: string,
   gates: { webhookVerified: boolean; serverConfirmed: boolean },
   nowIso: string,
-  post: (order: StoredOrder) => Promise<{ ok: boolean; confirmationSent: boolean; error?: string }>,
 ): Promise<StoredOrder> {
   const current = (await getOrder(kv, order.orderId)) || order;
   if (!canMarkPaid(gates)) return current;
-  if (current.status === "paid" && current.appsScriptPosted) return current;
-  current.status = "paid";
-  current.paymentId = paymentId || current.paymentId;
-  current.providerStatus = providerStatus;
-  current.paidAt = current.paidAt || nowIso;
-  current.failureReason = null;
-  current.updatedAt = nowIso;
-  await putOrder(kv, current);
-  if (!current.appsScriptPosted) {
-    const result = await post(current);
-    current.appsScriptPosted = result.ok;
-    current.confirmationSent = result.confirmationSent;
-    current.failureReason = result.ok ? null : result.error || "apps-script";
+  if (current.status !== "paid") {
+    current.status = "paid";
+    current.paymentId = paymentId || current.paymentId;
+    current.providerStatus = providerStatus;
+    current.paidAt = current.paidAt || nowIso;
+    current.failureReason = null;
     current.updatedAt = nowIso;
     await putOrder(kv, current);
   }
+  if (!current.appsScriptPosted) await kv.put(unpostedKey(current.orderId), current.orderId);
   return current;
 }

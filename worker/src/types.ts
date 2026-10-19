@@ -1,6 +1,12 @@
 export interface OrderKv {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(options: { prefix?: string; cursor?: string }): Promise<{
+    keys: { name: string }[];
+    list_complete: boolean;
+    cursor?: string;
+  }>;
 }
 
 export interface Env {
@@ -23,6 +29,8 @@ export interface Env {
 export interface Deps {
   fetch?: typeof fetch;
   now?: () => Date;
+  /** Keeps work running after the webhook response. Tests collect these promises. */
+  waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 export type PayMethod = "card" | "apple" | "google" | "vipps";
@@ -83,6 +91,10 @@ export interface StoredOrder {
   providerStatus: string | null;
   appsScriptPosted: boolean;
   appsScriptPostedNights: number;
+  appsScriptAttempts: number;
+  appsScriptNextAttemptAt: string | null;
+  appsScriptLeaseUntil: string | null;
+  appsScriptLeaseToken: string | null;
   confirmationSent: boolean;
   failureReason: string | null;
 }

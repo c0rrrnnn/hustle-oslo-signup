@@ -1,5 +1,5 @@
 import { priceOrder } from "../src/pricing.ts";
-import type { Env, OrderKv } from "../src/types.ts";
+import type { Deps, Env, OrderKv } from "../src/types.ts";
 
 export const NOW = new Date("2026-10-15T10:00:00.000Z");
 export const ORDER_ID = "11111111-1111-4111-8111-111111111111";
@@ -12,6 +12,33 @@ export function memoryKv(): OrderKv {
     },
     async put(key: string, value: string) {
       map.set(key, value);
+    },
+    async delete(key: string) {
+      map.delete(key);
+    },
+    async list(options: { prefix?: string; cursor?: string }) {
+      const prefix = options.prefix || "";
+      const keys = [...map.keys()]
+        .filter((name) => name.startsWith(prefix))
+        .sort()
+        .map((name) => ({ name }));
+      return { keys, list_complete: true as const };
+    },
+  };
+}
+
+export function backgroundDeps(base: Deps = {}): Deps & { flush: () => Promise<void> } {
+  const tasks: Promise<unknown>[] = [];
+  return {
+    ...base,
+    waitUntil(promise: Promise<unknown>) {
+      tasks.push(Promise.resolve(promise));
+    },
+    async flush() {
+      while (tasks.length) {
+        const batch = tasks.splice(0, tasks.length);
+        await Promise.all(batch);
+      }
     },
   };
 }
