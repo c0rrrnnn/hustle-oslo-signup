@@ -1,6 +1,6 @@
 import { postPaidBooking } from "./apps-script.ts";
 import { calendarBaseFor } from "./calendar.ts";
-import { getOrder, listUnpostedOrderIds, putOrder, unpostedKey } from "./orders.ts";
+import { getOrder, listUnpostedOrderIds, putOrder, UNPOSTED_TTL_SEC, unpostedKey } from "./orders.ts";
 import type { Deps, Env } from "./types.ts";
 
 /** After a failed sheet write: 5m, 15m, 30m, 1h, 3h, then 6h. */
@@ -91,7 +91,7 @@ export async function deliverPaidBooking(
   latest.failureReason = result.error || "apps-script";
   latest.appsScriptNextAttemptAt = new Date(nowMs + sheetBackoffMs(attempts)).toISOString();
   await putOrder(env.ORDERS, latest);
-  await env.ORDERS.put(unpostedKey(orderId), orderId);
+  await env.ORDERS.put(unpostedKey(orderId), orderId, { expirationTtl: UNPOSTED_TTL_SEC });
   console.info(JSON.stringify({ msg: "sheet-post-failed", orderId, attempts, error: latest.failureReason }));
   return "failed";
 }

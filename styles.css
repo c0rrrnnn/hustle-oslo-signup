@@ -3690,18 +3690,38 @@ a.bk-cal-link:hover {
 }
 
 /* Checkout and the failed-payment step: the terms line and Pay button stay
-   sticky, without the opaque band that covered the payment list. The body
-   pad is the footer's measured height plus the home-indicator inset. The
-   matching negative margin lets that pad be the footer's slot, so the list
-   can scroll clear of Pay without a second empty gap. */
+   on screen, without the opaque band. The sheet itself does not scroll.
+   The body is the scrollport and the bar sits underneath it, so a short
+   phone cannot draw Pay over a payment row. The body pad is the bar's
+   measured height plus the home-indicator inset. */
+.bk-sheet.is-clear-foot {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-sheet.is-clear-foot .bk-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bk-sheet.is-clear-foot .bk-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+}
+
 .bk-sheet.is-clear-foot .bk-foot {
+  position: relative;
+  bottom: auto;
+  flex-shrink: 0;
+  margin-top: 0;
   background: transparent;
   background-image: none;
   border-top: 0;
   box-shadow: none;
-  margin-top: calc(-1 * var(--bk-foot-h, 0px));
-}
-
-.bk-sheet.is-clear-foot .bk-body {
-  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
 }

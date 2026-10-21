@@ -27,7 +27,11 @@ test("the payment footer is measured and the error card keeps a red fill without
   assert.equal(banner[0].includes("#ff8a8a"), false);
   assert.match(banner[0], /color:\s*#a1a1aa/);
   assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-foot \{[^}]*background:\s*transparent;/);
+  assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-foot \{[^}]*margin-top:\s*0;/);
+  assert.match(css, /\.bk-sheet\.is-clear-foot \{[^}]*overflow:\s*hidden;/);
+  assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*overflow:\s*auto;/);
   assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*padding-bottom:\s*calc\(var\(--bk-foot-h, 0px\) \+ env\(safe-area-inset-bottom, 0px\)\);/);
+  assert.equal(/margin-top:\s*calc\(-1\s*\*\s*var\(--bk-foot-h/.test(css), false);
   assert.match(js, /new ResizeObserver/);
   assert.match(js, /--bk-foot-h/);
   assert.equal(js.includes("PAYMENTS_ENABLED: false"), true);

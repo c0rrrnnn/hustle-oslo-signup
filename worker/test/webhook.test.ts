@@ -916,7 +916,7 @@ test("the cron still captures an authorized vipps payment older than the poll wi
   await deps.flush();
   assert.equal(seeded.isCaptured(), true);
   assert.equal((await getOrder(kv, ORDER_ID))?.status, "paid");
-  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 0);
+  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 1);
   assert.equal(seeded.scriptBodies.filter((body) => body.sendAttendeeConfirmation === true).length, 1);
 });
 
@@ -936,7 +936,7 @@ test("a vipps order still created after the poll window is marked expired", asyn
   const order = await getOrder(kv, ORDER_ID);
   assert.equal(order?.status, "failed");
   assert.equal(order?.failureReason, "expired");
-  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 0);
+  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 1);
 });
 
 test("a vipps poll error leaves an old pending order on the cron", async () => {

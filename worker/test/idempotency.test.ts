@@ -185,6 +185,76 @@ test("checkout is rate limited per hashed address and a replay does not count", 
   assert.ok(ratePuts.every((put) => (put.options?.expirationTtl || 0) >= 60));
 });
 
+test("the same 30 per 10 minutes limit uses the cache and does not write KV", async () => {
+  const kv = memoryKv();
+  const puts: string[] = [];
+  const wrapped = {
+    get: (key: string) => kv.get(key),
+    delete: (key: string) => kv.delete(key),
+    list: (options: { prefix?: string; cursor?: string }) => kv.list(options),
+    async put(key: string, value: string, options?: { expirationTtl?: number }) {
+      puts.push(key);
+      await kv.put(key, value, options);
+    },
+  };
+  const store = new Map<string, string>();
+  const previous = (globalThis as { caches?: unknown }).caches;
+  (globalThis as { caches?: { default: unknown } }).caches = {
+    default: {
+      async match(request: Request) {
+        const body = store.get(request.url);
+        return body === undefined ? undefined : new Response(body);
+      },
+      async put(request: Request, response: Response) {
+        store.set(request.url, await response.text());
+      },
+    },
+  };
+  try {
+    const env = testEnv(wrapped);
+    const ip = "203.0.113.10";
+    const recorded = recordFetch((call) => {
+      if (call.method === "POST" && call.url.endsWith("/payment_intents")) {
+        const params = new URLSearchParams(call.body);
+        const orderId = params.get("metadata[orderId]") || "";
+        return jsonResponse({
+          id: "pi_" + orderId.slice(0, 8),
+          client_secret: "secret_" + orderId.slice(0, 8),
+          amount: 22000,
+          currency: "nok",
+          status: "requires_payment_method",
+          metadata: { orderId },
+        });
+      }
+      return jsonResponse({ error: { message: "unexpected " + call.url } }, 500);
+    });
+    const deps = { fetch: recorded.fetcher, now: () => NOW };
+    const requestFor = (n: number) =>
+      new Request("https://payments.test/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://hustleoslo.com", "cf-connecting-ip": ip },
+        body: JSON.stringify(
+          checkoutBody({ idempotencyKey: `22222222-2222-4222-8222-${n.toString(16).padStart(12, "0")}` }),
+        ),
+      });
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const response = await handleRequest(requestFor(attempt + 1), env, deps);
+      assert.equal(response.status, 200, String(attempt));
+    }
+    const blocked = await handleRequest(requestFor(31), env, deps);
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).error, "rate-limit");
+    const replay = await handleRequest(requestFor(1), env, deps);
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).replay, true);
+    assert.equal(puts.some((key) => key.startsWith("rl:")), false);
+    assert.equal(store.size, 1);
+  } finally {
+    if (previous === undefined) delete (globalThis as { caches?: unknown }).caches;
+    else (globalThis as { caches?: unknown }).caches = previous;
+  }
+});
+
 test("a simultaneous second checkout receives the same payment session", async () => {
   const kv = memoryKv();
   const env = testEnv(kv);

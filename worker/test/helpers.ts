@@ -1,3 +1,4 @@
+import { clearProviderChecks } from "../src/provider-check.ts";
 import { priceOrder } from "../src/pricing.ts";
 import type { Deps, Env, OrderKv } from "../src/types.ts";
 
@@ -5,6 +6,7 @@ export const NOW = new Date("2026-10-15T10:00:00.000Z");
 export const ORDER_ID = "11111111-1111-4111-8111-111111111111";
 
 export function memoryKv(): OrderKv {
+  clearProviderChecks();
   const map = new Map<string, string>();
   return {
     async get(key: string) {

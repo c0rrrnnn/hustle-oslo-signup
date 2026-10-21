@@ -17,6 +17,19 @@ export function checkoutOkKey(orderId: string): string {
   return `checkout-ok:${orderId}`;
 }
 
+/** Side key only has to outlive the checkout race. KV's shortest TTL is 60 seconds. */
+export const CHECKOUT_OK_TTL_SEC = 60 * 60;
+/** A Vipps payment can sit pending for 24 hours. The index then expires on its own. */
+export const PENDING_VIPPS_TTL_SEC = 25 * 60 * 60;
+/** Backstop if the sheet post never deletes the index. */
+export const UNPOSTED_TTL_SEC = 7 * 24 * 60 * 60;
+
+function mergeMethod(current: StoredOrder["method"], incoming: StoredOrder["method"]): StoredOrder["method"] {
+  if (incoming === "apple" || incoming === "google") return incoming;
+  if (current === "apple" || current === "google") return current;
+  return incoming;
+}
+
 export async function listPrefixedIds(kv: OrderKv, prefix: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor: string | undefined;
@@ -110,9 +123,20 @@ export async function saveStatus(
 ): Promise<StoredOrder> {
   const current = (await getOrder(kv, order.orderId)) || order;
   if (current.status === "paid") return current;
+  const method = mergeMethod(current.method, order.method);
+  const paymentId = order.paymentId || current.paymentId;
+  const same =
+    current.status === status &&
+    current.providerStatus === providerStatus &&
+    (current.failureReason ?? null) === (failureReason ?? null) &&
+    current.method === method &&
+    current.paymentId === paymentId;
+  if (same) return current;
   current.status = status;
   current.providerStatus = providerStatus;
   current.failureReason = failureReason;
+  current.method = method;
+  current.paymentId = paymentId;
   current.updatedAt = nowIso;
   await putOrder(kv, current);
   return current;
@@ -133,15 +157,32 @@ export async function markOrderPaid(
 ): Promise<StoredOrder> {
   const current = (await getOrder(kv, order.orderId)) || order;
   if (!canMarkPaid(gates)) return current;
-  if (current.status !== "paid") {
+  const method = mergeMethod(current.method, order.method);
+  const becamePaid = current.status !== "paid";
+  let dirty = false;
+  if (becamePaid) {
     current.status = "paid";
     current.paymentId = paymentId || current.paymentId;
     current.providerStatus = providerStatus;
     current.paidAt = current.paidAt || nowIso;
     current.failureReason = null;
     current.updatedAt = nowIso;
-    await putOrder(kv, current);
+    dirty = true;
+  } else if (paymentId && current.paymentId !== paymentId) {
+    current.paymentId = paymentId;
+    current.updatedAt = nowIso;
+    dirty = true;
   }
-  if (!current.appsScriptPosted) await kv.put(unpostedKey(current.orderId), current.orderId);
+  if (current.method !== method) {
+    current.method = method;
+    current.updatedAt = nowIso;
+    dirty = true;
+  }
+  if (dirty) await putOrder(kv, current);
+  if (current.status === "paid" && !current.appsScriptPosted) {
+    const key = unpostedKey(current.orderId);
+    const alreadyIndexed = becamePaid ? null : await kv.get(key);
+    if (!alreadyIndexed) await kv.put(key, current.orderId, { expirationTtl: UNPOSTED_TTL_SEC });
+  }
   return current;
 }

@@ -79,6 +79,7 @@
   };
 
   const PAY_FAIL = "Payment didn’t go through. You haven’t been charged. Try again or pick another method.";
+  const SERVER_FAIL = "Something went wrong on our side. You haven’t been charged. Try again in a moment.";
   const PAYMENT_SESSION_KEY = "hustleOsloPayment";
   const paymentUi = {
     idempotencyKey: "",
@@ -559,7 +560,10 @@
     if (view === "done") renderDone();
     updatePayChrome();
     schedulePrepare();
+    const body = $(".bk-body", sheet);
+    if (body) body.scrollTop = 0;
     sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
+    revealPayRows();
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
       if (heading) heading.focus({ preventScroll: true });
@@ -1210,6 +1214,24 @@
     }
     const payBar = (state.view === "checkout" || state.view === "failed") && !wideCheckout() && !foot.hidden;
     sheet.classList.toggle("is-clear-foot", payBar);
+    revealPayRows();
+  }
+
+  // On a short phone the last payment row starts just past the end of the
+  // scrollport. Bring that row fully above the pay bar. Rows already above
+  // the bar are left where the customer scrolled them.
+  function revealPayRows() {
+    const sheet = $("#book-sheet");
+    const body = sheet && $(".bk-body", sheet);
+    const foot = sheet && $(".bk-foot", sheet);
+    if (!sheet || !body || !foot || !sheet.classList.contains("is-clear-foot") || foot.hidden) return;
+    const rows = $$("#bk-pay-list .bk-mrow").filter(function (row) {
+      return row.offsetParent !== null;
+    });
+    const last = rows[rows.length - 1];
+    if (!last) return;
+    const extra = last.getBoundingClientRect().bottom - foot.getBoundingClientRect().top;
+    if (extra > 1) body.scrollTop += Math.ceil(extra) + 8;
   }
 
   function watchFootPad() {
@@ -1479,7 +1501,8 @@
       const data = await res.json().catch(() => ({}));
       logTiming("create-intent", started, { ok: res.ok && data.ok !== false, replay: data.replay === true });
       if (!res.ok || data.ok === false) {
-        return { ok: false, message: data.message || PAY_FAIL };
+        const fallback = res.status >= 500 ? SERVER_FAIL : PAY_FAIL;
+        return { ok: false, message: data.message || fallback };
       }
       return data;
     } catch (err) {
@@ -1583,6 +1606,7 @@
         billingDetails: {
           name: $("#bk-name").value.trim(),
           email: $("#bk-email").value.trim(),
+          address: { country: "NO" },
         },
       },
     });

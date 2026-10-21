@@ -1,7 +1,19 @@
 import { appsScriptBodies } from "./apps-script.ts";
 import { buildCalendar, nightsForCalendar } from "./calendar.ts";
 import { sha256Base64, timingSafeEqual } from "./crypto.ts";
-import { checkoutOkKey, getOrder, listPrefixedIds, markOrderPaid, newOrder, pendingVippsKey, putOrder, saveStatus } from "./orders.ts";
+import {
+  CHECKOUT_OK_TTL_SEC,
+  checkoutOkKey,
+  getOrder,
+  listPrefixedIds,
+  markOrderPaid,
+  newOrder,
+  PENDING_VIPPS_TTL_SEC,
+  pendingVippsKey,
+  putOrder,
+  saveStatus,
+} from "./orders.ts";
+import { markProviderChecked, providerCheckedRecently } from "./provider-check.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
 import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, stripePayMethod, verifyStripeSignature } from "./stripe.ts";
@@ -32,6 +44,7 @@ const VIPPS_POLL_MAX_MS = 24 * 60 * 60 * 1000;
 const VIPPS_SYNC_THROTTLE_MS = 5 * 1000;
 const METHODS = new Set(["card", "apple", "google", "vipps"]);
 const MAX_BODY = 65_536;
+const SERVER_FAIL = "Something went wrong on our side. You haven’t been charged. Try again in a moment.";
 
 export function captureModeOf(env: Env): CaptureMode {
   return env.CAPTURE_MODE === "reserve" ? "reserve" : "immediate";
@@ -127,27 +140,74 @@ function providerFailure(cors: Headers): Response {
   }, cors);
 }
 
-async function checkoutAllowed(kv: Env["ORDERS"], ip: string, nowMs: number): Promise<boolean> {
-  const digest = (await sha256Base64(ip || "unknown")).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
-  const key = `rl:${digest}`;
-  const raw = await kv.get(key);
+/**
+ * 30 checkouts per 10 minutes. The Workers Rate Limiting binding only accepts
+ * a 10 or 60 second period, so it cannot express this window. The Cache API
+ * keeps the count without a KV write. KV is the fallback where caches.default
+ * is missing, which is the Node test runner.
+ */
+function rateLimitCache(): Cache | null {
+  const cachesGlobal = (globalThis as { caches?: { default?: Cache } }).caches;
+  const cache = cachesGlobal?.default;
+  if (!cache || typeof cache.match !== "function" || typeof cache.put !== "function") return null;
+  return cache;
+}
+
+function rateLimitRequest(digest: string): Request {
+  return new Request(`https://rate-limit.hustleoslo.internal/checkout/${digest}`);
+}
+
+async function readRateBucket(raw: string | null, nowMs: number): Promise<{ start: number; count: number }> {
   let start = nowMs;
   let count = 0;
-  if (raw) {
+  if (!raw) return { start, count };
+  try {
+    const parsed = JSON.parse(raw) as { start?: number; count?: number };
+    if (typeof parsed.start === "number" && nowMs - parsed.start < CHECKOUT_WINDOW_MS) {
+      start = parsed.start;
+      count = parsed.count || 0;
+    }
+  } catch {
+    start = nowMs;
+  }
+  return { start, count };
+}
+
+async function checkoutAllowedViaCache(cache: Cache, digest: string, nowMs: number): Promise<boolean> {
+  const request = rateLimitRequest(digest);
+  const hit = await cache.match(request);
+  const bucket = await readRateBucket(hit ? await hit.text() : null, nowMs);
+  if (bucket.count >= CHECKOUT_LIMIT) return false;
+  const remainingMs = Math.max(1000, bucket.start + CHECKOUT_WINDOW_MS - nowMs);
+  await cache.put(
+    request,
+    new Response(JSON.stringify({ start: bucket.start, count: bucket.count + 1 }), {
+      headers: { "cache-control": `public, max-age=${Math.ceil(remainingMs / 1000)}` },
+    }),
+  );
+  return true;
+}
+
+async function checkoutAllowedViaKv(kv: Env["ORDERS"], digest: string, nowMs: number): Promise<boolean> {
+  const key = `rl:${digest}`;
+  const bucket = await readRateBucket(await kv.get(key), nowMs);
+  if (bucket.count >= CHECKOUT_LIMIT) return false;
+  const ttlSec = Math.ceil(CHECKOUT_WINDOW_MS / 1000);
+  await kv.put(key, JSON.stringify({ start: bucket.start, count: bucket.count + 1 }), { expirationTtl: ttlSec });
+  return true;
+}
+
+async function checkoutAllowed(kv: Env["ORDERS"], ip: string, nowMs: number): Promise<boolean> {
+  const digest = (await sha256Base64(ip || "unknown")).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
+  const cache = rateLimitCache();
+  if (cache) {
     try {
-      const parsed = JSON.parse(raw) as { start?: number; count?: number };
-      if (typeof parsed.start === "number" && nowMs - parsed.start < CHECKOUT_WINDOW_MS) {
-        start = parsed.start;
-        count = parsed.count || 0;
-      }
-    } catch {
-      start = nowMs;
+      return await checkoutAllowedViaCache(cache, digest, nowMs);
+    } catch (error) {
+      console.info(JSON.stringify({ msg: "rate-limit-cache-failed", error: error instanceof Error ? error.message : "error" }));
     }
   }
-  if (count >= CHECKOUT_LIMIT) return false;
-  const ttlSec = Math.ceil(CHECKOUT_WINDOW_MS / 1000);
-  await kv.put(key, JSON.stringify({ start, count: count + 1 }), { expirationTtl: ttlSec });
-  return true;
+  return checkoutAllowedViaKv(kv, digest, nowMs);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -263,14 +323,14 @@ async function waitForCheckout(kv: Env["ORDERS"], orderId: string): Promise<Stor
 }
 
 async function rememberReady(kv: Env["ORDERS"], order: StoredOrder): Promise<void> {
-  await kv.put(checkoutOkKey(order.orderId), JSON.stringify(order));
+  await kv.put(checkoutOkKey(order.orderId), JSON.stringify(order), { expirationTtl: CHECKOUT_OK_TTL_SEC });
   await putOrder(kv, order);
 }
 
 async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Headers): Promise<Response> {
   const modeError = testModeError(env);
   if (modeError) return json(403, { ok: false, error: "test-mode", message: modeError }, cors);
-  if (!env.ORDERS) return json(500, { ok: false, error: "kv-missing" }, cors);
+  if (!env.ORDERS) return json(500, { ok: false, error: "kv-missing", message: SERVER_FAIL }, cors);
   const raw = await request.text();
   if (raw.length > MAX_BODY) return json(413, { ok: false, error: "too-large" }, cors);
   let body: Record<string, unknown>;
@@ -331,11 +391,15 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
       message: "This checkout is already starting. Wait a moment and try again.",
     }, cors);
   const replay = async (ready: StoredOrder): Promise<Response> => {
-    ready.customer = order.customer;
-    ready.meta = order.meta;
-    if (!ready.workerOrigin) ready.workerOrigin = order.workerOrigin;
-    ready.updatedAt = now.toISOString();
-    await putOrder(env.ORDERS, ready);
+    const sameCustomer = JSON.stringify(ready.customer) === JSON.stringify(order.customer);
+    const sameMeta = JSON.stringify(ready.meta) === JSON.stringify(order.meta);
+    if (!sameCustomer || !sameMeta || !ready.workerOrigin) {
+      ready.customer = order.customer;
+      ready.meta = order.meta;
+      if (!ready.workerOrigin) ready.workerOrigin = order.workerOrigin;
+      ready.updatedAt = now.toISOString();
+      await putOrder(env.ORDERS, ready);
+    }
     return checkoutResponse(ready, env, cors, true);
   };
   const existing = (await readyCheckout(env.ORDERS, order.orderId)) || (await getOrder(env.ORDERS, order.orderId));
@@ -413,7 +477,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
       current.paymentId = created.reference;
       current.redirectUrl = created.redirectUrl;
       current.providerStatus = "created";
-      await env.ORDERS.put(pendingVippsKey(current.orderId), current.orderId);
+      await env.ORDERS.put(pendingVippsKey(current.orderId), current.orderId, { expirationTtl: PENDING_VIPPS_TTL_SEC });
     }
   } catch {
     const waited = await waitForCheckout(env.ORDERS, current.orderId);
@@ -525,7 +589,7 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
     return json(500, { ok: false, error: error instanceof Error ? error.message : "stripe-retrieve" }, cors);
   }
   const decision = decideStripe(intent, order);
-  const noted = await noteStripeMethod(env, order, intent, now.toISOString());
+  const noted = withStripeMethod(order, intent);
   if (type === "payment_intent.payment_failed" && decision.action !== "paid") {
     const reason = decision.action === "failed" ? decision.reason : "declined";
     await saveStatus(env.ORDERS, noted, "failed", reason, now.toISOString(), reason);
@@ -542,14 +606,11 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
   return json(200, { ok: true, status: decision.action, reason: decision.reason }, cors);
 }
 
-async function noteStripeMethod(env: Env, order: StoredOrder, intent: Awaited<ReturnType<typeof retrievePaymentIntent>>, nowIso: string): Promise<StoredOrder> {
+/** Wallet method stays in memory until the status write, so a pending poll does not put the order. */
+function withStripeMethod(order: StoredOrder, intent: Awaited<ReturnType<typeof retrievePaymentIntent>>): StoredOrder {
   const method = stripePayMethod(intent);
-  const current = (await getOrder(env.ORDERS, order.orderId)) || order;
-  if (!method || current.method === method) return current;
-  current.method = method;
-  current.updatedAt = nowIso;
-  await putOrder(env.ORDERS, current);
-  return current;
+  if (!method || order.method === method) return order;
+  return { ...order, method };
 }
 
 /** Webhook fallback: a pending card order is marked from the retrieved PaymentIntent. */
@@ -557,25 +618,22 @@ async function syncStripeOrder(env: Env, deps: Deps, order: StoredOrder): Promis
   const now = (deps.now || (() => new Date()))();
   const fresh = (await getOrder(env.ORDERS, order.orderId)) || order;
   if (fresh.provider !== "stripe" || fresh.status !== "pending" || !fresh.paymentId) return fresh;
-  const checked = fresh.stripeCheckedAt ? Date.parse(fresh.stripeCheckedAt) : 0;
-  if (Number.isFinite(checked) && now.getTime() - checked < VIPPS_SYNC_THROTTLE_MS) return fresh;
-  fresh.stripeCheckedAt = now.toISOString();
-  await putOrder(env.ORDERS, fresh);
+  if (providerCheckedRecently(fresh.orderId, now.getTime(), VIPPS_SYNC_THROTTLE_MS)) return fresh;
   const fetcher = deps.fetch || fetch;
   let intent;
   try {
     intent = await retrievePaymentIntent(fetcher, env.STRIPE_SECRET_KEY, fresh.paymentId);
   } catch {
     console.info(JSON.stringify({ msg: "stripe-retrieve-failed", orderId: fresh.orderId }));
-    return (await getOrder(env.ORDERS, fresh.orderId)) || fresh;
+    return fresh;
   }
-  const noted = await noteStripeMethod(env, fresh, intent, now.toISOString());
+  const noted = withStripeMethod(fresh, intent);
   const decision = decideStripe(intent, noted);
   if (decision.action === "paid") return acceptPaid(env, deps, noted, decision.paymentId, "succeeded", now);
   if (decision.action === "failed") {
     return saveStatus(env.ORDERS, noted, "failed", decision.reason, now.toISOString(), decision.reason);
   }
-  return (await getOrder(env.ORDERS, fresh.orderId)) || noted;
+  return (await getOrder(env.ORDERS, fresh.orderId)) || fresh;
 }
 
 async function settleVipps(
@@ -598,9 +656,8 @@ async function settleVipps(
   }
   if (view.kind === "authorized") {
     if (captureModeOf(env) === "reserve" && !forceCapture) {
+      if (view.paymentId) order.paymentId = view.paymentId;
       const updated = await saveStatus(env.ORDERS, order, "reserved", "authorized", now.toISOString(), null);
-      updated.paymentId = view.paymentId || updated.paymentId;
-      await putOrder(env.ORDERS, updated);
       return { order: updated, response: json(200, { ok: true, status: "reserved" }, cors) };
     }
     const fetcher = deps.fetch || fetch;
@@ -621,19 +678,12 @@ async function settleVipps(
   return { order, response: json(200, { ok: true, status: "pending", reason: view.reason }, cors) };
 }
 
-async function forgetPendingVipps(env: Env, order: StoredOrder): Promise<void> {
-  if (order.status === "pending") return;
-  await env.ORDERS.delete(pendingVippsKey(order.orderId));
-}
-
 async function syncVippsOrder(env: Env, deps: Deps, order: StoredOrder, ignoreThrottle: boolean): Promise<StoredOrder> {
   const now = (deps.now || (() => new Date()))();
   const fresh = (await getOrder(env.ORDERS, order.orderId)) || order;
   if (fresh.provider !== "vipps" || (fresh.status !== "pending" && fresh.status !== "reserved")) return fresh;
-  const checked = fresh.vippsCheckedAt ? Date.parse(fresh.vippsCheckedAt) : 0;
-  if (!ignoreThrottle && Number.isFinite(checked) && now.getTime() - checked < VIPPS_SYNC_THROTTLE_MS) return fresh;
-  fresh.vippsCheckedAt = now.toISOString();
-  await putOrder(env.ORDERS, fresh);
+  if (!ignoreThrottle && providerCheckedRecently(fresh.orderId, now.getTime(), VIPPS_SYNC_THROTTLE_MS)) return fresh;
+  if (ignoreThrottle) markProviderChecked(fresh.orderId, now.getTime());
   const fetcher = deps.fetch || fetch;
   let payment: VippsPayment;
   try {
@@ -644,7 +694,6 @@ async function syncVippsOrder(env: Env, deps: Deps, order: StoredOrder, ignoreTh
   }
   try {
     const settled = await settleVipps(env, deps, fresh, payment, now);
-    await forgetPendingVipps(env, settled.order);
     return (await getOrder(env.ORDERS, fresh.orderId)) || settled.order;
   } catch {
     console.info(JSON.stringify({ msg: "vipps-sync-failed", orderId: fresh.orderId }));
@@ -657,10 +706,7 @@ async function reconcilePendingVipps(env: Env, deps: Deps): Promise<void> {
   const ids = await listPrefixedIds(env.ORDERS, "pending-vipps:");
   for (const orderId of ids) {
     const order = await getOrder(env.ORDERS, orderId);
-    if (!order || order.provider !== "vipps" || order.status !== "pending") {
-      await env.ORDERS.delete(pendingVippsKey(orderId));
-      continue;
-    }
+    if (!order || order.provider !== "vipps" || order.status !== "pending") continue;
     const age = now.getTime() - Date.parse(order.createdAt);
     if (!Number.isFinite(age) || age < VIPPS_POLL_MIN_MS) continue;
     if (age > VIPPS_POLL_MAX_MS) {
@@ -687,11 +733,8 @@ async function expireOrSettleVipps(env: Env, deps: Deps, order: StoredOrder, now
   try {
     const settled = await settleVipps(env, deps, order, payment, now);
     if (settled.order.status === "pending") {
-      const failed = await saveStatus(env.ORDERS, settled.order, "failed", "expired", now.toISOString(), "expired");
-      await env.ORDERS.delete(pendingVippsKey(failed.orderId));
-      return;
+      await saveStatus(env.ORDERS, settled.order, "failed", "expired", now.toISOString(), "expired");
     }
-    await forgetPendingVipps(env, settled.order);
   } catch {
     console.info(JSON.stringify({ msg: "vipps-expire-skipped", orderId: order.orderId }));
   }
@@ -741,7 +784,6 @@ async function onVippsWebhook(request: Request, env: Env, deps: Deps, cors: Head
     return json(500, { ok: false, error: error instanceof Error ? error.message : "vipps-get" }, cors);
   }
   const settled = await settleVipps(env, deps, order, payment, now);
-  await forgetPendingVipps(env, settled.order);
   const headers = new Headers(settled.response.headers);
   cors.forEach((value, key) => headers.set(key, value));
   return new Response(settled.response.body, { status: settled.response.status, headers });
@@ -806,10 +848,10 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
         vippsApi,
       }, cors);
     }
-    if (request.method === "GET" && path === "/ics") return onIcs(request, env, deps, cors);
-    if (request.method === "POST" && path === "/checkout") return beginCheckout(request, env, deps, cors);
-    if (request.method === "POST" && path === "/webhooks/stripe") return onStripeWebhook(request, env, deps, cors);
-    if (request.method === "POST" && path === "/webhooks/vipps") return onVippsWebhook(request, env, deps, cors);
+    if (request.method === "GET" && path === "/ics") return await onIcs(request, env, deps, cors);
+    if (request.method === "POST" && path === "/checkout") return await beginCheckout(request, env, deps, cors);
+    if (request.method === "POST" && path === "/webhooks/stripe") return await onStripeWebhook(request, env, deps, cors);
+    if (request.method === "POST" && path === "/webhooks/vipps") return await onVippsWebhook(request, env, deps, cors);
     const orderMatch = path.match(/^\/order\/([0-9a-f-]{36})$/i);
     if (orderMatch && request.method === "GET") {
       let order = await getOrder(env.ORDERS, orderMatch[1]);
@@ -822,10 +864,10 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
       return json(200, publicOrder(order), cors);
     }
     const captureMatch = path.match(/^\/order\/([0-9a-f-]{36})\/capture$/i);
-    if (captureMatch && request.method === "POST") return onCapture(request, env, captureMatch[1], deps, cors);
+    if (captureMatch && request.method === "POST") return await onCapture(request, env, captureMatch[1], deps, cors);
     return json(404, { ok: false, error: "not-found" }, cors);
   } catch (error) {
     console.info(JSON.stringify({ msg: "unhandled", error: error instanceof Error ? error.message : "error" }));
-    return json(500, { ok: false, error: "internal" }, cors);
+    return json(500, { ok: false, error: "internal", message: SERVER_FAIL }, cors);
   }
 }

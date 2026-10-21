@@ -105,8 +105,9 @@ export interface StoredOrder {
   appsScriptLeaseToken: string | null;
   checkoutLeaseUntil: string | null;
   checkoutLeaseToken: string | null;
+  /** Legacy field. Polls keep this throttle in memory and no longer write it. */
   vippsCheckedAt: string | null;
-  /** Last time GET /order asked Stripe about a still-pending card payment. */
+  /** Legacy field. Polls keep this throttle in memory and no longer write it. */
   stripeCheckedAt?: string | null;
   confirmationSent: boolean;
   failureReason: string | null;
