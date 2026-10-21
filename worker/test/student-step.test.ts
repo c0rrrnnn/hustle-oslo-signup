@@ -5,12 +5,20 @@ import vm from "node:vm";
 
 test("the student step has no separate Next button", () => {
   const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  const step = html.slice(html.indexOf('id="bk-step-student"'), html.indexOf('id="bk-step-dates"'));
+  const foot = html.slice(html.indexOf('id="bk-foot-student"'), html.indexOf('id="bk-foot-dates"'));
   assert.equal(html.includes("student-next"), false);
-  assert.equal(html.includes('id="bk-foot-student"'), false);
-  assert.match(html, /<button type="button"[^>]*id="bk-student-yes"/);
-  assert.match(html, /<button type="button"[^>]*id="bk-student-no"/);
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(step, /Are you a student\?/);
+  assert.equal(step.includes("bk-student-yes"), false);
+  assert.match(foot, /<button type="button"[^>]*id="bk-student-yes"/);
+  assert.match(foot, /<button type="button"[^>]*id="bk-student-no"/);
+  assert.match(html, /id="bk-dates-next"[^>]*>Next</);
   assert.match(html, /id="bk-dates-heading"[^>]*tabindex="-1"/);
   assert.match(html, /id="bk-student-heading"[^>]*tabindex="-1"/);
+  assert.match(css, /padding:\s*12px 16px calc\(14px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+  assert.match(css, /#bk-foot-student \.bk-choices \{[^}]*flex-direction:\s*column;/);
 });
 
 class ClassList {
@@ -226,13 +234,15 @@ function mountSheet() {
   datesHeading.textContent = "Select a date";
   const options = el("div", { id: "bk-options" });
   const footer = el("footer", { class: "bk-foot" });
+  const studentFoot = el("div", { id: "bk-foot-student" });
   const datesFoot = el("div", { id: "bk-foot-dates", hidden: "" });
   datesFoot.appendChild(el("button", { id: "bk-dates-next", "data-action": "dates-next" }));
   student.appendChild(studentHeading);
-  student.appendChild(yes);
-  student.appendChild(no);
+  studentFoot.appendChild(yes);
+  studentFoot.appendChild(no);
   dates.appendChild(datesHeading);
   dates.appendChild(options);
+  footer.appendChild(studentFoot);
   footer.appendChild(datesFoot);
   sheet.appendChild(back);
   sheet.appendChild(prog);
@@ -272,7 +282,7 @@ function mountSheet() {
       return active;
     },
   });
-  return { document, start, sheet, back, yes, no, student, dates, datesHeading, status, options, footer };
+  return { document, start, sheet, back, yes, no, student, dates, datesHeading, status, options, footer, studentFoot };
 }
 
 test("choosing Yes or No opens the date step and keeps that answer", async () => {
@@ -294,8 +304,8 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
 
   ui.start.click();
   assert.equal(ui.student.hidden, false);
-  assert.equal(ui.footer.hidden, true);
-  assert.equal(ui.document.getElementById("bk-foot-student"), null);
+  assert.equal(ui.footer.hidden, false);
+  assert.equal(ui.studentFoot.hidden, false);
 
   ui.yes.focus();
   ui.document.emit("keydown", { target: ui.yes, key: "ArrowDown", preventDefault() {}, stopPropagation() {}, stopped: false });
@@ -315,6 +325,7 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.no.classList.contains("is-on"), true);
   assert.equal(ui.yes.getAttribute("aria-pressed"), "false");
   assert.equal(ui.footer.hidden, false);
+  assert.equal(ui.studentFoot.hidden, true);
 
   ui.options.textContent = "untouched";
   const ghost = el("button", { "data-action": "focus-date", "data-date": "2026-11-02" });
@@ -328,7 +339,8 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.student.hidden, false);
   assert.equal(ui.dates.hidden, true);
   assert.equal(ui.no.getAttribute("aria-pressed"), "true");
-  assert.equal(ui.footer.hidden, true);
+  assert.equal(ui.footer.hidden, false);
+  assert.equal(ui.studentFoot.hidden, false);
 
   ui.yes.click();
   assert.equal(ui.dates.hidden, false);
