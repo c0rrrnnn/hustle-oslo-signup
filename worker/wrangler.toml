@@ -19,8 +19,8 @@ CAPTURE_MODE = "immediate"
 ALLOW_LIVE_PAYMENTS = "false"
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec"
 PUBLIC_SITE_URL = "https://hustleoslo.com"
-# Production site only. For local wrangler dev, add http://localhost:8765 in .dev.vars.
-ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com"
+# Production site plus the private test copy at hustle-oslo-test.pages.dev (remove before go-live). For local wrangler dev, add http://localhost:8765 in .dev.vars.
+ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com,https://hustle-oslo-test.pages.dev"
 
 # Create with: npx wrangler kv namespace create ORDERS
 # Paste the printed id here before deploy. This placeholder is not a real namespace.
