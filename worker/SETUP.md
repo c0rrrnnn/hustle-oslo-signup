@@ -214,11 +214,11 @@ The public site keeps posting `payment-pending` with no secret **until you launc
 The browser cannot hold `APPS_SCRIPT_SHARED_SECRET`. Live https://hustleoslo.com/ still posts unpaid signups itself while `PAYMENTS_ENABLED` is false.
 
 1. Deploy this Apps Script version with `REQUIRE_SHARED_SECRET` **unset** (or anything other than `true`). Unpaid signups keep working. Paid claims already need the secret. `confirmationOnly` from the website, which does not claim `paid`, still works.
-2. Deploy the worker in test mode. `PAYMENTS_ENABLED` stays false on the public site.
-3. When you are ready for real online payments, in this order: set the worker secrets, point a **non-public** preview at the worker with `PAYMENTS_ENABLED: true` (do not commit that), confirm a test payment writes one paid row and one confirmation email, then set script property `REQUIRE_SHARED_SECRET` to `true`. That locks every write and every `confirmationOnly`. Only the worker, which has the secret, can add rows or send mail.
-4. Turn `PAYMENTS_ENABLED` on for the public site in the same change that stops the browser posting to Apps Script. If you set `REQUIRE_SHARED_SECRET` first, the live unpaid signup path starts failing.
+2. Deploy the worker in test mode. Register the Vipps **apitest** webhook and save its one-time secret as `VIPPS_WEBHOOK_SECRET`. `PAYMENTS_ENABLED` stays false on the public site.
+3. Prove the paid path on a **non-public** preview: set `PAYMENTS_ENABLED: true` and `PAYMENTS_WORKER_URL` in a local checkout only (do not commit that). One test payment must write one paid row and one confirmation email from hustleinoslo@gmail.com. Leave `REQUIRE_SHARED_SECRET` unset during this preview. The live site is still posting unpaid signups and cannot hold the secret.
+4. Launch payments on the public site: turn `PAYMENTS_ENABLED` on in the same change that stops the browser posting to Apps Script. After that change is live, set script property `REQUIRE_SHARED_SECRET` to `true`. That locks every write and every `confirmationOnly`. Only the worker, which has the secret, can add rows or send mail.
 
-Do not set `REQUIRE_SHARED_SECRET` while the live site is still posting from the browser.
+Do not set `REQUIRE_SHARED_SECRET` while https://hustleoslo.com/ is still posting from the browser. Setting it earlier rejects unpaid signups.
 
 1. Open the Hustle Oslo signups spreadsheet → **Extensions → Apps Script**.
 2. Replace the script with `apps-script/Code.gs` from this repo.
