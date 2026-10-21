@@ -1,6 +1,6 @@
 # Hustle Oslo payments — test mode setup
 
-This worker is **configured for test payments**. `ALLOW_LIVE_PAYMENTS` is `"false"` in `wrangler.toml`. In that mode it refuses a Stripe live secret (`sk_live_`) or live publishable key (`pk_live_`), and it calls Vipps at `https://apitest.vipps.no` even if `VIPPS_API_BASE` is set. Going live later is a config change, not a code change: set `ALLOW_LIVE_PAYMENTS` to `"true"`, use live Stripe keys, and set `VIPPS_API_BASE` to `https://api.vipps.no`. Do not do that in this pass. Nothing in this setup moves real money.
+This worker is **configured for test payments**. `ALLOW_LIVE_PAYMENTS` is `"false"` in `wrangler.toml`. In that mode it refuses a Stripe live secret (`sk_live_`) or live publishable key (`pk_live_`), and it calls Vipps at `https://apitest.vipps.no` even if `VIPPS_API_BASE` is set. Going live later is a config change Claire reviews, not a code change: set `ALLOW_LIVE_PAYMENTS` to `"true"`, use a live Stripe key pair, and set `VIPPS_API_BASE` to `https://api.vipps.no`. Register a separate production webhook and replace `VIPPS_WEBHOOK_SECRET`. The signup page accepts `pk_test_` or `pk_live_`; the worker only returns a live publishable key when live mode is on. Do not do that in this pass. Nothing in this setup moves real money.
 
 The public site stays on `PAYMENTS_ENABLED: false` until you decide otherwise. Dancers keep the current path: the sheet stores `payment-pending`, and they Vipps **Hustle Oslo #48782**.
 
@@ -128,7 +128,7 @@ curl -sS -X POST https://apitest.vipps.no/webhooks/v1/webhooks \
   }'
 ```
 
-Vipps returns an `id` and a `secret`. The secret is shown once. Save it as `VIPPS_WEBHOOK_SECRET` (`npx wrangler secret put VIPPS_WEBHOOK_SECRET`) and in a password manager. The worker checks the Webhooks API HMAC (`x-ms-date`, `x-ms-content-sha256`, `Authorization`) and rejects a missing or bad signature. It still ignores the webhook’s own amount and name: a signed webhook is accepted only after the worker gets an access token and `GET /epayment/v1/payments/{reference}` shows the real status.
+Vipps returns an `id` and a `secret`. The secret is shown once. Save it as `VIPPS_WEBHOOK_SECRET` (`npx wrangler secret put VIPPS_WEBHOOK_SECRET`) and in a password manager. The worker checks the Webhooks API HMAC (`x-ms-date`, `x-ms-content-sha256`, `Authorization`) and rejects a missing or bad signature. The date is part of that signature. A retry that reuses an older `x-ms-date` is still accepted; the worker does not treat the webhook as paid until `GET /epayment/v1/payments/{reference}` shows the real status. The webhook’s own amount and name are ignored.
 
 Confirm the registration, still on apitest:
 
@@ -141,7 +141,7 @@ curl -sS https://apitest.vipps.no/webhooks/v1/webhooks \
 
 The list should include your worker URL and the ePayment events above. If the secret is lost, delete that webhook and register it again. Production (`https://api.vipps.no`) is a separate registration with its own secret. Do that only when you deliberately turn `ALLOW_LIVE_PAYMENTS` on.
 
-If a webhook never arrives, the order does not stay pending forever. The return page’s `GET /order/:id` asks Vipps and, in immediate mode, captures. The same 5-minute cron retries pending Vipps orders that are between 2 minutes and 24 hours old. Older pending orders drop off the cron; opening the return page still checks Vipps.
+If a webhook never arrives, the order does not stay pending forever. The return page’s `GET /order/:id` asks Vipps and, in immediate mode, captures. The same 5-minute cron retries pending Vipps orders that are at least 2 minutes old. After 24 hours it reads Vipps one last time: an authorized payment is still captured, a payment that is still only created is marked `expired`, and a failed read stays on the cron for the next run. `GET /order/:id` returns status and whether the confirmation email was sent. It does not return the buyer’s name, email, or the night list.
 
 With `CAPTURE_MODE=immediate`, an authorized payment is captured by the worker, then read again. The sheet is updated only when the captured amount equals the catalogue total.
 
@@ -195,7 +195,7 @@ Note the `*.workers.dev` URL. Check:
 curl -sS https://hustle-oslo-payments.<your-subdomain>.workers.dev/health
 ```
 
-Expected body: `{"ok":true,"mode":"test","captureMode":"immediate"}`.
+Expected fields: `"ok": true`, `"mode": "test"`, `"allowLivePayments": false`, `"captureMode": "immediate"`, `"vippsApi": "https://apitest.vipps.no"`.
 
 Then finish the Stripe webhook (step 2.5) and the Vipps webhook (step 3), set `STRIPE_WEBHOOK_SECRET` if you had not yet, and deploy once more:
 
@@ -228,7 +228,7 @@ Do not set `REQUIRE_SHARED_SECRET` while the live site is still posting from the
 
 New columns, added on the right when the header row still matches: **Payment provider**, **Payment id**, **Payment status**. A paid row looks like `stripe` / `pi_…` / `paid`, or `vipps` / the Vipps reference / `paid`. A payment-pending row has status `pending` and blank provider and id.
 
-The worker writes one row per night after the payment is confirmed. That write can finish after the webhook has already returned. The browser does not write that booking. The append and the paid-row check run under Apps Script `LockService`, and the worker holds a short lease so two deliveries do not both append. A repeated webhook does not add a second row for the same payment id and event id. The attendee confirmation from hustleinoslo@gmail.com is sent once per payment id, on the paid post or on the confirmation follow-up if that first mail did not go out. If the first write fails or is too slow, the 5-minute cron tries again. The same cron also polls Vipps for pending Vipps orders.
+The worker writes one row per night after the payment is confirmed. That write can finish after the webhook has already returned. The browser does not write that booking. The append and the paid-row check run under Apps Script `LockService`, which is what makes one row and one confirmation email atomic. The worker’s KV lease is only a best-effort guard: two checkout requests for the same order wait and then share one PaymentIntent or Vipps redirect, and a provider error on the loser does not mark the winner failed. `/checkout` allows 30 new checkouts per 10 minutes per hashed IP. Replaying an order that already has a payment session does not count, and the rate-limit key expires with the window. A repeated webhook does not add a second row for the same payment id and event id. The attendee confirmation from hustleinoslo@gmail.com is sent once per payment id, on the paid post or on the confirmation follow-up if that first mail did not go out. If the first write fails or is too slow, the 5-minute cron tries again. The same cron also polls Vipps for pending Vipps orders.
 
 ## 8. Try it locally without changing main
 

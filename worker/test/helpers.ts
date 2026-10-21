@@ -10,7 +10,7 @@ export function memoryKv(): OrderKv {
     async get(key: string) {
       return map.has(key) ? map.get(key) || null : null;
     },
-    async put(key: string, value: string) {
+    async put(key: string, value: string, _options?: { expirationTtl?: number }) {
       map.set(key, value);
     },
     async delete(key: string) {

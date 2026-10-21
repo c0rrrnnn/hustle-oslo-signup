@@ -1308,8 +1308,13 @@
     return paymentUi.js;
   }
 
+  function publishableKeyOk(key) {
+    const value = String(key || "");
+    return value.indexOf("pk_test_") === 0 || value.indexOf("pk_live_") === 0;
+  }
+
   async function mountStripe(created) {
-    if (!created || !created.clientSecret || String(created.publishableKey || "").indexOf("pk_test_") !== 0) {
+    if (!created || !created.clientSecret || !publishableKeyOk(created.publishableKey)) {
       return { ok: false, message: PAY_FAIL };
     }
     if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
@@ -2147,6 +2152,8 @@
     startPayment: startPayment,
     showPaymentFailed: showPaymentFailed,
     buildOrder: buildOrder,
+    resultFromOrder: resultFromOrder,
+    publishableKeyOk: publishableKeyOk,
     config: CONFIG,
   };
 

@@ -646,11 +646,15 @@ test("order status omits the Stripe client secret", async () => {
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.status, "pending");
-  assert.equal(body.amountNok, 220);
+  assert.equal(body.amountNok, undefined);
+  assert.equal(body.nights, undefined);
   assert.equal("clientSecret" in body, false);
   assert.equal("email" in body, false);
+  assert.equal("fullName" in body, false);
   assert.equal(body.customer, undefined);
   assert.equal(body.paymentId, null);
+  assert.equal(body.appsScriptPosted, false);
+  assert.equal(body.confirmationSent, false);
 });
 
 test("vipps webhook signatures follow the Webhooks API string-to-sign and reject a bad signature", async () => {
@@ -676,7 +680,6 @@ test("vipps webhook signatures follow the Webhooks API string-to-sign and reject
     contentHashHeader: proof.contentHash,
     authorization: proof.authorization,
     rawBody: raw,
-    nowMs,
   });
   assert.equal(ok, true);
   assert.equal(await verifyVippsWebhook({
@@ -824,4 +827,73 @@ test("a paid booking follows up with exactly one confirmation when the row did n
   assert.equal(again.status, 200);
   await deps.flush();
   assert.equal(scriptBodies.length, 2);
+});
+
+test("a vipps webhook signed with an old date is still accepted and re-read", async () => {
+  const { kv, env, seeded } = await seedVipps();
+  const old = new Date(NOW.getTime() - 6 * 60 * 60 * 1000);
+  const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
+  const response = await handleRequest(
+    await vippsWebhookRequest(
+      { msn: "123456", reference: ORDER_ID, name: "AUTHORIZED", amount: { currency: "NOK", value: 1 } },
+      old,
+    ),
+    env,
+    deps,
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "paid");
+  await deps.flush();
+  assert.equal(seeded.isCaptured(), true);
+  assert.equal((await getOrder(kv, ORDER_ID))?.confirmationSent, true);
+  assert.equal(seeded.scriptBodies.length, 1);
+});
+
+test("the cron still captures an authorized vipps payment older than the poll window", async () => {
+  const { kv, env, seeded } = await seedVipps();
+  const deps = backgroundDeps({
+    fetch: seeded.recorded.fetcher,
+    now: () => new Date(NOW.getTime() + 25 * 60 * 60 * 1000),
+  });
+  await reconcilePayments(env, deps);
+  await deps.flush();
+  assert.equal(seeded.isCaptured(), true);
+  assert.equal((await getOrder(kv, ORDER_ID))?.status, "paid");
+  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 0);
+  assert.equal(seeded.scriptBodies.filter((body) => body.sendAttendeeConfirmation === true).length, 1);
+});
+
+test("a vipps order still created after the poll window is marked expired", async () => {
+  const { kv, env } = await seedVipps();
+  clearVippsTokenCache();
+  const recorded = recordFetch((call) => {
+    if (call.url.endsWith("/accesstoken/get")) return jsonResponse({ access_token: "vipps-token", expires_in: "60" });
+    if (call.method === "GET" && call.url.includes("/epayment/v1/payments/")) return jsonResponse(vippsPayment("CREATED", 0));
+    if (call.url.endsWith("/capture")) throw new Error("should not capture");
+    return jsonResponse({ ok: false }, 500);
+  });
+  await reconcilePayments(env, {
+    fetch: recorded.fetcher,
+    now: () => new Date(NOW.getTime() + 25 * 60 * 60 * 1000),
+  });
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.status, "failed");
+  assert.equal(order?.failureReason, "expired");
+  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 0);
+});
+
+test("a vipps poll error leaves an old pending order on the cron", async () => {
+  const { kv, env } = await seedVipps();
+  clearVippsTokenCache();
+  const recorded = recordFetch((call) => {
+    if (call.url.endsWith("/accesstoken/get")) return jsonResponse({ access_token: "vipps-token", expires_in: "60" });
+    if (call.method === "GET" && call.url.includes("/epayment/v1/payments/")) return jsonResponse({ error: "down" }, 500);
+    return jsonResponse({ ok: false }, 500);
+  });
+  await reconcilePayments(env, {
+    fetch: recorded.fetcher,
+    now: () => new Date(NOW.getTime() + 25 * 60 * 60 * 1000),
+  });
+  assert.equal((await getOrder(kv, ORDER_ID))?.status, "pending");
+  assert.equal((await kv.list({ prefix: "pending-vipps:" })).keys.length, 1);
 });

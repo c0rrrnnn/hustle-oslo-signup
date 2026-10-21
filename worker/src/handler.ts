@@ -1,6 +1,6 @@
 import { appsScriptBodies } from "./apps-script.ts";
-import { timingSafeEqual } from "./crypto.ts";
-import { getOrder, listPrefixedIds, markOrderPaid, newOrder, pendingVippsKey, putOrder, saveStatus } from "./orders.ts";
+import { sha256Base64, timingSafeEqual } from "./crypto.ts";
+import { checkoutOkKey, getOrder, listPrefixedIds, markOrderPaid, newOrder, pendingVippsKey, putOrder, saveStatus } from "./orders.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
 import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, verifyStripeSignature } from "./stripe.ts";
@@ -13,6 +13,7 @@ import {
   interpretVipps,
   verifyVippsWebhook,
   vippsApiBase,
+  VIPPS_LIVE_API,
   type VippsCreds,
   type VippsPayment,
 } from "./vipps.ts";
@@ -20,8 +21,10 @@ import {
 export { appsScriptBodies, clearVippsTokenCache };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CHECKOUT_LIMIT = 8;
+const CHECKOUT_LIMIT = 30;
 const CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
+const CHECKOUT_WAIT_MS = 8000;
+const CHECKOUT_POLL_MS = 50;
 const VIPPS_POLL_MIN_MS = 2 * 60 * 1000;
 const VIPPS_POLL_MAX_MS = 24 * 60 * 60 * 1000;
 const VIPPS_SYNC_THROTTLE_MS = 5 * 1000;
@@ -96,8 +99,17 @@ function checkoutReady(order: StoredOrder): boolean {
   return Boolean(order.clientSecret || order.redirectUrl || order.status === "paid" || order.status === "reserved");
 }
 
+function providerFailure(cors: Headers): Response {
+  return json(502, {
+    ok: false,
+    error: "provider",
+    message: "Payment didn’t go through. You haven’t been charged. Try again or pick another method.",
+  }, cors);
+}
+
 async function checkoutAllowed(kv: Env["ORDERS"], ip: string, nowMs: number): Promise<boolean> {
-  const key = `rl:${ip}`;
+  const digest = (await sha256Base64(ip || "unknown")).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
+  const key = `rl:${digest}`;
   const raw = await kv.get(key);
   let start = nowMs;
   let count = 0;
@@ -113,8 +125,13 @@ async function checkoutAllowed(kv: Env["ORDERS"], ip: string, nowMs: number): Pr
     }
   }
   if (count >= CHECKOUT_LIMIT) return false;
-  await kv.put(key, JSON.stringify({ start, count: count + 1 }));
+  const ttlSec = Math.ceil(CHECKOUT_WINDOW_MS / 1000);
+  await kv.put(key, JSON.stringify({ start, count: count + 1 }), { expirationTtl: ttlSec });
   return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function returnUrlFor(env: Env, requested: string, orderId: string): string {
@@ -138,27 +155,18 @@ function returnUrlFor(env: Env, requested: string, orderId: string): string {
   return `${origin}${path}?order=${orderId}`;
 }
 
+/** Fields the return page reads. Name, email, and the night list stay in KV. */
 function publicOrder(order: StoredOrder) {
   return {
     ok: true,
     orderId: order.orderId,
     status: order.status,
-    currency: order.currency,
-    amountNok: order.amountNok,
     provider: order.provider,
     method: order.method,
     paymentId: order.status === "paid" ? order.paymentId : null,
     appsScriptPosted: order.appsScriptPosted,
     confirmationSent: order.confirmationSent,
     failureReason: order.status === "failed" ? order.failureReason : null,
-    nights: order.nights.map((night) => ({
-      eventId: night.eventId,
-      eventDate: night.eventDate,
-      ticketId: night.ticketId,
-      ticketName: night.ticketName,
-      priceTier: night.priceTier,
-      amount: night.amount,
-    })),
   };
 }
 
@@ -205,6 +213,39 @@ function paymentDescription(order: StoredOrder): string {
   return `Hustle Oslo ${dates}`.slice(0, 100);
 }
 
+async function readyCheckout(kv: Env["ORDERS"], orderId: string): Promise<StoredOrder | null> {
+  const side = await kv.get(checkoutOkKey(orderId));
+  if (side) {
+    try {
+      const saved = JSON.parse(side) as StoredOrder;
+      if (saved && saved.orderId === orderId && checkoutReady(saved)) {
+        const current = await getOrder(kv, orderId);
+        if (!current || !checkoutReady(current)) await putOrder(kv, saved);
+        return (await getOrder(kv, orderId)) || saved;
+      }
+    } catch {
+      /* a bad side key falls through to the order row */
+    }
+  }
+  const current = await getOrder(kv, orderId);
+  return current && checkoutReady(current) ? current : null;
+}
+
+async function waitForCheckout(kv: Env["ORDERS"], orderId: string): Promise<StoredOrder | null> {
+  const deadline = Date.now() + CHECKOUT_WAIT_MS;
+  for (;;) {
+    const ready = await readyCheckout(kv, orderId);
+    if (ready) return ready;
+    if (Date.now() >= deadline) return null;
+    await sleep(CHECKOUT_POLL_MS);
+  }
+}
+
+async function rememberReady(kv: Env["ORDERS"], order: StoredOrder): Promise<void> {
+  await kv.put(checkoutOkKey(order.orderId), JSON.stringify(order));
+  await putOrder(kv, order);
+}
+
 async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Headers): Promise<Response> {
   const modeError = testModeError(env);
   if (modeError) return json(403, { ok: false, error: "test-mode", message: modeError }, cors);
@@ -245,13 +286,6 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
     body.amount,
   );
   if (!priced.ok) return json(400, { ok: false, error: "price", message: priced.error }, cors);
-  if (!(await checkoutAllowed(env.ORDERS, clientIp(request), now.getTime()))) {
-    return json(429, {
-      ok: false,
-      error: "rate-limit",
-      message: "Too many checkout attempts. Wait a few minutes and try again.",
-    }, cors);
-  }
 
   const input: CheckoutInput = {
     idempotencyKey,
@@ -265,33 +299,55 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   };
   const order = newOrder(input, captureModeOf(env), now.toISOString());
   const leaseToken = crypto.randomUUID();
-  const inProgress = json(409, {
-    ok: false,
-    error: "checkout-in-progress",
-    message: "This checkout is already starting. Wait a moment and try again.",
-  }, cors);
-  const existing = await getOrder(env.ORDERS, order.orderId);
+  const inProgress = () =>
+    json(409, {
+      ok: false,
+      error: "checkout-in-progress",
+      message: "This checkout is already starting. Wait a moment and try again.",
+    }, cors);
+  const replay = async (ready: StoredOrder): Promise<Response> => {
+    ready.customer = order.customer;
+    ready.meta = order.meta;
+    ready.updatedAt = now.toISOString();
+    await putOrder(env.ORDERS, ready);
+    return checkoutResponse(ready, env, cors, true);
+  };
+  const existing = (await readyCheckout(env.ORDERS, order.orderId)) || (await getOrder(env.ORDERS, order.orderId));
   if (existing) {
     if (existing.fingerprint !== order.fingerprint) {
       return json(409, { ok: false, error: "idempotency-conflict", message: "This checkout doesn’t match the original order. Start again." }, cors);
     }
-    if (checkoutReady(existing)) {
-      existing.customer = order.customer;
-      existing.meta = order.meta;
-      existing.updatedAt = now.toISOString();
-      await putOrder(env.ORDERS, existing);
-      return checkoutResponse(existing, env, cors, true);
-    }
+    if (checkoutReady(existing)) return replay(existing);
     const heldUntil = existing.checkoutLeaseUntil ? Date.parse(existing.checkoutLeaseUntil) : 0;
-    if (existing.checkoutLeaseToken && Number.isFinite(heldUntil) && heldUntil > now.getTime()) return inProgress;
+    if (existing.checkoutLeaseToken && Number.isFinite(heldUntil) && heldUntil > now.getTime()) {
+      const waited = await waitForCheckout(env.ORDERS, order.orderId);
+      if (waited && waited.fingerprint === order.fingerprint) return replay(waited);
+      const after = await getOrder(env.ORDERS, order.orderId);
+      if (after && after.status === "failed" && after.failureReason === "provider" && after.fingerprint === order.fingerprint) {
+        return providerFailure(cors);
+      }
+      return inProgress();
+    }
+  }
+  if (!(await checkoutAllowed(env.ORDERS, clientIp(request), now.getTime()))) {
+    return json(429, {
+      ok: false,
+      error: "rate-limit",
+      message: "Too many checkout attempts. Wait a few minutes and try again.",
+    }, cors);
   }
   order.checkoutLeaseToken = leaseToken;
   order.checkoutLeaseUntil = new Date(now.getTime() + 30_000).toISOString();
   await putOrder(env.ORDERS, order);
   const claimed = await getOrder(env.ORDERS, order.orderId);
   if (!claimed || claimed.checkoutLeaseToken !== leaseToken) {
-    if (claimed && checkoutReady(claimed)) return checkoutResponse(claimed, env, cors, true);
-    return inProgress;
+    const waited = await waitForCheckout(env.ORDERS, order.orderId);
+    if (waited && waited.fingerprint === order.fingerprint) return replay(waited);
+    const after = await getOrder(env.ORDERS, order.orderId);
+    if (after && after.status === "failed" && after.failureReason === "provider" && after.fingerprint === order.fingerprint) {
+      return providerFailure(cors);
+    }
+    return inProgress();
   }
   const current = claimed;
   current.customer = order.customer;
@@ -331,26 +387,29 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
       await env.ORDERS.put(pendingVippsKey(current.orderId), current.orderId);
     }
   } catch {
+    const waited = await waitForCheckout(env.ORDERS, current.orderId);
+    if (waited && waited.fingerprint === order.fingerprint) return replay(waited);
     const fresh = await getOrder(env.ORDERS, current.orderId);
-    if (fresh && checkoutReady(fresh)) return checkoutResponse(fresh, env, cors, true);
-    if (fresh && fresh.checkoutLeaseToken !== leaseToken) return inProgress;
+    if (fresh && fresh.checkoutLeaseToken && fresh.checkoutLeaseToken !== leaseToken) return inProgress();
     current.status = "failed";
     current.failureReason = "provider";
     current.checkoutLeaseToken = null;
     current.checkoutLeaseUntil = null;
+    current.clientSecret = null;
+    current.redirectUrl = null;
     current.updatedAt = now.toISOString();
+    const saved = await readyCheckout(env.ORDERS, current.orderId);
+    if (saved && saved.fingerprint === order.fingerprint) return replay(saved);
     await putOrder(env.ORDERS, current);
+    const late = await readyCheckout(env.ORDERS, current.orderId);
+    if (late && late.fingerprint === order.fingerprint && late.failureReason !== "provider") return replay(late);
     console.info(JSON.stringify({ msg: "checkout-provider-failed", orderId: current.orderId, provider: current.provider }));
-    return json(502, {
-      ok: false,
-      error: "provider",
-      message: "Payment didn’t go through. You haven’t been charged. Try again or pick another method.",
-    }, cors);
+    return providerFailure(cors);
   }
   current.checkoutLeaseToken = null;
   current.checkoutLeaseUntil = null;
   current.updatedAt = now.toISOString();
-  await putOrder(env.ORDERS, current);
+  await rememberReady(env.ORDERS, current);
   return checkoutResponse(current, env, cors, false);
 }
 
@@ -522,10 +581,36 @@ async function reconcilePendingVipps(env: Env, deps: Deps): Promise<void> {
     const age = now.getTime() - Date.parse(order.createdAt);
     if (!Number.isFinite(age) || age < VIPPS_POLL_MIN_MS) continue;
     if (age > VIPPS_POLL_MAX_MS) {
-      await env.ORDERS.delete(pendingVippsKey(orderId));
+      await expireOrSettleVipps(env, deps, order, now);
       continue;
     }
     await syncVippsOrder(env, deps, order, true);
+  }
+}
+
+/**
+ * One last read before giving up. A network error leaves the order on the cron.
+ * AUTHORIZED is captured. A payment still sitting in CREATED is marked expired.
+ */
+async function expireOrSettleVipps(env: Env, deps: Deps, order: StoredOrder, now: Date): Promise<void> {
+  const fetcher = deps.fetch || fetch;
+  let payment: VippsPayment;
+  try {
+    payment = await getVippsPayment(fetcher, vippsCreds(env), order.orderId, now.getTime());
+  } catch {
+    console.info(JSON.stringify({ msg: "vipps-expire-skipped", orderId: order.orderId }));
+    return;
+  }
+  try {
+    const settled = await settleVipps(env, deps, order, payment, now);
+    if (settled.order.status === "pending") {
+      const failed = await saveStatus(env.ORDERS, settled.order, "failed", "expired", now.toISOString(), "expired");
+      await env.ORDERS.delete(pendingVippsKey(failed.orderId));
+      return;
+    }
+    await forgetPendingVipps(env, settled.order);
+  } catch {
+    console.info(JSON.stringify({ msg: "vipps-expire-skipped", orderId: order.orderId }));
   }
 }
 
@@ -551,7 +636,6 @@ async function onVippsWebhook(request: Request, env: Env, deps: Deps, cors: Head
     contentHashHeader: request.headers.get("x-ms-content-sha256") || "",
     authorization: request.headers.get("authorization") || "",
     rawBody: raw,
-    nowMs: now.getTime(),
   });
   if (!signed) return json(401, { ok: false, error: "invalid-signature" }, cors);
   let body: { reference?: string; msn?: string; name?: string; amount?: unknown };
@@ -611,11 +695,15 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
   const path = url.pathname.replace(/\/$/, "") || "/";
   try {
     if (request.method === "GET" && path === "/health") {
+      const live = allowLive(env);
+      const vippsApi = vippsApiBase(live, env.VIPPS_API_BASE);
+      const stripeLive = (env.STRIPE_SECRET_KEY || "").startsWith("sk_live_");
       return json(200, {
         ok: true,
-        mode: allowLive(env) ? "live" : "test",
+        mode: live && (stripeLive || vippsApi === VIPPS_LIVE_API) ? "live" : "test",
+        allowLivePayments: live,
         captureMode: captureModeOf(env),
-        vippsApi: vippsApiBase(allowLive(env), env.VIPPS_API_BASE),
+        vippsApi,
       }, cors);
     }
     if (request.method === "POST" && path === "/checkout") return beginCheckout(request, env, deps, cors);

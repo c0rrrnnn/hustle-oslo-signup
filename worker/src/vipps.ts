@@ -102,8 +102,12 @@ export interface VippsCreds {
   apiBase: string;
 }
 
+function tokenCacheKey(creds: VippsCreds): string {
+  return `${creds.apiBase}|${creds.clientId}`;
+}
+
 async function accessToken(fetcher: typeof fetch, creds: VippsCreds, nowMs: number): Promise<string> {
-  const cached = tokenCache.get(creds.clientId);
+  const cached = tokenCache.get(tokenCacheKey(creds));
   if (cached && cached.exp > nowMs + 30_000) return cached.token;
   const response = await fetcher(`${creds.apiBase}/accesstoken/get`, {
     method: "POST",
@@ -120,7 +124,7 @@ async function accessToken(fetcher: typeof fetch, creds: VippsCreds, nowMs: numb
     throw new Error(`Vipps auth failed (${response.status})`);
   }
   const expiresIn = Number(payload.expires_in || 3600);
-  tokenCache.set(creds.clientId, { token: payload.access_token, exp: nowMs + expiresIn * 1000 });
+  tokenCache.set(tokenCacheKey(creds), { token: payload.access_token, exp: nowMs + expiresIn * 1000 });
   return payload.access_token;
 }
 
@@ -221,8 +225,10 @@ export async function vippsWebhookAuthorization(input: {
 
 /**
  * Vipps Webhooks API: SHA-256 body hash plus HMAC-SHA256 over
- * `METHOD\npathAndQuery\ndate;host;contentHash`, keyed with the registration secret.
- * The date must be within five minutes.
+ * `METHOD\npathAndQuery\ndate;host;contentHash`, keyed with the raw registration secret.
+ * The date is part of the signed string. It is not rejected for age: Vipps retries
+ * reuse the original x-ms-date, and a signed webhook is not treated as paid until
+ * the worker has re-read the payment from Vipps.
  */
 export async function verifyVippsWebhook(input: {
   secret: string;
@@ -233,11 +239,8 @@ export async function verifyVippsWebhook(input: {
   contentHashHeader: string;
   authorization: string;
   rawBody: string;
-  nowMs: number;
 }): Promise<boolean> {
   if (!input.secret || !input.dateHeader || !input.contentHashHeader || !input.authorization) return false;
-  const dateMs = Date.parse(input.dateHeader);
-  if (!Number.isFinite(dateMs) || Math.abs(input.nowMs - dateMs) > 5 * 60 * 1000) return false;
   const expected = await vippsWebhookAuthorization(input);
   if (!timingSafeEqual(expected.contentHash, input.contentHashHeader)) return false;
   return timingSafeEqual(expected.authorization, input.authorization.trim());

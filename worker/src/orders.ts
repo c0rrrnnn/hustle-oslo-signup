@@ -12,6 +12,11 @@ export function pendingVippsKey(orderId: string): string {
   return `pending-vipps:${orderId}`;
 }
 
+/** Provider success written before the order row, so a racing failure can restore it. */
+export function checkoutOkKey(orderId: string): string {
+  return `checkout-ok:${orderId}`;
+}
+
 export async function listPrefixedIds(kv: OrderKv, prefix: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor: string | undefined;

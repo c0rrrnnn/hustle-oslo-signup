@@ -109,7 +109,7 @@ No build step. No npm. Edit `events.js` when dates change and push.
 2. Add:
    - `SHEET_ID` = the spreadsheet ID from step A  
    - `NOTIFY_EMAIL` = `hustleinoslo@gmail.com` (optional; Code.gs defaults to this)
-   - `APPS_SCRIPT_SHARED_SECRET` = the same random value set on the worker (see `worker/SETUP.md`). Public payment-pending signups do not send it. Paid posts from the worker are rejected without it.
+   - `APPS_SCRIPT_SHARED_SECRET` = the same random value set on the worker (see `worker/SETUP.md`). Public payment-pending signups do not send it. Paid posts from the worker are rejected without it. Leave `REQUIRE_SHARED_SECRET` unset until the live site stops posting from the browser. Setting it earlier rejects unpaid signups.
 
 ### D. Deploy as Web App
 

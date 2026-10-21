@@ -99,21 +99,61 @@ test("the same idempotency key with a different booking conflicts", async () => 
   assert.equal(stored?.amountNok, 220);
 });
 
-test("checkout is rate limited", async () => {
+test("checkout is rate limited per hashed address and a replay does not count", async () => {
   const kv = memoryKv();
-  const env = testEnv(kv);
-  const recorded = stripeFetch();
+  const puts: { key: string; options?: { expirationTtl?: number } }[] = [];
+  const wrapped = {
+    get: (key: string) => kv.get(key),
+    delete: (key: string) => kv.delete(key),
+    list: (options: { prefix?: string; cursor?: string }) => kv.list(options),
+    async put(key: string, value: string, options?: { expirationTtl?: number }) {
+      puts.push({ key, options });
+      await kv.put(key, value, options);
+    },
+  };
+  const env = testEnv(wrapped);
+  const ip = "203.0.113.10";
+  const recorded = recordFetch((call) => {
+    if (call.method === "POST" && call.url.endsWith("/payment_intents")) {
+      const params = new URLSearchParams(call.body);
+      const orderId = params.get("metadata[orderId]") || "";
+      return jsonResponse({
+        id: "pi_" + orderId.slice(0, 8),
+        client_secret: "secret_" + orderId.slice(0, 8),
+        amount: 22000,
+        currency: "nok",
+        status: "requires_payment_method",
+        metadata: { orderId },
+      });
+    }
+    return jsonResponse({ error: { message: "unexpected " + call.url } }, 500);
+  });
   const deps = { fetch: recorded.fetcher, now: () => NOW };
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const response = await handleRequest(checkoutRequest(checkoutBody()), env, deps);
-    assert.equal(response.status, 200);
+  const requestFor = (n: number) =>
+    new Request("https://payments.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://hustleoslo.com", "cf-connecting-ip": ip },
+      body: JSON.stringify(
+        checkoutBody({ idempotencyKey: `11111111-1111-4111-8111-${n.toString(16).padStart(12, "0")}` }),
+      ),
+    });
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const response = await handleRequest(requestFor(attempt + 1), env, deps);
+    assert.equal(response.status, 200, String(attempt));
   }
-  const blocked = await handleRequest(checkoutRequest(checkoutBody()), env, deps);
+  const blocked = await handleRequest(requestFor(31), env, deps);
   assert.equal(blocked.status, 429);
   assert.equal((await blocked.json()).error, "rate-limit");
+  const replay = await handleRequest(requestFor(1), env, deps);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replay, true);
+  const ratePuts = puts.filter((put) => put.key.startsWith("rl:"));
+  assert.ok(ratePuts.length >= 1);
+  assert.equal(ratePuts.some((put) => put.key.includes(ip)), false);
+  assert.ok(ratePuts.every((put) => (put.options?.expirationTtl || 0) >= 60));
 });
 
-test("a simultaneous second checkout does not mark a successful order failed", async () => {
+test("a simultaneous second checkout receives the same payment session", async () => {
   const kv = memoryKv();
   const env = testEnv(kv);
   let started = 0;
@@ -138,20 +178,87 @@ test("a simultaneous second checkout does not mark a successful order failed", a
     return jsonResponse({ error: { message: "unexpected " + call.url } }, 500);
   });
   const deps = { fetch: recorded.fetcher, now: () => NOW };
-  const first = handleRequest(checkoutRequest(checkoutBody()), env, deps);
+  const firstPromise = handleRequest(checkoutRequest(checkoutBody()), env, deps);
   for (let i = 0; i < 40 && started < 1; i++) await new Promise((resolve) => setTimeout(resolve, 5));
-  const second = await handleRequest(checkoutRequest(checkoutBody()), env, deps);
-  const secondBody = await second.json();
-  assert.equal(second.status, 409, JSON.stringify(secondBody));
-  assert.equal(secondBody.error, "checkout-in-progress");
+  const secondPromise = handleRequest(checkoutRequest(checkoutBody()), env, deps);
+  await new Promise((resolve) => setTimeout(resolve, 20));
   release();
-  const created = await first;
-  assert.equal(created.status, 200);
+  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+  const created = await first.json();
+  const replay = await second.json();
+  assert.equal(first.status, 200, JSON.stringify(created));
+  assert.equal(second.status, 200, JSON.stringify(replay));
+  assert.equal(created.clientSecret, "pi_test_1_secret_abc");
+  assert.equal(replay.clientSecret, "pi_test_1_secret_abc");
+  assert.equal(replay.replay, true);
+  assert.equal(started, 1);
   const order = await getOrder(kv, ORDER_ID);
   assert.equal(order?.status, "pending");
   assert.equal(order?.failureReason, null);
   assert.equal(order?.clientSecret, "pi_test_1_secret_abc");
-  assert.equal(started, 1);
+});
+
+test("a racing provider error does not overwrite a checkout that succeeded", async () => {
+  const kv = memoryKv();
+  let leaseReads = 0;
+  const racing = {
+    get: async (key: string) => {
+      const value = await kv.get(key);
+      if (key.startsWith("order:") && value && value.includes('"checkoutLeaseToken":"') && !value.includes("pi_test_1_secret_abc")) {
+        leaseReads += 1;
+        // The winner's claim is visible. The next two reads are the loser
+        // looking the order up, and must miss it so both reach Stripe.
+        if (leaseReads === 2 || leaseReads === 3) return null;
+      }
+      return value;
+    },
+    put: (key: string, value: string, options?: { expirationTtl?: number }) => kv.put(key, value, options),
+    delete: (key: string) => kv.delete(key),
+    list: (options: { prefix?: string; cursor?: string }) => kv.list(options),
+  };
+  const env = testEnv(racing);
+  let started = 0;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const recorded = recordFetch((call) => {
+    if (call.method === "POST" && call.url.endsWith("/payment_intents")) {
+      started += 1;
+      if (started === 1) {
+        return gate.then(() =>
+          jsonResponse({
+            id: "pi_test_1",
+            client_secret: "pi_test_1_secret_abc",
+            amount: 22000,
+            currency: "nok",
+            status: "requires_payment_method",
+            metadata: { orderId: ORDER_ID },
+          }),
+        );
+      }
+      return jsonResponse({ error: { message: "stripe down" } }, 500);
+    }
+    return jsonResponse({ error: { message: "unexpected " + call.url } }, 500);
+  });
+  const deps = { fetch: recorded.fetcher, now: () => NOW };
+  const firstPromise = handleRequest(checkoutRequest(checkoutBody()), env, deps);
+  for (let i = 0; i < 40 && started < 1; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  const secondPromise = handleRequest(checkoutRequest(checkoutBody()), env, deps);
+  for (let i = 0; i < 40 && started < 2; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(started, 2);
+  release();
+  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+  const created = await first.json();
+  const other = await second.json();
+  assert.equal(first.status, 200, JSON.stringify(created));
+  assert.equal(second.status, 200, JSON.stringify(other));
+  assert.equal(created.clientSecret, "pi_test_1_secret_abc");
+  assert.equal(other.clientSecret, "pi_test_1_secret_abc");
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.status, "pending");
+  assert.equal(order?.failureReason, null);
+  assert.equal(order?.clientSecret, "pi_test_1_secret_abc");
 });
 
 test("live stripe keys are accepted only when live mode is explicitly on", async () => {
