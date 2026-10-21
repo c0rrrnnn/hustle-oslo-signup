@@ -394,11 +394,19 @@
     return (month + " " + day).trim();
   }
 
-  function upcomingDateHtml(ev) {
-    const parts = String(ev.date || "").split("-");
-    // Landing cards omit the October date. The event itself is unchanged.
-    if (Number(parts[1]) === 10) return "";
-    return '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>";
+  function osloTodayKey() {
+    const now = osloNow();
+    return now.y + "-" + pad2(now.m) + "-" + pad2(now.d);
+  }
+
+  // Landing cards use the Oslo calendar date at page load. A night today stays
+  // listed. Signup keeps isEventPast, which closes booking at 18:00 that day.
+  function landingUpcomingEvents() {
+    const today = osloTodayKey();
+    return (window.HUSTLE_EVENTS || []).filter((ev) => {
+      const date = String((ev && ev.date) || "");
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= today;
+    });
   }
 
   function upcomingKind(ev) {
@@ -411,7 +419,7 @@
     const host = $("#upcoming-events");
     if (!host) return;
     const empty = $("#upcoming-empty");
-    const events = upcomingEvents();
+    const events = landingUpcomingEvents();
     if (!events.length) {
       host.innerHTML = "";
       host.hidden = true;
@@ -424,7 +432,7 @@
       .map((ev) => {
         return (
           '<article class="upcoming-card" role="listitem">' +
-          upcomingDateHtml(ev) +
+          '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>" +
           '<p class="upcoming-kind">' + escapeHtml(upcomingKind(ev)) + "</p>" +
           "</article>"
         );
