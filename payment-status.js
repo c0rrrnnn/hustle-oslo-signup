@@ -27,6 +27,16 @@
     return kind === "paid" || kind === "failed" || kind === "reserved" || kind === "missing";
   }
 
+  /** How long the page waits for the webhook after Stripe.js has already answered. The sheet is not part of this wait. */
+  function confirmWaitMs(stripeSucceeded) {
+    return stripeSucceeded ? 1500 : 8000;
+  }
+
+  function pollDelayMs(attempt) {
+    const delay = 250 * 2 ** Math.min(attempt, 4);
+    return delay > 800 ? 800 : delay;
+  }
+
   function stripeConfirmOutcome(confirmed) {
     if (!confirmed || confirmed.error) {
       return { kind: "failed", message: (confirmed && confirmed.error && confirmed.error.message) || "" };
@@ -81,7 +91,14 @@
     };
   }
 
-  const api = { outcomeFromOrder: outcomeFromOrder, pollSettled: pollSettled, stripeConfirmOutcome: stripeConfirmOutcome, checkoutResult: checkoutResult };
+  const api = {
+    outcomeFromOrder: outcomeFromOrder,
+    pollSettled: pollSettled,
+    confirmWaitMs: confirmWaitMs,
+    pollDelayMs: pollDelayMs,
+    stripeConfirmOutcome: stripeConfirmOutcome,
+    checkoutResult: checkoutResult,
+  };
   root.HustlePaymentStatus = api;
   if (typeof module === "object" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

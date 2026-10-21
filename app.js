@@ -88,7 +88,9 @@
     elements: null,
     element: null,
     orderId: "",
+    surface: "",
     complete: false,
+    announcedBusy: false,
     js: null,
     timer: null,
     mountChain: null,
@@ -1073,12 +1075,16 @@
       payBtn.classList.toggle("bk-btn-primary", !orange);
     }
     const retry = $("#bk-fail-retry-text");
-    if (retry) retry.textContent = "Pay " + amt + " kr";
+    if (retry && !state.submitting) retry.textContent = "Pay " + amt + " kr";
     const retryBtn = $("#bk-fail-retry");
     if (retryBtn) {
       retryBtn.classList.toggle("bk-btn-vipps", method === "vipps");
       retryBtn.classList.toggle("bk-btn-primary", method !== "vipps");
     }
+    const wallet = paymentsLive() && (method === "apple" || method === "google");
+    if (payBtn) payBtn.hidden = wallet && !state.submitting;
+    if (retryBtn) retryBtn.hidden = wallet && !state.submitting;
+    syncPayBusy();
     $$(".bk-trust-by").forEach((el) => {
       el.textContent = who;
     });
@@ -1088,6 +1094,42 @@
     placePayActions();
     placeCardFields();
     placePaymentHost();
+  }
+
+  function syncPayBusy() {
+    const on = state.submitting === true;
+    $$(".bk-btn-pay").forEach((btn) => {
+      btn.setAttribute("aria-busy", on ? "true" : "false");
+      const spin = btn.querySelector(".bk-pay-spinner");
+      const lock = btn.querySelector(".bk-lock");
+      if (spin) spin.hidden = !on;
+      if (lock) lock.hidden = on;
+      if (on) btn.hidden = false;
+    });
+    if (on) {
+      const payText = $("#bk-pay-text");
+      const retryText = $("#bk-fail-retry-text");
+      if (payText) payText.textContent = "Paying…";
+      if (retryText) retryText.textContent = "Paying…";
+    }
+    if (on && !paymentUi.announcedBusy) {
+      paymentUi.announcedBusy = true;
+      const status = $("#bk-step-status");
+      if (status) status.textContent = "Paying…";
+      announce("Paying…");
+    }
+    if (!on) paymentUi.announcedBusy = false;
+  }
+
+  function logTiming(step, started, extra) {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    console.info(JSON.stringify(Object.assign({ msg: "timing", step: step, ms: Math.round(now - started) }, extra || {})));
+  }
+
+  function stripeSurface() {
+    if (state.paymentMethod === "google") return "google";
+    if (state.paymentMethod === "apple") return "apple";
+    return "card";
   }
 
   function renderCheckout() {
@@ -1189,6 +1231,7 @@
     paymentUi.elements = null;
     paymentUi.stripe = null;
     paymentUi.orderId = "";
+    paymentUi.surface = "";
     paymentUi.complete = false;
     setPaymentNote("");
     try {
@@ -1219,6 +1262,7 @@
       paymentUi.elements = null;
       paymentUi.stripe = null;
       paymentUi.orderId = "";
+      paymentUi.surface = "";
       paymentUi.complete = false;
     }
     return paymentUi.idempotencyKey;
@@ -1291,12 +1335,14 @@
       returnUrl: window.location.origin + window.location.pathname,
     };
     try {
+      const started = typeof performance !== "undefined" ? performance.now() : Date.now();
       const res = await fetch(workerUrl("/checkout"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
+      logTiming("create-intent", started, { ok: res.ok && data.ok !== false, replay: data.replay === true });
       if (!res.ok || data.ok === false) {
         return { ok: false, message: data.message || PAY_FAIL };
       }
@@ -1331,12 +1377,17 @@
     return paymentUi.mountChain;
   }
 
+  function sameStripeSurface(created) {
+    return paymentUi.orderId === created.orderId && paymentUi.surface === stripeSurface() && paymentUi.elements && paymentUi.element;
+  }
+
   async function mountStripeNow(created) {
     if (!created || !created.clientSecret || !publishableKeyOk(created.publishableKey)) {
       return { ok: false, message: PAY_FAIL };
     }
     const generation = paymentUi.prepToken;
-    if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
+    const surface = stripeSurface();
+    if (sameStripeSurface(created)) {
       placePaymentHost();
       return { ok: true };
     }
@@ -1346,7 +1397,7 @@
       return { ok: false, message: PAY_FAIL };
     }
     if (generation !== paymentUi.prepToken) return { ok: true };
-    if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
+    if (sameStripeSurface(created)) {
       placePaymentHost();
       return { ok: true };
     }
@@ -1374,20 +1425,7 @@
         },
       },
     });
-    const method = state.paymentMethod;
-    const element = elements.create("payment", {
-      layout: "tabs",
-      wallets: {
-        applePay: method === "google" ? "never" : "auto",
-        googlePay: method === "apple" ? "never" : "auto",
-      },
-      defaultValues: {
-        billingDetails: {
-          name: $("#bk-name").value.trim(),
-          email: $("#bk-email").value.trim(),
-        },
-      },
-    });
+    const element = surface === "card" ? createCardElement(elements) : createWalletElement(elements, surface);
     element.mount("#bk-payment-element");
     if (generation !== paymentUi.prepToken && paymentUi.element && paymentUi.element !== element) {
       try {
@@ -1401,7 +1439,96 @@
     paymentUi.elements = elements;
     paymentUi.element = element;
     paymentUi.orderId = created.orderId;
+    paymentUi.surface = surface;
     return { ok: true };
+  }
+
+  function createCardElement(elements) {
+    return elements.create("payment", {
+      layout: { type: "tabs", defaultCollapsed: false },
+      wallets: { applePay: "never", googlePay: "never", link: "never" },
+      defaultValues: {
+        billingDetails: {
+          name: $("#bk-name").value.trim(),
+          email: $("#bk-email").value.trim(),
+        },
+      },
+    });
+  }
+
+  function createWalletElement(elements, surface) {
+    const element = elements.create("expressCheckout", {
+      paymentMethods: {
+        applePay: surface === "apple" ? "auto" : "never",
+        googlePay: surface === "google" ? "auto" : "never",
+        link: "never",
+        paypal: "never",
+        amazonPay: "never",
+      },
+      buttonHeight: 48,
+      buttonTheme: { applePay: "black", googlePay: "black" },
+      layout: { maxColumns: 1, maxRows: 1, overflow: "never" },
+    });
+    element.on("ready", (event) => {
+      const methods = (event && event.availablePaymentMethods) || {};
+      const ready = surface === "apple" ? methods.applePay : methods.googlePay;
+      if (paymentUi.element !== element) return;
+      if (!ready) {
+        setPaymentNote(
+          surface === "apple"
+            ? "Apple Pay shows on Apple devices after this domain is registered in Stripe. Pay by card on this device."
+            : "Google Pay isn’t available in this browser yet. Pay by card.",
+          true,
+        );
+      } else {
+        setPaymentNote("");
+      }
+    });
+    element.on("confirm", () => {
+      if (paymentUi.element !== element) return undefined;
+      return confirmWalletPayment();
+    });
+    return element;
+  }
+
+  async function confirmWalletPayment() {
+    if (state.submitting || !paymentUi.stripe || !paymentUi.elements) return;
+    state.submitting = true;
+    const pay = $("#bk-pay");
+    const retry = $("#bk-fail-retry");
+    if (pay) pay.disabled = true;
+    if (retry) retry.disabled = true;
+    $("#book-sheet").setAttribute("aria-busy", "true");
+    updatePayChrome();
+    const started = typeof performance !== "undefined" ? performance.now() : Date.now();
+    try {
+      const confirmed = await paymentUi.stripe.confirmPayment({
+        elements: paymentUi.elements,
+        confirmParams: {
+          return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(paymentUi.orderId),
+        },
+        redirect: "if_required",
+      });
+      logTiming("stripe-confirm", started, { surface: paymentUi.surface });
+      const result = await resolveConfirmed(paymentUi.orderId, confirmed, started);
+      if (result && result.redirecting) return;
+      if (!result || result.ok !== true) {
+        showPaymentFailed(result && result.message);
+        return;
+      }
+      state.transactionNumber = result.transactionNumber || "";
+      state.paymentPending = false;
+      showConfirmation(result.booking || { ok: true, confirmationSent: false, paidByWorker: true });
+    } catch (err) {
+      console.error(err);
+      showPaymentFailed(PAY_FAIL);
+    } finally {
+      state.submitting = false;
+      if (pay) pay.disabled = false;
+      if (retry) retry.disabled = false;
+      $("#book-sheet").setAttribute("aria-busy", "false");
+      updatePayChrome();
+    }
   }
 
   function resultFromOrder(data, confirmOutcome) {
@@ -1416,9 +1543,11 @@
     return { ok: false, message: PAY_FAIL };
   }
 
-  async function pollOrder(orderId) {
-    const deadline = Date.now() + 20000;
+  async function pollOrder(orderId, options) {
+    const stripeSucceeded = !!(options && options.stripeSucceeded);
+    const deadline = Date.now() + window.HustlePaymentStatus.confirmWaitMs(stripeSucceeded);
     let last = null;
+    let attempt = 0;
     while (Date.now() < deadline) {
       try {
         const res = await fetch(workerUrl("/order/" + encodeURIComponent(orderId)));
@@ -1430,9 +1559,29 @@
         last = last || { status: "pending" };
       }
       if (window.HustlePaymentStatus.pollSettled(last)) return last;
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      const wait = window.HustlePaymentStatus.pollDelayMs(attempt);
+      attempt += 1;
+      if (Date.now() + wait >= deadline) break;
+      await new Promise((resolve) => window.setTimeout(resolve, wait));
     }
     return last;
+  }
+
+  async function resolveConfirmed(orderId, confirmed, started) {
+    const decision = window.HustlePaymentStatus.stripeConfirmOutcome(confirmed);
+    if (decision.kind === "failed") {
+      return { ok: false, message: decision.message || PAY_FAIL };
+    }
+    const pollStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const polled = await pollOrder(orderId, { stripeSucceeded: decision.succeeded === true });
+    logTiming("order-poll", pollStarted, {
+      orderId: orderId,
+      status: polled && polled.status,
+      stripeSucceeded: decision.succeeded === true,
+    });
+    const result = resultFromOrder(polled, decision);
+    logTiming("success-resolve", started, { orderId: orderId, ok: !!(result && result.ok) });
+    return result;
   }
 
   function savePaymentSession(orderId) {
@@ -1561,12 +1710,21 @@
     const mounted = await mountStripe(created);
     if (!mounted.ok) return { ok: false, message: mounted.message || PAY_FAIL };
     if (!paymentUi.stripe || !paymentUi.elements) return { ok: false, message: PAY_FAIL };
+    if (paymentUi.surface === "apple" || paymentUi.surface === "google") {
+      return {
+        ok: false,
+        reason: "needs-details",
+        message: paymentUi.surface === "apple" ? "Use the Apple Pay button." : "Use the Google Pay button.",
+      };
+    }
     let submitted;
+    const submitStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
     try {
       submitted = await paymentUi.elements.submit();
     } catch (err) {
       return { ok: false, message: PAY_FAIL };
     }
+    logTiming("elements-submit", submitStarted, { orderId: created.orderId });
     if (submitted && submitted.error) {
       const message = submitted.error.message || "Enter your payment details, then press Pay again.";
       setPaymentNote(message, true);
@@ -1575,6 +1733,7 @@
     setPaymentNote("");
     savePaymentSession(created.orderId);
     let confirmed;
+    const confirmStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
     try {
       confirmed = await paymentUi.stripe.confirmPayment({
         elements: paymentUi.elements,
@@ -1586,12 +1745,8 @@
     } catch (err) {
       return { ok: false, message: PAY_FAIL };
     }
-    const decision = window.HustlePaymentStatus.stripeConfirmOutcome(confirmed);
-    if (decision.kind === "failed") {
-      return { ok: false, message: decision.message || PAY_FAIL };
-    }
-    const polled = await pollOrder(created.orderId);
-    return resultFromOrder(polled, decision);
+    logTiming("stripe-confirm", confirmStarted, { surface: "card" });
+    return resolveConfirmed(created.orderId, confirmed, confirmStarted);
   }
 
   function buildOrder() {
@@ -1952,9 +2107,9 @@
       const retry = $("#bk-fail-retry");
       if (pay) pay.disabled = true;
       if (retry) retry.disabled = true;
-      const payText = $("#bk-pay-text");
-      if (payText) payText.textContent = "Paying…";
       $("#book-sheet").setAttribute("aria-busy", "true");
+      updatePayChrome();
+      const payStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
       try {
         const result = await startPayment(state.paymentMethod, order);
         if (result && result.redirecting) return;
@@ -1969,6 +2124,7 @@
         state.transactionNumber = result.transactionNumber || "";
         state.paymentPending = false;
         showConfirmation(result.booking || { ok: true, confirmationSent: false, paidByWorker: true });
+        logTiming("success-page", payStarted, { ok: true });
       } catch (err) {
         console.error(err);
         showPaymentFailed(PAY_FAIL);

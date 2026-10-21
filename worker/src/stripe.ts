@@ -113,7 +113,8 @@ export async function createPaymentIntent(
     body: formEncode({
       amount: String(input.amountMinor),
       currency: "nok",
-      "payment_method_types[0]": "card",
+      // Card plus Apple Pay and Google Pay. Stripe rejects this together with payment_method_types.
+      "automatic_payment_methods[enabled]": "true",
       capture_method: "automatic",
       description: input.description.slice(0, 200),
       receipt_email: input.receiptEmail,

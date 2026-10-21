@@ -15,6 +15,8 @@ function stripeFetch() {
       const params = new URLSearchParams(call.body);
       assert.equal(params.get("amount"), "22000");
       assert.equal(params.get("currency"), "nok");
+      assert.equal(params.get("automatic_payment_methods[enabled]"), "true");
+      assert.equal(params.get("payment_method_types[0]"), null);
       assert.equal(params.get("metadata[orderId]"), ORDER_ID);
       assert.equal(call.headers["idempotency-key"], ORDER_ID);
       assert.equal(call.headers.authorization, "Bearer sk_test_123");
@@ -42,7 +44,10 @@ function checkoutRequest(body: unknown) {
 test("the deployed allow-list is the public site and live mode stays off", () => {
   const toml = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
   const origins = toml.split("\n").find((line) => line.startsWith("ALLOWED_ORIGINS"));
-  assert.equal(origins, 'ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com"');
+  assert.equal(
+    origins,
+    'ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com,https://hustle-oslo-test.pages.dev"',
+  );
   assert.match(toml, /ALLOW_LIVE_PAYMENTS = "false"/);
 });
 
@@ -73,6 +78,33 @@ test("checkout prices on the server and replays the same order id", async () => 
   const stored = await getOrder(kv, ORDER_ID);
   assert.equal(stored?.amountMinor, 22000);
   assert.equal(stored?.nights[0].amount, 220);
+});
+
+test("checkout create-intent does not call Apps Script", async () => {
+  const kv = memoryKv();
+  const env = testEnv(kv);
+  const stripeDelayMs = 80;
+  const recorded = recordFetch(async (call) => {
+    if (call.method === "POST" && call.url.endsWith("/payment_intents")) {
+      await new Promise((resolve) => setTimeout(resolve, stripeDelayMs));
+      return jsonResponse({
+        id: "pi_test_1",
+        client_secret: "pi_test_1_secret_abc",
+        amount: 22000,
+        currency: "nok",
+        status: "requires_payment_method",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    return jsonResponse({ error: { message: "unexpected " + call.url } }, 500);
+  });
+  const started = Date.now();
+  const response = await handleRequest(checkoutRequest(checkoutBody()), env, { fetch: recorded.fetcher, now: () => NOW });
+  const ms = Date.now() - started;
+  assert.equal(response.status, 200);
+  assert.ok(ms >= stripeDelayMs - 20 && ms < 250, "checkout took " + ms + "ms");
+  assert.equal(recorded.calls.some((call) => call.url === env.APPS_SCRIPT_URL), false);
+  console.info(JSON.stringify({ msg: "timing-measured", step: "create-intent", ms, stripeDelayMs }));
 });
 
 test("the same idempotency key with a different booking conflicts", async () => {

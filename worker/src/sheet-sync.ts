@@ -52,11 +52,21 @@ export async function deliverPaidBooking(
   const claimed = await getOrder(env.ORDERS, orderId);
   if (!claimed || claimed.appsScriptLeaseToken !== token) return "skipped";
 
+  const postStarted = Date.now();
   const result = await postPaidBooking(
     deps.fetch || fetch,
     env.APPS_SCRIPT_URL,
     claimed,
     env.APPS_SCRIPT_SHARED_SECRET,
+  );
+  console.info(
+    JSON.stringify({
+      msg: "timing",
+      step: "apps-script-post",
+      orderId,
+      ms: Date.now() - postStarted,
+      ok: result.ok,
+    }),
   );
   const latest = (await getOrder(env.ORDERS, orderId)) || claimed;
   if (latest.appsScriptLeaseToken !== token) return "skipped";

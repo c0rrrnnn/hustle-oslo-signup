@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const status = require("../../payment-status.js") as {
   outcomeFromOrder: (data: unknown) => { kind: string; confirmationSent?: boolean };
   pollSettled: (data: unknown) => boolean;
+  confirmWaitMs: (stripeSucceeded: boolean) => number;
+  pollDelayMs: (attempt: number) => number;
   stripeConfirmOutcome: (confirmed: unknown) => { kind: string; message?: string; succeeded?: boolean };
   checkoutResult: (order: unknown, confirm: unknown) => {
     ok: boolean;
@@ -29,6 +31,12 @@ test("a paid order is booked before the sheet post finishes", () => {
   assert.equal(view.booking && view.booking.ok, true);
   assert.equal(view.booking && view.booking.pendingConfirmation, undefined);
   assert.equal(view.booking && view.booking.confirmationSent, false);
+});
+
+test("a succeeded card waits briefly for the webhook and does not wait on the sheet", () => {
+  assert.equal(status.confirmWaitMs(true), 1500);
+  assert.equal(status.confirmWaitMs(false), 8000);
+  assert.deepEqual([0, 1, 2, 3].map((attempt) => status.pollDelayMs(attempt)), [250, 500, 800, 800]);
 });
 
 test("polling keeps waiting only while the order is still pending", () => {
@@ -60,6 +68,15 @@ test("a succeeded PaymentIntent still becomes the booked screen if the poll is s
   assert.equal(view.ok, true);
   assert.equal(view.booking && view.booking.ok, true);
   assert.equal(view.booking && view.booking.pendingConfirmation, undefined);
+});
+
+test("the pay button loader is static when motion is reduced", () => {
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  assert.match(html, /id="bk-pay"[^>]*aria-busy="false"/);
+  assert.match(html, /class="bk-pay-spinner"/);
+  assert.match(css, /@keyframes bk-pay-spin/);
+  assert.match(css, /\.bk-pay-spinner \{[^}]*animation: none !important;/);
 });
 
 test("confirmation and organiser subjects are plain ASCII", () => {

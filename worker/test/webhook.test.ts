@@ -416,6 +416,48 @@ test("stripe webhook returns before Apps Script answers, then the background pos
   assert.equal(scriptCalls, 1);
 });
 
+test("a slow Apps Script post does not delay the paid webhook", async () => {
+  const { kv, env } = await seedCardOrder();
+  const payload = stripeEvent(1);
+  const now = new Date("2026-10-15T10:05:00.000Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+  const sheetDelayMs = 400;
+  const recorded = recordFetch(async (call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "succeeded",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) {
+      await new Promise((resolve) => setTimeout(resolve, sheetDelayMs));
+      return jsonResponse({ ok: true, confirmationSent: true });
+    }
+    return jsonResponse({ ok: false }, 500);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
+  const started = Date.now();
+  const response = await handleRequest(
+    new Request("https://payments.test/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+      body: payload,
+    }),
+    env,
+    deps,
+  );
+  const ms = Date.now() - started;
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "paid");
+  assert.ok(ms < sheetDelayMs, "webhook waited " + ms + "ms for a " + sheetDelayMs + "ms sheet write");
+  console.info(JSON.stringify({ msg: "timing-measured", step: "webhook-paid", ms, sheetDelayMs }));
+  await deps.flush();
+  assert.equal((await getOrder(kv, ORDER_ID))?.appsScriptPosted, true);
+});
+
 test("cron retries an unposted paid order after backoff and does not post it twice", async () => {
   const { kv, env } = await seedCardOrder();
   const now = new Date("2026-10-15T10:05:00.000Z");

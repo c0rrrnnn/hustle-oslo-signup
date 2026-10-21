@@ -350,6 +350,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
     return inProgress();
   }
   const current = claimed;
+  const checkoutStarted = Date.now();
   current.customer = order.customer;
   current.meta = order.meta;
   current.returnUrl = order.returnUrl;
@@ -358,6 +359,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   const fetcher = deps.fetch || fetch;
   try {
     if (current.provider === "stripe") {
+      const intentStarted = Date.now();
       const intent = await createPaymentIntent(fetcher, env.STRIPE_SECRET_KEY, {
         amountMinor: current.amountMinor,
         orderId: current.orderId,
@@ -365,6 +367,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
         description: paymentDescription(current),
         method: current.method,
       });
+      console.info(JSON.stringify({ msg: "timing", step: "create-intent", orderId: current.orderId, ms: Date.now() - intentStarted }));
       current.paymentId = intent.id || null;
       current.clientSecret = intent.client_secret || null;
       current.providerStatus = intent.status || "requires_payment_method";
@@ -410,6 +413,15 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   current.checkoutLeaseUntil = null;
   current.updatedAt = now.toISOString();
   await rememberReady(env.ORDERS, current);
+  console.info(
+    JSON.stringify({
+      msg: "timing",
+      step: "checkout",
+      orderId: current.orderId,
+      provider: current.provider,
+      ms: Date.now() - checkoutStarted,
+    }),
+  );
   return checkoutResponse(current, env, cors, false);
 }
 
@@ -448,6 +460,7 @@ async function acceptPaid(
 }
 
 async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Headers): Promise<Response> {
+  const webhookStarted = Date.now();
   const modeError = testModeError(env);
   if (modeError) return json(403, { ok: false, error: "test-mode", message: modeError }, cors);
   const raw = await request.text();
@@ -472,6 +485,7 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
   const orderId = event.data?.object?.metadata?.orderId || "";
   const hintedId = event.data?.object?.id || "";
   if (!orderId) return json(200, { ok: true, ignored: true }, cors);
+  console.info(JSON.stringify({ msg: "timing", step: "webhook-arrival", provider: "stripe", orderId, ms: Date.now() - webhookStarted }));
   const order = await getOrder(env.ORDERS, orderId);
   if (!order || order.provider !== "stripe") return json(200, { ok: true, ignored: true }, cors);
   const paymentIntentId = order.paymentId || hintedId;
@@ -487,6 +501,7 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
   const decision = decideStripe(intent, order);
   if (decision.action === "paid") {
     await acceptPaid(env, deps, order, decision.paymentId, "succeeded", now);
+    console.info(JSON.stringify({ msg: "timing", step: "webhook-paid", provider: "stripe", orderId, ms: Date.now() - webhookStarted }));
     return json(200, { ok: true, status: "paid" }, cors);
   }
   if (decision.action === "failed") {

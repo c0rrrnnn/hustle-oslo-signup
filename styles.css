@@ -2401,6 +2401,29 @@ body.bk-open {
   display: inline-block;
 }
 
+.bk-pay-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: bk-pay-spin 0.7s linear infinite;
+}
+
+@keyframes bk-pay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-pay-spinner {
+    animation: none !important;
+  }
+}
+
 .bk-mini {
   text-align: center;
   color: #a1a1aa;

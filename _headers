@@ -1,0 +1,3 @@
+# Cloudflare Pages. Stripe’s Apple Pay check requests this file on the checkout domain.
+/.well-known/apple-developer-merchantid-domain-association
+  Content-Type: text/plain
