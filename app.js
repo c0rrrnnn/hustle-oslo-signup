@@ -1137,6 +1137,41 @@
     placePayActions();
     placeCardFields();
     placePaymentHost();
+    syncFootPad();
+  }
+
+  // The terms line wraps, so the sticky footer's height is measured rather
+  // than hard-coded. --bk-foot-h is the border box, which already includes
+  // the footer's own safe-area padding. The content pad adds that inset once
+  // more so the last payment row can clear the home indicator.
+  function syncFootPad() {
+    const sheet = $("#book-sheet");
+    const foot = sheet && $(".bk-foot", sheet);
+    if (!sheet || !foot) return;
+    let height = 0;
+    if (typeof foot.getBoundingClientRect === "function") {
+      const rect = foot.getBoundingClientRect();
+      if (rect && Number.isFinite(rect.height)) height = Math.ceil(rect.height);
+    }
+    if (sheet.style && typeof sheet.style.setProperty === "function") {
+      sheet.style.setProperty("--bk-foot-h", height + "px");
+    }
+    const payBar = (state.view === "checkout" || state.view === "failed") && !wideCheckout() && !foot.hidden;
+    sheet.classList.toggle("is-clear-foot", payBar);
+  }
+
+  function watchFootPad() {
+    syncFootPad();
+    const foot = $(".bk-foot");
+    if (foot && typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(function () {
+        syncFootPad();
+      });
+      observer.observe(foot);
+    }
+    if (typeof window.addEventListener === "function") {
+      window.addEventListener("resize", syncFootPad);
+    }
   }
 
   function syncPayBusy() {
@@ -2345,6 +2380,7 @@
     const form = $("#bk-details-form");
     if (form) form.addEventListener("submit", onDetailsSubmit);
     document.addEventListener("keydown", onKeydown);
+    watchFootPad();
     const wide = window.matchMedia("(min-width: 601px)");
     if (typeof wide.addEventListener === "function") {
       wide.addEventListener("change", () => {

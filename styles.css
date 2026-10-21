@@ -2322,6 +2322,7 @@ body.bk-open {
 .bk-foot {
   position: sticky;
   bottom: 0;
+  z-index: 4;
   margin-top: auto;
   background: #121214;
   border-top: 1px solid #2a2a2e;
@@ -3275,10 +3276,10 @@ body.bk-open {
 
 .bk-banner {
   background: rgba(255, 138, 138, 0.08);
-  border: 1px solid #ff8a8a;
+  border: 0;
   border-radius: 12px;
   padding: 12px 14px;
-  color: #fecaca;
+  color: #a1a1aa;
   font-size: 0.88rem;
   margin: 0 0 14px;
   line-height: 1.4;
@@ -3545,4 +3546,21 @@ body.bk-open {
   .bk-sheet.is-wide #bk-pay-seg {
     display: none;
   }
+}
+
+/* Checkout and the failed-payment step: the terms line and Pay button stay
+   sticky, without the opaque band that covered the payment list. The body
+   pad is the footer's measured height plus the home-indicator inset. The
+   matching negative margin lets that pad be the footer's slot, so the list
+   can scroll clear of Pay without a second empty gap. */
+.bk-sheet.is-clear-foot .bk-foot {
+  background: transparent;
+  background-image: none;
+  border-top: 0;
+  box-shadow: none;
+  margin-top: calc(-1 * var(--bk-foot-h, 0px));
+}
+
+.bk-sheet.is-clear-foot .bk-body {
+  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
 }
