@@ -530,6 +530,8 @@
       if (step) step.hidden = name !== view;
       if (foot) foot.hidden = name !== view;
     });
+    const footer = $(".bk-foot", sheet);
+    if (footer) footer.hidden = !document.getElementById("bk-foot-" + view);
     const prog = PROGRESS[view] || 1;
     $$("#bk-prog i").forEach((bar, i) => bar.classList.toggle("on", i < prog));
     const status = $("#bk-step-status");
@@ -649,6 +651,47 @@
     }
     setErr("student", false);
     applyPriceTierToSelections();
+  }
+
+  // A second tap in this window is the same press landing on the next step.
+  let studentAdvancedAt = 0;
+
+  function studentAdvanceLocked() {
+    return studentAdvancedAt !== 0 && Date.now() - studentAdvancedAt < 500;
+  }
+
+  function chooseStudent(tier) {
+    if (studentAdvanceLocked()) return;
+    setTier(tier);
+    if (state.view !== "student") return;
+    studentAdvancedAt = Date.now();
+    go("dates");
+  }
+
+  function swallowStudentFollowup(e) {
+    if (!studentAdvanceLocked() || state.view === "student") return false;
+    e.preventDefault();
+    if (typeof e.stopPropagation === "function") e.stopPropagation();
+    return true;
+  }
+
+  function onStudentChoiceKey(e) {
+    if (state.view !== "student") return false;
+    const yes = $("#bk-student-yes");
+    const no = $("#bk-student-no");
+    const active = document.activeElement;
+    if (!yes || !no || (active !== yes && active !== no)) return false;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      (active === yes ? no : yes).focus();
+      return true;
+    }
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      chooseStudent(active.getAttribute("data-value"));
+      return true;
+    }
+    return false;
   }
 
   function initCalendarMonth() {
@@ -2165,6 +2208,7 @@
   function onKeydown(e) {
     const sheet = $("#book-sheet");
     if (!sheet || sheet.hidden) return;
+    if (onStudentChoiceKey(e)) return;
     if (e.key === "Escape") {
       const help = $("#bk-phone-help");
       const helpBtn = $("#bk-phone-help-btn");
@@ -2202,6 +2246,7 @@
   }
 
   function onSheetClick(e) {
+    if (swallowStudentFollowup(e)) return;
     const actionEl = e.target.closest("[data-action]");
     if (!actionEl || !$("#book-sheet").contains(actionEl)) return;
     const action = actionEl.dataset.action;
@@ -2216,15 +2261,7 @@
     }
     if (action === "close") return closeSheet();
     if (action === "back") return onBack();
-    if (action === "student") return setTier(actionEl.dataset.value);
-    if (action === "student-next") {
-      if (!state.priceTier) {
-        setErr("student", true);
-        announce("Please choose Yes or No.");
-        return;
-      }
-      return go("dates");
-    }
+    if (action === "student") return chooseStudent(actionEl.dataset.value);
     if (action === "cal-prev") {
       if (canPrevMonth()) shiftMonth(-1);
       return;
@@ -2300,6 +2337,7 @@
     if (start) start.addEventListener("click", openSheet);
     const sheet = $("#book-sheet");
     if (sheet) {
+      sheet.addEventListener("pointerdown", swallowStudentFollowup);
       sheet.addEventListener("click", onSheetClick);
       sheet.addEventListener("change", onSheetChange);
       sheet.addEventListener("input", onSheetInput);
