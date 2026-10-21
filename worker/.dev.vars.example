@@ -1,5 +1,7 @@
 # Copy to worker/.dev.vars for `wrangler dev`. Never commit .dev.vars.
-# Test keys only. The worker rejects sk_live_ / pk_live_ and always calls apitest.vipps.no.
+# Leave ALLOW_LIVE_PAYMENTS false. Live Stripe keys and https://api.vipps.no stay refused.
+# Add localhost here for local preview. Do not put it in wrangler.toml.
+ALLOWED_ORIGINS=https://hustleoslo.com,https://www.hustleoslo.com,http://localhost:8765,http://127.0.0.1:8765
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PUBLISHABLE_KEY=
@@ -7,5 +9,6 @@ VIPPS_CLIENT_ID=
 VIPPS_CLIENT_SECRET=
 VIPPS_SUBSCRIPTION_KEY=
 VIPPS_MSN=
+VIPPS_WEBHOOK_SECRET=
 APPS_SCRIPT_SHARED_SECRET=
 ADMIN_SECRET=

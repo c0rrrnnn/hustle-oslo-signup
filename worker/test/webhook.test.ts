@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
-import { handleRequest } from "../src/handler.ts";
-import { clearVippsTokenCache } from "../src/vipps.ts";
+import { handleRequest, reconcilePayments } from "../src/handler.ts";
 import { canMarkPaid, getOrder, markOrderPaid, newOrder } from "../src/orders.ts";
 import { retryUnpostedBookings, sheetBackoffMs } from "../src/sheet-sync.ts";
 import { verifyStripeSignature, decideStripe } from "../src/stripe.ts";
-import { interpretVipps } from "../src/vipps.ts";
+import { clearVippsTokenCache, interpretVipps, verifyVippsWebhook, vippsWebhookAuthorization } from "../src/vipps.ts";
 import { backgroundDeps, bundlePrice, checkoutBody, jsonResponse, memoryKv, NOW, ORDER_ID, recordFetch, testEnv } from "./helpers.ts";
 
 function sign(payload: string, secret: string, timestamp: string): string {
@@ -15,6 +14,30 @@ function sign(payload: string, secret: string, timestamp: string): string {
 }
 
 const SECRET = "whsec_test_secret";
+const VIPPS_WEBHOOK_SECRET = "vipps-webhook-secret";
+
+async function vippsWebhookRequest(body: unknown, when = NOW, secret = VIPPS_WEBHOOK_SECRET) {
+  const raw = JSON.stringify(body);
+  const dateHeader = when.toUTCString();
+  const proof = await vippsWebhookAuthorization({
+    secret,
+    method: "POST",
+    pathAndQuery: "/webhooks/vipps",
+    host: "payments.test",
+    dateHeader,
+    rawBody: raw,
+  });
+  return new Request("https://payments.test/webhooks/vipps", {
+    method: "POST",
+    body: raw,
+    headers: {
+      "content-type": "application/json",
+      "x-ms-date": dateHeader,
+      "x-ms-content-sha256": proof.contentHash,
+      authorization: proof.authorization,
+    },
+  });
+}
 
 test("stripe signatures accept the matching v1 and reject tampering, the wrong secret, and a stale timestamp", async () => {
   const payload = "{\"id\":\"evt_test\"}";
@@ -541,15 +564,7 @@ test("vipps webhook ignores the posted amount and captures from the server payme
     success: true,
   };
   const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
-  const response = await handleRequest(
-    new Request("https://payments.test/webhooks/vipps", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(webhook),
-    }),
-    env,
-    deps,
-  );
+  const response = await handleRequest(await vippsWebhookRequest(webhook), env, deps);
   assert.equal(response.status, 200);
   assert.equal((await response.json()).status, "paid");
   assert.equal(seeded.isCaptured(), true);
@@ -561,14 +576,7 @@ test("vipps webhook ignores the posted amount and captures from the server payme
   assert.equal((await getOrder(kv, ORDER_ID))?.status, "paid");
 
   const posts = seeded.scriptBodies.length;
-  const again = await handleRequest(
-    new Request("https://payments.test/webhooks/vipps", {
-      method: "POST",
-      body: JSON.stringify(webhook),
-    }),
-    env,
-    deps,
-  );
+  const again = await handleRequest(await vippsWebhookRequest(webhook), env, deps);
   assert.equal(again.status, 200);
   await deps.flush();
   assert.equal(seeded.scriptBodies.length, posts);
@@ -578,11 +586,7 @@ test("vipps reserve mode does not capture or record until the admin capture call
   const { kv, env, seeded } = await seedVipps({ CAPTURE_MODE: "reserve" });
   const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
   const webhook = { msn: "123456", reference: ORDER_ID, name: "AUTHORIZED", amount: { currency: "NOK", value: 1 } };
-  const reserved = await handleRequest(
-    new Request("https://payments.test/webhooks/vipps", { method: "POST", body: JSON.stringify(webhook) }),
-    env,
-    deps,
-  );
+  const reserved = await handleRequest(await vippsWebhookRequest(webhook), env, deps);
   assert.equal((await reserved.json()).status, "reserved");
   assert.equal(seeded.isCaptured(), false);
   await deps.flush();
@@ -628,10 +632,7 @@ test("a vipps webhook that is not authorized yet does not capture", async () => 
     return jsonResponse({ ok: false }, 500);
   });
   const response = await handleRequest(
-    new Request("https://payments.test/webhooks/vipps", {
-      method: "POST",
-      body: JSON.stringify({ msn: "123456", reference: ORDER_ID, name: "CAPTURED", amount: { value: 22000 } }),
-    }),
+    await vippsWebhookRequest({ msn: "123456", reference: ORDER_ID, name: "CAPTURED", amount: { value: 22000 } }),
     env,
     { fetch: recorded.fetcher, now: () => NOW },
   );
@@ -647,5 +648,180 @@ test("order status omits the Stripe client secret", async () => {
   assert.equal(body.status, "pending");
   assert.equal(body.amountNok, 220);
   assert.equal("clientSecret" in body, false);
+  assert.equal("email" in body, false);
+  assert.equal(body.customer, undefined);
   assert.equal(body.paymentId, null);
+});
+
+test("vipps webhook signatures follow the Webhooks API string-to-sign and reject a bad signature", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+  const raw = "{\"some-unique-content\":\"ee6e441b-cc4a-46f8-895d-a5af79bcc233/hello-world\"}";
+  const dateHeader = "Thu, 30 Mar 2023 08:38:32 GMT";
+  const nowMs = Date.parse(dateHeader);
+  const proof = await vippsWebhookAuthorization({
+    secret,
+    method: "POST",
+    pathAndQuery: "/e2cee29b-012e-4f1d-8ef4-e95fd74a7a63",
+    host: "webhook.site",
+    dateHeader,
+    rawBody: raw,
+  });
+  assert.equal(proof.contentHash, "lNlsp1XA03N34HrQsVzPgJKtC+r7l/RBF4V3JQUWMj4=");
+  const ok = await verifyVippsWebhook({
+    secret,
+    method: "POST",
+    pathAndQuery: "/e2cee29b-012e-4f1d-8ef4-e95fd74a7a63",
+    host: "webhook.site",
+    dateHeader,
+    contentHashHeader: proof.contentHash,
+    authorization: proof.authorization,
+    rawBody: raw,
+    nowMs,
+  });
+  assert.equal(ok, true);
+  assert.equal(await verifyVippsWebhook({
+    secret,
+    method: "POST",
+    pathAndQuery: "/e2cee29b-012e-4f1d-8ef4-e95fd74a7a63",
+    host: "webhook.site",
+    dateHeader,
+    contentHashHeader: proof.contentHash,
+    authorization: "HMAC-SHA256 SignedHeaders=x-ms-date;host;x-ms-content-sha256&Signature=agAiSyogQbDHpeucoNwYz+yAr5nJ+v+zasdkSbqzv+U=",
+    rawBody: raw,
+    nowMs,
+  }), false);
+  assert.equal(await verifyVippsWebhook({
+    secret,
+    method: "POST",
+    pathAndQuery: "/e2cee29b-012e-4f1d-8ef4-e95fd74a7a63",
+    host: "webhook.site",
+    dateHeader,
+    contentHashHeader: proof.contentHash,
+    authorization: proof.authorization,
+    rawBody: raw + " ",
+    nowMs,
+  }), false);
+  assert.equal(await verifyVippsWebhook({
+    secret: "",
+    method: "POST",
+    pathAndQuery: "/webhooks/vipps",
+    host: "payments.test",
+    dateHeader,
+    contentHashHeader: "x",
+    authorization: "y",
+    rawBody: raw,
+    nowMs,
+  }), false);
+});
+
+test("an unsigned vipps webhook is rejected before the payment is read", async () => {
+  const { env } = await seedVipps();
+  const recorded = recordFetch(() => {
+    throw new Error("vipps should not be called");
+  });
+  const response = await handleRequest(
+    new Request("https://payments.test/webhooks/vipps", {
+      method: "POST",
+      body: JSON.stringify({ msn: "123456", reference: ORDER_ID, name: "CAPTURED", amount: { value: 1 } }),
+    }),
+    env,
+    { fetch: recorded.fetcher, now: () => NOW },
+  );
+  assert.equal(response.status, 401);
+  assert.equal(recorded.calls.length, 0);
+});
+
+test("a missed vipps webhook is settled by the return page and by the cron", async () => {
+  const { kv, env, seeded } = await seedVipps();
+  const earlyCalls = seeded.recorded.calls.length;
+  await reconcilePayments(env, {
+    fetch: seeded.recorded.fetcher,
+    now: () => new Date(NOW.getTime() + 60 * 1000),
+  });
+  assert.equal(seeded.recorded.calls.length, earlyCalls);
+  assert.equal((await getOrder(kv, ORDER_ID))?.status, "pending");
+
+  const deps = backgroundDeps({ fetch: seeded.recorded.fetcher, now: () => NOW });
+  const returned = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, deps);
+  const body = await returned.json();
+  assert.equal(returned.status, 200, JSON.stringify(body));
+  assert.equal(body.status, "paid");
+  assert.equal(body.customer, undefined);
+  await deps.flush();
+  assert.equal(seeded.isCaptured(), true);
+  assert.equal(seeded.scriptBodies.length, 1);
+  assert.equal(seeded.scriptBodies[0].sendAttendeeConfirmation, true);
+  assert.equal(seeded.scriptBodies[0].paymentStatus, "paid");
+  assert.equal((await getOrder(kv, ORDER_ID))?.appsScriptPosted, true);
+});
+
+test("the cron settles a vipps order whose return page was also missed", async () => {
+  const { kv, env, seeded } = await seedVipps();
+  const deps = backgroundDeps({
+    fetch: seeded.recorded.fetcher,
+    now: () => new Date(NOW.getTime() + 3 * 60 * 1000),
+  });
+  await reconcilePayments(env, deps);
+  await deps.flush();
+  assert.equal(seeded.isCaptured(), true);
+  assert.equal((await getOrder(kv, ORDER_ID))?.status, "paid");
+  assert.equal(seeded.scriptBodies.filter((body) => body.confirmationOnly === true).length, 0);
+  assert.equal(seeded.scriptBodies.length, 1);
+});
+
+test("a paid booking follows up with exactly one confirmation when the row did not confirm", async () => {
+  const { kv, env } = await seedCardOrder();
+  const payload = stripeEvent(1);
+  const now = new Date("2026-10-15T10:05:00.000Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+  const scriptBodies: Record<string, unknown>[] = [];
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "succeeded",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) {
+      const body = JSON.parse(call.body) as Record<string, unknown>;
+      scriptBodies.push(body);
+      if (body.confirmationOnly === true) return jsonResponse({ ok: true, confirmationSent: true });
+      return jsonResponse({ ok: true, duplicate: true, confirmationSent: false });
+    }
+    return jsonResponse({ ok: false }, 500);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => now });
+  const response = await handleRequest(
+    new Request("https://payments.test/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+      body: payload,
+    }),
+    env,
+    deps,
+  );
+  assert.equal(response.status, 200);
+  await deps.flush();
+  assert.equal(scriptBodies.length, 2);
+  assert.equal(scriptBodies[0].sendAttendeeConfirmation, true);
+  assert.equal(scriptBodies[1].confirmationOnly, true);
+  assert.equal(scriptBodies[1].SHARED_SECRET, "shared-secret-value");
+  assert.equal(scriptBodies[1].paymentStatus, "paid");
+  assert.equal((await getOrder(kv, ORDER_ID))?.confirmationSent, true);
+
+  const again = await handleRequest(
+    new Request("https://payments.test/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": sign(payload, SECRET, timestamp) },
+      body: payload,
+    }),
+    env,
+    deps,
+  );
+  assert.equal(again.status, 200);
+  await deps.flush();
+  assert.equal(scriptBodies.length, 2);
 });

@@ -1400,6 +1400,12 @@
     if (data && (data.status === "failed" || data.status === "cancelled")) {
       return { ok: false, message: PAY_FAIL };
     }
+    if (data && (data.status === "unknown" || data.error === "not-found")) {
+      return {
+        ok: false,
+        message: "We couldn’t find that payment. If money left your account, don’t pay again. Email hustleinoslo@gmail.com.",
+      };
+    }
     return {
       ok: true,
       transactionNumber: "",
@@ -1414,6 +1420,9 @@
       try {
         const res = await fetch(workerUrl("/order/" + encodeURIComponent(orderId)));
         last = await res.json().catch(() => ({}));
+        if (res.status === 404 || (last && last.error === "not-found")) {
+          return { status: "unknown", error: "not-found" };
+        }
       } catch (err) {
         last = last || { status: "pending" };
       }

@@ -8,18 +8,26 @@ export function unpostedKey(orderId: string): string {
   return `unposted:${orderId}`;
 }
 
-export async function listUnpostedOrderIds(kv: OrderKv): Promise<string[]> {
+export function pendingVippsKey(orderId: string): string {
+  return `pending-vipps:${orderId}`;
+}
+
+export async function listPrefixedIds(kv: OrderKv, prefix: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor: string | undefined;
   do {
-    const page = await kv.list({ prefix: "unposted:", cursor });
+    const page = await kv.list({ prefix, cursor });
     for (const key of page.keys) {
-      if (key.name.startsWith("unposted:")) ids.push(key.name.slice("unposted:".length));
+      if (key.name.startsWith(prefix)) ids.push(key.name.slice(prefix.length));
     }
     if (page.list_complete || !page.cursor || page.cursor === cursor) break;
     cursor = page.cursor;
   } while (cursor);
   return ids;
+}
+
+export async function listUnpostedOrderIds(kv: OrderKv): Promise<string[]> {
+  return listPrefixedIds(kv, "unposted:");
 }
 
 export async function getOrder(kv: OrderKv, orderId: string): Promise<StoredOrder | null> {
@@ -79,6 +87,9 @@ export function newOrder(input: CheckoutInput, captureMode: StoredOrder["capture
     appsScriptNextAttemptAt: null,
     appsScriptLeaseUntil: null,
     appsScriptLeaseToken: null,
+    checkoutLeaseUntil: null,
+    checkoutLeaseToken: null,
+    vippsCheckedAt: null,
     confirmationSent: false,
     failureReason: null,
   };

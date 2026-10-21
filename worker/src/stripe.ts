@@ -74,6 +74,23 @@ export function assertStripeTestKey(secretKey: string, publishableKey: string): 
   return null;
 }
 
+/**
+ * Live Stripe keys work only when allowLive is true, and the secret and
+ * publishable key must be the same mode. The deployed config leaves allowLive false.
+ */
+export function paymentsModeError(allowLive: boolean, secretKey: string, publishableKey: string): string | null {
+  if (!allowLive) return assertStripeTestKey(secretKey, publishableKey);
+  const secretLive = secretKey.startsWith("sk_live_");
+  const secretTest = secretKey.startsWith("sk_test_");
+  const pubLive = publishableKey.startsWith("pk_live_");
+  const pubTest = publishableKey.startsWith("pk_test_");
+  if ((!secretLive && !secretTest) || (!pubLive && !pubTest)) {
+    return "Stripe keys must be a test pair or a live pair.";
+  }
+  if (secretLive !== pubLive) return "Stripe secret and publishable keys must both be live or both be test.";
+  return null;
+}
+
 function formEncode(fields: Record<string, string>): string {
   return Object.entries(fields)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)

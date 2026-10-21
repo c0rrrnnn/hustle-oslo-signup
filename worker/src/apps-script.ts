@@ -110,7 +110,7 @@ export async function postPaidBooking(
         return { ok: false, confirmationSent: false, error: parsed.error };
       }
       order.appsScriptPostedNights = index + 1;
-      if (parsed.data.confirmationSent === true || parsed.data.duplicate === true) confirmationSent = true;
+      if (parsed.data.confirmationSent === true) confirmationSent = true;
     }
     const lastIndex = bodies.length - 1;
     const lastWasPosted = order.appsScriptPostedNights > lastIndex;

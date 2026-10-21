@@ -1,6 +1,6 @@
 # Hustle Oslo payments — test mode setup
 
-This worker takes **test payments only**. It refuses a Stripe live secret (`sk_live_`) or live publishable key (`pk_live_`), and it always calls Vipps at `https://apitest.vipps.no`. Nothing in this setup moves real money.
+This worker is **configured for test payments**. `ALLOW_LIVE_PAYMENTS` is `"false"` in `wrangler.toml`. In that mode it refuses a Stripe live secret (`sk_live_`) or live publishable key (`pk_live_`), and it calls Vipps at `https://apitest.vipps.no` even if `VIPPS_API_BASE` is set. Going live later is a config change, not a code change: set `ALLOW_LIVE_PAYMENTS` to `"true"`, use live Stripe keys, and set `VIPPS_API_BASE` to `https://api.vipps.no`. Do not do that in this pass. Nothing in this setup moves real money.
 
 The public site stays on `PAYMENTS_ENABLED: false` until you decide otherwise. Dancers keep the current path: the sheet stores `payment-pending`, and they Vipps **Hustle Oslo #48782**.
 
@@ -19,6 +19,7 @@ Account id already in `wrangler.toml`: `5564680c05464d959eaafd052eb97998`.
 | `VIPPS_CLIENT_SECRET` | Vipps **test** sales unit |
 | `VIPPS_SUBSCRIPTION_KEY` | Vipps test primary `Ocp-Apim-Subscription-Key` |
 | `VIPPS_MSN` | Vipps test merchant serial number |
+| `VIPPS_WEBHOOK_SECRET` | The `secret` returned once when you register the Vipps webhook |
 | `APPS_SCRIPT_SHARED_SECRET` | You generate it. Same value in Apps Script. |
 | `ADMIN_SECRET` | You generate it. Protects `POST /order/:id/capture`. |
 
@@ -127,7 +128,20 @@ curl -sS -X POST https://apitest.vipps.no/webhooks/v1/webhooks \
   }'
 ```
 
-Vipps returns an `id` and a `secret`. Keep the secret in a password manager. This worker does **not** use it. A Vipps webhook is accepted only after the worker gets its own access token and `GET /epayment/v1/payments/{reference}` shows the real status. The `amount` and `name` on the webhook are ignored for the paid decision.
+Vipps returns an `id` and a `secret`. The secret is shown once. Save it as `VIPPS_WEBHOOK_SECRET` (`npx wrangler secret put VIPPS_WEBHOOK_SECRET`) and in a password manager. The worker checks the Webhooks API HMAC (`x-ms-date`, `x-ms-content-sha256`, `Authorization`) and rejects a missing or bad signature. It still ignores the webhook’s own amount and name: a signed webhook is accepted only after the worker gets an access token and `GET /epayment/v1/payments/{reference}` shows the real status.
+
+Confirm the registration, still on apitest:
+
+```bash
+curl -sS https://apitest.vipps.no/webhooks/v1/webhooks \
+  -H "Authorization: Bearer ACCESS-TOKEN" \
+  -H "Ocp-Apim-Subscription-Key: YOUR-SUBSCRIPTION-KEY" \
+  -H "Merchant-Serial-Number: YOUR-MSN"
+```
+
+The list should include your worker URL and the ePayment events above. If the secret is lost, delete that webhook and register it again. Production (`https://api.vipps.no`) is a separate registration with its own secret. Do that only when you deliberately turn `ALLOW_LIVE_PAYMENTS` on.
+
+If a webhook never arrives, the order does not stay pending forever. The return page’s `GET /order/:id` asks Vipps and, in immediate mode, captures. The same 5-minute cron retries pending Vipps orders that are between 2 minutes and 24 hours old. Older pending orders drop off the cron; opening the return page still checks Vipps.
 
 With `CAPTURE_MODE=immediate`, an authorized payment is captured by the worker, then read again. The sheet is updated only when the captured amount equals the catalogue total.
 
@@ -156,6 +170,7 @@ npx wrangler secret put VIPPS_CLIENT_ID
 npx wrangler secret put VIPPS_CLIENT_SECRET
 npx wrangler secret put VIPPS_SUBSCRIPTION_KEY
 npx wrangler secret put VIPPS_MSN
+npx wrangler secret put VIPPS_WEBHOOK_SECRET
 npx wrangler secret put APPS_SCRIPT_SHARED_SECRET
 npx wrangler secret put ADMIN_SECRET
 ```
@@ -192,17 +207,28 @@ Do not add a production custom domain in this pass.
 
 ## 7. Apps Script
 
-The public site keeps posting `payment-pending` with no secret. That still works. A paid post is rejected unless `SHARED_SECRET` matches.
+The public site keeps posting `payment-pending` with no secret **until you launch payments**. A paid post is rejected unless `SHARED_SECRET` matches, whether or not the flag below is set.
+
+### Rollout order — do not skip this
+
+The browser cannot hold `APPS_SCRIPT_SHARED_SECRET`. Live https://hustleoslo.com/ still posts unpaid signups itself while `PAYMENTS_ENABLED` is false.
+
+1. Deploy this Apps Script version with `REQUIRE_SHARED_SECRET` **unset** (or anything other than `true`). Unpaid signups keep working. Paid claims already need the secret. `confirmationOnly` from the website, which does not claim `paid`, still works.
+2. Deploy the worker in test mode. `PAYMENTS_ENABLED` stays false on the public site.
+3. When you are ready for real online payments, in this order: set the worker secrets, point a **non-public** preview at the worker with `PAYMENTS_ENABLED: true` (do not commit that), confirm a test payment writes one paid row and one confirmation email, then set script property `REQUIRE_SHARED_SECRET` to `true`. That locks every write and every `confirmationOnly`. Only the worker, which has the secret, can add rows or send mail.
+4. Turn `PAYMENTS_ENABLED` on for the public site in the same change that stops the browser posting to Apps Script. If you set `REQUIRE_SHARED_SECRET` first, the live unpaid signup path starts failing.
+
+Do not set `REQUIRE_SHARED_SECRET` while the live site is still posting from the browser.
 
 1. Open the Hustle Oslo signups spreadsheet → **Extensions → Apps Script**.
 2. Replace the script with `apps-script/Code.gs` from this repo.
-3. Project settings → **Script properties** → add `APPS_SCRIPT_SHARED_SECRET` with the same value as the worker secret. Leave `SHEET_ID` as it is.
+3. Project settings → **Script properties** → add `APPS_SCRIPT_SHARED_SECRET` with the same value as the worker secret. Leave `SHEET_ID` as it is. Do **not** set `REQUIRE_SHARED_SECRET` yet.
 4. **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.** The web app URL does not change. Pasting the file without a new version does nothing to the live URL.
 5. Do this **before** you send a test payment. Until this version is deployed, a paid post is handled by the old script, which does not check the secret and does not have the new columns.
 
 New columns, added on the right when the header row still matches: **Payment provider**, **Payment id**, **Payment status**. A paid row looks like `stripe` / `pi_…` / `paid`, or `vipps` / the Vipps reference / `paid`. A payment-pending row has status `pending` and blank provider and id.
 
-The worker writes one row per night after the payment is confirmed. That write can finish after the webhook has already returned. The browser does not write that booking. A repeated webhook does not add a second row for the same payment id and event id. If the first write fails or is too slow, the 5-minute cron tries again.
+The worker writes one row per night after the payment is confirmed. That write can finish after the webhook has already returned. The browser does not write that booking. The append and the paid-row check run under Apps Script `LockService`, and the worker holds a short lease so two deliveries do not both append. A repeated webhook does not add a second row for the same payment id and event id. The attendee confirmation from hustleinoslo@gmail.com is sent once per payment id, on the paid post or on the confirmation follow-up if that first mail did not go out. If the first write fails or is too slow, the 5-minute cron tries again. The same cron also polls Vipps for pending Vipps orders.
 
 ## 8. Try it locally without changing main
 
@@ -213,7 +239,11 @@ PAYMENTS_ENABLED: true,
 PAYMENTS_WORKER_URL: "https://hustle-oslo-payments.<your-subdomain>.workers.dev",
 ```
 
-`http://localhost:8765` is already in the worker’s allowed origins.
+The deployed allow-list is only `https://hustleoslo.com` and `https://www.hustleoslo.com`. For this local preview, put this in `worker/.dev.vars` (not in git):
+
+```bash
+ALLOWED_ORIGINS=https://hustleoslo.com,https://www.hustleoslo.com,http://localhost:8765,http://127.0.0.1:8765
+```
 
 ```bash
 python3 -m http.server 8765
@@ -238,8 +268,9 @@ Put `CAPTURE_MODE` back to `immediate` and deploy again when you are done. The d
 - [ ] `GET /health` returns `"mode":"test"` and `"captureMode":"immediate"`.
 - [ ] `wrangler whoami` is account `5564680c05464d959eaafd052eb97998`.
 - [ ] Stripe secret starts with `sk_test_`. Publishable key starts with `pk_test_`. No live keys in `.dev.vars` or the dashboard toggle.
-- [ ] Vipps keys are from the **Test** sales unit. Direct capture is off. Base URL in code is `apitest.vipps.no` (there is no setting to change it).
-- [ ] Apps Script has a new deployment version and `APPS_SCRIPT_SHARED_SECRET` matches the worker.
+- [ ] `ALLOW_LIVE_PAYMENTS` is still `"false"`. Vipps keys are from the **Test** sales unit. Direct capture is off. Calls go to `apitest.vipps.no`.
+- [ ] `GET /webhooks/v1/webhooks` on apitest lists the worker URL. `VIPPS_WEBHOOK_SECRET` is the secret from that registration. An unsigned POST to `/webhooks/vipps` returns 401.
+- [ ] Apps Script has a new deployment version and `APPS_SCRIPT_SHARED_SECRET` matches the worker. `REQUIRE_SHARED_SECRET` is not `true` yet.
 - [ ] Local preview only: one Stripe payment with `4242 4242 4242 4242` for a future night. The sheet row is `paid`, provider `stripe`, payment id `pi_…`, amount equal to the catalogue (not a number you typed). The attendee email says payment received.
 - [ ] Card `4000 0000 0000 0002` shows the existing Checkout failure screen (“Payment didn’t go through”). No paid row.
 - [ ] One Vipps test-app payment. The browser goes to `apitest.vipps.no` and returns to the site. The row is `paid`, provider `vipps`. Captured amount in the Vipps test portal equals the catalogue total.

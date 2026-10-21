@@ -55,6 +55,8 @@ export function testEnv(kv: OrderKv, overrides: Partial<Env> = {}): Env {
     VIPPS_MSN: "123456",
     APPS_SCRIPT_SHARED_SECRET: "shared-secret-value",
     ADMIN_SECRET: "admin-secret-value",
+    VIPPS_WEBHOOK_SECRET: "vipps-webhook-secret",
+    ALLOW_LIVE_PAYMENTS: "false",
     CAPTURE_MODE: "immediate",
     APPS_SCRIPT_URL: "https://apps-script.test/exec",
     PUBLIC_SITE_URL: "https://hustleoslo.com",
@@ -114,12 +116,15 @@ function headerRecord(headers: HeadersInit | undefined): Record<string, string> 
   return out;
 }
 
-export function recordFetch(handle: (call: RecordedCall) => Response | Promise<Response>) {
+export function recordFetch(
+  handle: (call: RecordedCall) => Response | Promise<Response>,
+  options: { allowLiveVipps?: boolean } = {},
+) {
   const calls: RecordedCall[] = [];
   const fetcher: typeof fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url.includes("script.google.com")) throw new Error("Refusing to call the live Apps Script");
-    if (url.startsWith("https://api.vipps.no/")) throw new Error("Refusing live Vipps");
+    if (!options.allowLiveVipps && url.startsWith("https://api.vipps.no/")) throw new Error("Refusing live Vipps");
     const call: RecordedCall = {
       url,
       method: (init?.method || "GET").toUpperCase(),

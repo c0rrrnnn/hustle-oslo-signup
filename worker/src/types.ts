@@ -24,6 +24,12 @@ export interface Env {
   APPS_SCRIPT_URL: string;
   PUBLIC_SITE_URL: string;
   ALLOWED_ORIGINS: string;
+  /** "true" allows live Stripe keys and https://api.vipps.no. Leave unset or "false". */
+  ALLOW_LIVE_PAYMENTS?: string;
+  /** Only https://api.vipps.no is honored, and only when ALLOW_LIVE_PAYMENTS is "true". */
+  VIPPS_API_BASE?: string;
+  /** Secret returned once when the Vipps webhook is registered. */
+  VIPPS_WEBHOOK_SECRET?: string;
 }
 
 export interface Deps {
@@ -95,6 +101,9 @@ export interface StoredOrder {
   appsScriptNextAttemptAt: string | null;
   appsScriptLeaseUntil: string | null;
   appsScriptLeaseToken: string | null;
+  checkoutLeaseUntil: string | null;
+  checkoutLeaseToken: string | null;
+  vippsCheckedAt: string | null;
   confirmationSent: boolean;
   failureReason: string | null;
 }

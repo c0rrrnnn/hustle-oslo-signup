@@ -8,6 +8,7 @@
  *      SHEET_ID = <your spreadsheet ID from the URL>
  *      NOTIFY_EMAIL = hustleinoslo@gmail.com   (optional; defaults below)
  *      APPS_SCRIPT_SHARED_SECRET = <same value as the worker secret>
+ *      REQUIRE_SHARED_SECRET = true   (ONLY after payments launch — see below)
  * 4. Deploy → New deployment → Web app
  *      Execute as: Me
  *      Who has access: Anyone
@@ -25,11 +26,18 @@
  * and transactionNumber. While online card/Vipps checkout is not live,
  * the site sends transactionNumber "payment-pending" and asks the
  * attendee to Vipps the amount to #48782. That path does not send
- * SHARED_SECRET and stays accepted. A request that claims a completed
+ * SHARED_SECRET. It stays accepted only while script property
+ * REQUIRE_SHARED_SECRET is not "true". A request that claims a completed
  * online payment (paymentStatus "paid", or any paymentProvider / paymentId)
- * is rejected unless SHARED_SECRET matches the script property. The worker
- * sends that secret only after a verified webhook and a server-side status
- * check. Paid rows record payment provider, payment id, and status paid.
+ * is always rejected unless SHARED_SECRET matches. Once payments are the
+ * path, set REQUIRE_SHARED_SECRET to true so every write and every
+ * confirmationOnly also needs the secret. Do that only after the live
+ * site stops posting straight from the browser (PAYMENTS_ENABLED true),
+ * or unpaid signups on hustleoslo.com will be rejected. The worker sends
+ * the secret only after payment is confirmed. Paid rows record payment
+ * provider, payment id, and status paid. The sheet append and the paid
+ * dedupe run inside a script lock. A paid confirmation email is sent at
+ * most once per payment id.
  * Extra fields (referral, paymentMethod, terms acceptance) are appended
  * after the original columns.
  * Multi-night bookings: the website POSTs one signup object per night
@@ -107,7 +115,7 @@ function doPost(e) {
   try {
     var raw = (e && e.postData && e.postData.contents) || "{}";
     var data = JSON.parse(raw);
-    if (claimsPaid_(data) && !secretOk_(data.SHARED_SECRET)) {
+    if (!writeAuthorized_(data)) {
       return json_({ ok: false, error: "Unauthorized" });
     }
     if (!claimsPaid_(data)) {
@@ -115,58 +123,112 @@ function doPost(e) {
       data.paymentId = "";
       data.paymentStatus = isPendingSignup_(data) ? "pending" : "";
     }
-    if (data.confirmationOnly === true) {
-      return sendAttendeeConfirmationOnly_(data);
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+    } catch (lockErr) {
+      return json_({ ok: false, error: "Busy" });
     }
-    if (!data.email || !data.fullName) {
-      return json_({ ok: false, error: "Missing required fields" });
-    }
-    if (!data.transactionNumber) {
-      return json_({ ok: false, error: "Missing Vipps transaction number" });
-    }
-
-    var ss = openSpreadsheet_();
-    var master = getOrCreateSheet_(ss, MASTER_TAB);
-    ensureHeaders_(master);
-
-    var tabName = data.sheetTabHint || buildTabName_(data);
-    var eventSheet = getOrCreateSheet_(ss, tabName);
-    ensureHeaders_(eventSheet);
-
-    if (claimsPaid_(data) && alreadyRecorded_(master, data.paymentId, data.eventId)) {
-      return json_({
-        ok: true,
-        duplicate: true,
-        transactionNumber: data.transactionNumber,
-        tab: tabName,
-        confirmationSent: data.sendAttendeeConfirmation === true,
-      });
-    }
-
-    var row = buildRow_(data);
-    master.appendRow(row);
-    eventSheet.appendRow(row);
-
-    sendNotifyEmail_(data);
-
-    var response = {
-      ok: true,
-      transactionNumber: data.transactionNumber,
-      tab: tabName,
-    };
-    if (data.sendAttendeeConfirmation === true) {
-      try {
-        response.confirmationSent = sendConfirmationEmail_(data) === true;
-      } catch (mailErr) {
-        response.confirmationSent = false;
-        response.confirmationError = String(mailErr);
+    try {
+      if (data.confirmationOnly === true) {
+        return sendAttendeeConfirmationOnly_(data);
       }
+      return appendSignup_(data);
+    } finally {
+      lock.releaseLock();
     }
-
-    return json_(response);
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+function appendSignup_(data) {
+  if (!data.email || !data.fullName) {
+    return json_({ ok: false, error: "Missing required fields" });
+  }
+  if (!data.transactionNumber) {
+    return json_({ ok: false, error: "Missing Vipps transaction number" });
+  }
+
+  var ss = openSpreadsheet_();
+  var master = getOrCreateSheet_(ss, MASTER_TAB);
+  ensureHeaders_(master);
+
+  var tabName = data.sheetTabHint || buildTabName_(data);
+  var eventSheet = getOrCreateSheet_(ss, tabName);
+  ensureHeaders_(eventSheet);
+
+  if (claimsPaid_(data) && alreadyRecorded_(master, data.paymentId, data.eventId)) {
+    return json_({
+      ok: true,
+      duplicate: true,
+      transactionNumber: data.transactionNumber,
+      tab: tabName,
+      confirmationSent: ensurePaidConfirmation_(data),
+    });
+  }
+
+  var row = buildRow_(data);
+  master.appendRow(row);
+  eventSheet.appendRow(row);
+
+  sendNotifyEmail_(data);
+
+  var response = {
+    ok: true,
+    transactionNumber: data.transactionNumber,
+    tab: tabName,
+  };
+  if (data.sendAttendeeConfirmation === true) {
+    try {
+      response.confirmationSent = sendConfirmationEmail_(data) === true;
+      if (response.confirmationSent) rememberPaidConfirmation_(data);
+    } catch (mailErr) {
+      response.confirmationSent = false;
+      response.confirmationError = String(mailErr);
+    }
+  }
+
+  return json_(response);
+}
+
+/** Paid claims always need the secret. Every write needs it once REQUIRE_SHARED_SECRET=true. */
+function writeAuthorized_(data) {
+  if (paymentsPathLocked_() || claimsPaid_(data)) return secretOk_(data.SHARED_SECRET);
+  return true;
+}
+
+function paymentsPathLocked_() {
+  var flag = PropertiesService.getScriptProperties().getProperty("REQUIRE_SHARED_SECRET") || "";
+  return String(flag).toLowerCase() === "true";
+}
+
+function confirmationMarkerKey_(paymentId) {
+  return "confirm:" + String(paymentId || "").slice(0, 120);
+}
+
+function paidConfirmationSent_(data) {
+  if (!claimsPaid_(data) || !data.paymentId) return false;
+  return PropertiesService.getScriptProperties().getProperty(confirmationMarkerKey_(data.paymentId)) === "1";
+}
+
+function rememberPaidConfirmation_(data) {
+  if (!claimsPaid_(data) || !data.paymentId) return;
+  PropertiesService.getScriptProperties().setProperty(confirmationMarkerKey_(data.paymentId), "1");
+}
+
+function ensurePaidConfirmation_(data) {
+  if (paidConfirmationSent_(data)) return true;
+  if (data.sendAttendeeConfirmation !== true) return false;
+  try {
+    if (sendConfirmationEmail_(data) === true) {
+      rememberPaidConfirmation_(data);
+      return true;
+    }
+  } catch (mailErr) {
+    return false;
+  }
+  return false;
 }
 
 function openSpreadsheet_() {
@@ -392,9 +454,13 @@ function sendAttendeeConfirmationOnly_(data) {
   }
   data.transactionNumber = txn;
   if (!data.vippsNumber) data.vippsNumber = "48782";
+  if (paidConfirmationSent_(data)) {
+    return json_({ ok: true, confirmationOnly: true, confirmationSent: true, duplicate: true });
+  }
   if (sendConfirmationEmail_(data) !== true) {
     return json_({ ok: false, error: "Nothing to confirm" });
   }
+  rememberPaidConfirmation_(data);
   return json_({ ok: true, confirmationOnly: true, confirmationSent: true });
 }
 
