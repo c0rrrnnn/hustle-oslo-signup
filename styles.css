@@ -2215,7 +2215,8 @@ body.bk-open {
 #bk-desk-details[hidden],
 #bk-inline-pay[hidden],
 #bk-payment-host[hidden],
-#bk-payment-note[hidden] {
+#bk-payment-note[hidden],
+#bk-wallet-host[hidden] {
   display: none !important;
 }
 
@@ -3187,6 +3188,10 @@ body.bk-open {
   color: #121214;
 }
 
+.bk-wallet-host {
+  margin: 8px 0 4px;
+}
+
 .bk-payment-host {
   margin-top: 12px;
 }
@@ -3504,7 +3509,7 @@ body.bk-open {
 
   .bk-sheet.is-wide #bk-pay-seg {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     gap: 4px;
     background: #121214;
     border: 1px solid #2a2a2e;
