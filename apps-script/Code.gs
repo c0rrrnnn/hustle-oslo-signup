@@ -384,11 +384,11 @@ function sendNotifyEmail_(data) {
   var props = PropertiesService.getScriptProperties();
   var to = props.getProperty("NOTIFY_EMAIL") || DEFAULT_NOTIFY;
   var subject =
-    "[Hustle Oslo] Signup — " +
+    "[Hustle Oslo] Signup - " +
     (data.eventDate || "") +
     " " +
     (data.ticketName || "") +
-    " · txn " +
+    " - txn " +
     (data.transactionNumber || "");
   var body = [
     "New Hustle Oslo signup",
@@ -482,7 +482,8 @@ function sendConfirmationEmail_(data) {
 }
 
 function confirmationSubject_() {
-  return "Hustle Oslo — signup received";
+  // MailApp does not RFC-2047-encode subjects. A non-ASCII dash is shown in Gmail as Latin-1 mojibake.
+  return "Hustle Oslo - signup received";
 }
 
 function confirmationBody_(data, nights) {

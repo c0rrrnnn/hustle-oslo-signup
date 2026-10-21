@@ -15,9 +15,10 @@ test("the return page errors on an unknown order and can mount a live publishabl
   };
   sandbox.window = sandbox as unknown as Record<string, unknown>;
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync(new URL("../../payment-status.js", import.meta.url), "utf8"), sandbox, { filename: "payment-status.js" });
   vm.runInContext(readFileSync(new URL("../../app.js", import.meta.url), "utf8"), sandbox, { filename: "app.js" });
   const api = sandbox.window.HustleOslo as {
-    resultFromOrder: (data: unknown) => { ok: boolean; message?: string; booking?: { pendingConfirmation?: boolean } };
+    resultFromOrder: (data: unknown) => { ok: boolean; message?: string; booking?: { ok?: boolean; pendingConfirmation?: boolean } };
     publishableKeyOk: (key: string) => boolean;
     config: { PAYMENTS_ENABLED: boolean };
   };
@@ -29,6 +30,10 @@ test("the return page errors on an unknown order and can mount a live publishabl
   const pending = api.resultFromOrder({ status: "pending", appsScriptPosted: false, confirmationSent: false });
   assert.equal(pending.ok, true);
   assert.equal(pending.booking?.pendingConfirmation, true);
+  const paid = api.resultFromOrder({ status: "paid", paymentId: "pi_test", appsScriptPosted: false, confirmationSent: false });
+  assert.equal(paid.ok, true);
+  assert.equal(paid.booking?.ok, true);
+  assert.equal(paid.booking?.pendingConfirmation, undefined);
   assert.equal(api.publishableKeyOk("pk_test_123"), true);
   assert.equal(api.publishableKeyOk("pk_live_123"), true);
   assert.equal(api.publishableKeyOk("pk_live_"), true);

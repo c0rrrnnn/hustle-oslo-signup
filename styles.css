@@ -3161,6 +3161,10 @@ body.bk-open {
   font-size: 0.9rem;
 }
 
+.bk-pay-note.is-error {
+  color: #ffb4b4;
+}
+
 .bk-card-fields.is-attached {
   border: 1px solid #f4f4f5;
   border-top: 0;

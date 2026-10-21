@@ -91,6 +91,7 @@
     complete: false,
     js: null,
     timer: null,
+    mountChain: null,
   };
 
   const state = {
@@ -1047,11 +1048,12 @@
     host.hidden = false;
   }
 
-  function setPaymentNote(text) {
+  function setPaymentNote(text, isError) {
     const note = $("#bk-payment-note");
     if (!note) return;
     note.textContent = text || "";
     note.hidden = !text;
+    note.classList.toggle("is-error", !!isError && !!text);
   }
 
   function updatePayChrome() {
@@ -1222,8 +1224,17 @@
     return paymentUi.idempotencyKey;
   }
 
+  function cancelPrepare() {
+    paymentUi.prepToken += 1;
+    if (paymentUi.timer) {
+      window.clearTimeout(paymentUi.timer);
+      paymentUi.timer = null;
+    }
+  }
+
   function schedulePrepare() {
     if (!paymentsLive()) return;
+    if (state.submitting) return;
     if (state.view !== "checkout" && state.view !== "failed") return;
     if (paymentUi.timer) window.clearTimeout(paymentUi.timer);
     paymentUi.timer = window.setTimeout(function () {
@@ -1233,6 +1244,7 @@
   }
 
   async function prepareStripeElement() {
+    if (state.submitting) return;
     if (!paymentsLive() || !isStripeMethod(state.paymentMethod)) return;
     if (state.view !== "checkout" && state.view !== "failed") return;
     if (!validateDetails(false)) return;
@@ -1246,7 +1258,7 @@
     }
     const mounted = await mountStripe(created);
     if (token !== paymentUi.prepToken) return;
-    setPaymentNote(mounted.ok ? "" : PAY_FAIL);
+    setPaymentNote(mounted.ok ? "" : PAY_FAIL, !mounted.ok);
   }
 
   async function postCheckout(method) {
@@ -1313,10 +1325,17 @@
     return value.indexOf("pk_test_") === 0 || value.indexOf("pk_live_") === 0;
   }
 
-  async function mountStripe(created) {
+  function mountStripe(created) {
+    const run = () => mountStripeNow(created);
+    paymentUi.mountChain = (paymentUi.mountChain || Promise.resolve()).then(run, run);
+    return paymentUi.mountChain;
+  }
+
+  async function mountStripeNow(created) {
     if (!created || !created.clientSecret || !publishableKeyOk(created.publishableKey)) {
       return { ok: false, message: PAY_FAIL };
     }
+    const generation = paymentUi.prepToken;
     if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
       placePaymentHost();
       return { ok: true };
@@ -1325,6 +1344,11 @@
       await loadStripeJs();
     } catch (err) {
       return { ok: false, message: PAY_FAIL };
+    }
+    if (generation !== paymentUi.prepToken) return { ok: true };
+    if (paymentUi.orderId === created.orderId && paymentUi.elements && paymentUi.element) {
+      placePaymentHost();
+      return { ok: true };
     }
     placePaymentHost();
     const host = $("#bk-payment-element");
@@ -1364,58 +1388,32 @@
         },
       },
     });
-    element.on("change", (event) => {
-      paymentUi.complete = !!(event && event.complete);
-    });
     element.mount("#bk-payment-element");
+    if (generation !== paymentUi.prepToken && paymentUi.element && paymentUi.element !== element) {
+      try {
+        element.unmount();
+      } catch (err) {
+        /* Pay started a newer mount */
+      }
+      return { ok: true };
+    }
     paymentUi.stripe = stripe;
     paymentUi.elements = elements;
     paymentUi.element = element;
     paymentUi.orderId = created.orderId;
-    paymentUi.complete = false;
     return { ok: true };
   }
 
-  function resultFromOrder(data) {
-    if (data && data.status === "paid") {
-      if (!data.appsScriptPosted) {
-        return {
-          ok: true,
-          transactionNumber: data.paymentId || "",
-          booking: { ok: false, pendingConfirmation: true, confirmationSent: false, paidByWorker: true },
-        };
-      }
-      return {
-        ok: true,
-        transactionNumber: data.paymentId || "",
-        booking: {
-          ok: true,
-          confirmationSent: !!data.confirmationSent,
-          paidByWorker: true,
-        },
-      };
-    }
-    if (data && data.status === "reserved") {
-      return {
-        ok: true,
-        transactionNumber: "",
-        booking: { ok: false, pendingConfirmation: true, reserved: true, confirmationSent: false },
-      };
-    }
-    if (data && (data.status === "failed" || data.status === "cancelled")) {
-      return { ok: false, message: PAY_FAIL };
-    }
-    if (data && (data.status === "unknown" || data.error === "not-found")) {
+  function resultFromOrder(data, confirmOutcome) {
+    const result = window.HustlePaymentStatus.checkoutResult(data, confirmOutcome || null);
+    if (result.ok) return result;
+    if (result.reason === "missing") {
       return {
         ok: false,
         message: "We couldn’t find that payment. If money left your account, don’t pay again. Email hustleinoslo@gmail.com.",
       };
     }
-    return {
-      ok: true,
-      transactionNumber: "",
-      booking: { ok: false, pendingConfirmation: true, confirmationSent: false },
-    };
+    return { ok: false, message: PAY_FAIL };
   }
 
   async function pollOrder(orderId) {
@@ -1431,11 +1429,8 @@
       } catch (err) {
         last = last || { status: "pending" };
       }
-      if (last && (last.status === "failed" || last.status === "reserved" || last.status === "cancelled")) {
-        return last;
-      }
-      if (last && last.status === "paid" && last.appsScriptPosted) return last;
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      if (window.HustlePaymentStatus.pollSettled(last)) return last;
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
     }
     return last;
   }
@@ -1552,6 +1547,7 @@
       return { ok: false, reason: "not-configured", message: PAY_FAIL };
     }
     void order;
+    cancelPrepare();
     const created = await postCheckout(method);
     if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
     if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
@@ -1564,26 +1560,38 @@
     }
     const mounted = await mountStripe(created);
     if (!mounted.ok) return { ok: false, message: mounted.message || PAY_FAIL };
-    if (!paymentUi.complete) {
-      return {
-        ok: false,
-        reason: "needs-details",
-        message: "Enter your payment details, then press Pay again.",
-      };
+    if (!paymentUi.stripe || !paymentUi.elements) return { ok: false, message: PAY_FAIL };
+    let submitted;
+    try {
+      submitted = await paymentUi.elements.submit();
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
     }
+    if (submitted && submitted.error) {
+      const message = submitted.error.message || "Enter your payment details, then press Pay again.";
+      setPaymentNote(message, true);
+      return { ok: false, reason: "needs-details", message: message };
+    }
+    setPaymentNote("");
     savePaymentSession(created.orderId);
-    const confirmed = await paymentUi.stripe.confirmPayment({
-      elements: paymentUi.elements,
-      confirmParams: {
-        return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(created.orderId),
-      },
-      redirect: "if_required",
-    });
-    if (confirmed.error) {
-      return { ok: false, message: confirmed.error.message || PAY_FAIL };
+    let confirmed;
+    try {
+      confirmed = await paymentUi.stripe.confirmPayment({
+        elements: paymentUi.elements,
+        confirmParams: {
+          return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(created.orderId),
+        },
+        redirect: "if_required",
+      });
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    const decision = window.HustlePaymentStatus.stripeConfirmOutcome(confirmed);
+    if (decision.kind === "failed") {
+      return { ok: false, message: decision.message || PAY_FAIL };
     }
     const polled = await pollOrder(created.orderId);
-    return resultFromOrder(polled);
+    return resultFromOrder(polled, decision);
   }
 
   function buildOrder() {
@@ -1828,6 +1836,12 @@
     const saved = ok || mocked || partial;
     const emailed = !!(result && result.confirmationSent);
     const pendingConfirmation = !!(result && result.pendingConfirmation);
+    const step = $("#bk-step-status");
+    if (step) {
+      if (pendingConfirmation) step.textContent = "We’re confirming your payment.";
+      else if (saved) step.textContent = "You’re booked.";
+      else step.textContent = "We couldn’t save your booking.";
+    }
     if (heading) {
       if (pendingConfirmation) heading.textContent = "We’re confirming your payment";
       else heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
