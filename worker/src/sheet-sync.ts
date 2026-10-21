@@ -1,4 +1,5 @@
 import { postPaidBooking } from "./apps-script.ts";
+import { calendarBaseFor } from "./calendar.ts";
 import { getOrder, listUnpostedOrderIds, putOrder, unpostedKey } from "./orders.ts";
 import type { Deps, Env } from "./types.ts";
 
@@ -58,6 +59,7 @@ export async function deliverPaidBooking(
     env.APPS_SCRIPT_URL,
     claimed,
     env.APPS_SCRIPT_SHARED_SECRET,
+    calendarBaseFor(claimed, env),
   );
   console.info(
     JSON.stringify({

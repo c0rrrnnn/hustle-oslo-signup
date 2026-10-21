@@ -30,6 +30,8 @@ export interface Env {
   VIPPS_API_BASE?: string;
   /** Secret returned once when the Vipps webhook is registered. */
   VIPPS_WEBHOOK_SECRET?: string;
+  /** Public https origin of this worker. Used when an order has no stored origin. */
+  WORKER_PUBLIC_URL?: string;
 }
 
 export interface Deps {
@@ -106,6 +108,8 @@ export interface StoredOrder {
   vippsCheckedAt: string | null;
   confirmationSent: boolean;
   failureReason: string | null;
+  /** Origin of the checkout request, so confirmation mail can link to GET /ics. */
+  workerOrigin?: string;
 }
 
 export interface CheckoutInput {

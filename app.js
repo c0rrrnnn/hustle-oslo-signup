@@ -1779,6 +1779,7 @@
   }
 
   async function resumePayment(orderId) {
+    paymentUi.orderId = orderId;
     state.submitting = true;
     const polled = await pollOrder(orderId);
     state.submitting = false;
@@ -2068,6 +2069,150 @@
     return { start: range[0], end: range[1] || range[0] };
   }
 
+  const CALENDAR_DETAILS = "What to bring: non-grippy shoes. No partner needed.\nQuestions? DM @hustleoslo on Instagram";
+  const CALENDAR_ADDRESS = "Sentralen, Øvre Slottsgate 3, 0157 Oslo";
+  const ORDER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  function calendarPlatform() {
+    const ua = navigator.userAgent || "";
+    const iPadOs = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    if (/iPad|iPhone|iPod/.test(ua) || iPadOs) return "ios";
+    if (/Android/i.test(ua)) return "android";
+    return "other";
+  }
+
+  function calendarDateLabel(ev) {
+    if (!ev || !ev.date) return "";
+    return formatCheckoutDate(ev) + " " + String(ev.date).slice(0, 4);
+  }
+
+  function calendarDatePhrase() {
+    return state.selections.map((sel) => calendarDateLabel(sel.event)).filter(Boolean).join(", ");
+  }
+
+  function calendarLocationText(ev) {
+    const room = ev && ev.location ? String(ev.location).trim() : "";
+    return room ? CALENDAR_ADDRESS + ", " + room : CALENDAR_ADDRESS;
+  }
+
+  function osloBasicStamp(date, hm) {
+    const parts = String(date).split("-").map(Number);
+    const clock = String(hm).split(":").map(Number);
+    const desired = Date.UTC(parts[0], parts[1] - 1, parts[2], clock[0] || 0, clock[1] || 0, 0);
+    let utc = desired;
+    const fmt = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Oslo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    for (let i = 0; i < 4; i++) {
+      const got = {};
+      fmt.formatToParts(new Date(utc)).forEach((part) => {
+        got[part.type] = part.value;
+      });
+      const actual = Date.UTC(Number(got.year), Number(got.month) - 1, Number(got.day), Number(got.hour), Number(got.minute), Number(got.second));
+      if (actual === desired) break;
+      utc -= actual - desired;
+    }
+    return new Date(utc).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  }
+
+  function googleCalendarHref(sel) {
+    const times = timeParts(sel);
+    const start = osloBasicStamp(sel.event.date, times.start);
+    const end = osloBasicStamp(sel.event.date, times.end);
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: "Hustle Oslo – " + ticketLabel(sel.ticket),
+      location: calendarLocationText(sel.event),
+      details: CALENDAR_DETAILS,
+    });
+    return "https://calendar.google.com/calendar/render?" + params.toString() + "&dates=" + start + "/" + end;
+  }
+
+  function hostedIcsUrl(eventId) {
+    try {
+      const base = String(CONFIG.PAYMENTS_WORKER_URL || "").replace(/\/$/, "");
+      const orderId = paymentUi.orderId || "";
+      if (!base || !ORDER_UUID.test(orderId)) return "";
+      const url = new URL(base + "/ics");
+      url.searchParams.set("order", orderId);
+      if (eventId) url.searchParams.set("eventId", eventId);
+      return url.toString();
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function hostedCalendarHtml() {
+    const all = hostedIcsUrl();
+    if (!all) return "";
+    const platform = calendarPlatform();
+    const dates = calendarDatePhrase();
+    let primary = "";
+    if (platform === "android") {
+      primary =
+        '<ul class="bk-cal-list">' +
+        state.selections
+          .map((sel) => {
+            const label = "Add " + calendarDateLabel(sel.event) + " to Google Calendar";
+            return (
+              '<li><a class="bk-btn bk-btn-secondary bk-btn-block bk-cal-link" target="_blank" rel="noopener noreferrer" href="' +
+              escapeHtml(googleCalendarHref(sel)) +
+              '" aria-label="' +
+              escapeHtml(label) +
+              '">' +
+              escapeHtml(label) +
+              "</a></li>"
+            );
+          })
+          .join("") +
+        "</ul>";
+    } else if (platform === "ios") {
+      const text = state.selections.length > 1 ? "Add all nights to Calendar" : "Add " + (dates || "this night") + " to Calendar";
+      const aria = state.selections.length > 1 ? "Add all nights to Calendar, " + dates : text;
+      primary =
+        '<a class="bk-btn bk-btn-secondary bk-btn-block bk-cal-link" href="' +
+        escapeHtml(all) +
+        '" aria-label="' +
+        escapeHtml(aria) +
+        '">' +
+        escapeHtml(text) +
+        "</a>";
+    }
+    const otherAria = "Other calendar (.ics)" + (dates ? ", " + dates : "");
+    const other =
+      '<a class="bk-cal-other' +
+      (primary ? "" : " is-only") +
+      '" href="' +
+      escapeHtml(all) +
+      '" aria-label="' +
+      escapeHtml(otherAria) +
+      '">Other calendar (.ics)</a>';
+    return primary + other;
+  }
+
+  function fallbackCalendarHtml() {
+    const dates = calendarDatePhrase();
+    const aria = dates ? "Add all to calendar (.ics), " + dates : "Add all to calendar (.ics)";
+    return (
+      '<button type="button" class="bk-btn bk-btn-secondary bk-btn-block bk-ics-all" id="bk-ics-all" data-action="ics-all" aria-label="' +
+      escapeHtml(aria) +
+      '">Add all to calendar (.ics)</button>'
+    );
+  }
+
+  function renderCalendarActions() {
+    const host = $("#bk-cal-actions");
+    if (!host) return;
+    host.innerHTML = hostedCalendarHtml() || fallbackCalendarHtml();
+  }
+
   function buildIcs(selections) {
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
     const events = selections
@@ -2156,19 +2301,27 @@
       }
     }
     const list = $("#bk-done-list");
+    const hosted = !!hostedIcsUrl();
     if (list) {
       list.innerHTML = state.selections
         .map((s) => {
+          const one = hosted
+            ? ""
+            : '<button type="button" class="bk-textlink" data-action="ics-one" data-event-id="' +
+              escapeHtml(s.event.id) +
+              '" aria-label="' +
+              escapeHtml("Add " + calendarDateLabel(s.event) + " to calendar") +
+              '">+ Calendar</button>';
           return (
             '<article class="bk-calcard"><div><p class="bk-calcard-date">' + escapeHtml(ticketLabel(s.ticket)) +
             '</p><p class="bk-calcard-meta">' + escapeHtml(formatCheckoutDate(s.event)) +
             "<br>" + escapeHtml(ticketTime(s.event, s.ticket.id) + " · " + venueDot(s.event).replace(" • ", ", ")) + "</p></div>" +
-            '<button type="button" class="bk-textlink" data-action="ics-one" data-event-id="' + escapeHtml(s.event.id) +
-            '">+ Calendar</button></article>'
+            one + "</article>"
           );
         })
         .join("");
     }
+    renderCalendarActions();
   }
 
   function showConfirmation(result) {

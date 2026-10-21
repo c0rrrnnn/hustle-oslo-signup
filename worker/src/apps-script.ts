@@ -1,6 +1,7 @@
+import { calendarFields } from "./calendar.ts";
 import type { StoredOrder } from "./types.ts";
 
-export function appsScriptBodies(order: StoredOrder, secret: string): Record<string, unknown>[] {
+export function appsScriptBodies(order: StoredOrder, secret: string, calendarBase = ""): Record<string, unknown>[] {
   const person: Record<string, unknown> = {
     SHARED_SECRET: secret,
     timestamp: order.createdAt,
@@ -46,6 +47,7 @@ export function appsScriptBodies(order: StoredOrder, secret: string): Record<str
     };
     if (index === order.nights.length - 1) {
       body.sendAttendeeConfirmation = true;
+      Object.assign(body, calendarFields(order, calendarBase));
       body.confirmationNights = order.nights.map((item) => ({
         eventId: item.eventId,
         eventDate: item.eventDate,
@@ -93,10 +95,11 @@ export async function postPaidBooking(
   url: string,
   order: StoredOrder,
   secret: string,
+  calendarBase = "",
 ): Promise<{ ok: boolean; confirmationSent: boolean; error?: string }> {
   if (order.status !== "paid") return { ok: false, confirmationSent: false, error: "not-paid" };
   if (!secret) return { ok: false, confirmationSent: false, error: "missing-secret" };
-  const bodies = appsScriptBodies(order, secret);
+  const bodies = appsScriptBodies(order, secret, calendarBase);
   let confirmationSent = order.confirmationSent;
   try {
     for (let index = order.appsScriptPostedNights; index < bodies.length; index++) {
@@ -129,6 +132,7 @@ export async function postPaidBooking(
         paymentId: order.paymentId || order.orderId,
         paymentStatus: "paid",
         vippsNumber: "48782",
+        ...calendarFields(order, calendarBase),
       };
       const response = await fetcher(url, {
         method: "POST",

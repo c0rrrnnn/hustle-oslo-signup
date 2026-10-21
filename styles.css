@@ -3353,7 +3353,59 @@ body.bk-open {
 }
 
 .bk-ics-all {
+  margin-top: 0;
+}
+
+.bk-cal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 14px;
+}
+
+.bk-cal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+a.bk-cal-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 50px;
+  padding: 12px 18px;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+a.bk-cal-link:hover {
+  color: #f4f4f5;
+}
+
+.bk-cal-other {
+  align-self: center;
+  color: #f4f4f5;
+  font: 500 0.95rem var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 10px 8px;
+  min-height: 44px;
+}
+
+.bk-cal-other.is-only {
+  align-self: stretch;
+  text-align: center;
+}
+
+.bk-cal-other:hover {
+  color: #fff;
 }
 
 .bk-note {

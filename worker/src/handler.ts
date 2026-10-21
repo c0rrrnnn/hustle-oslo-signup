@@ -1,4 +1,5 @@
 import { appsScriptBodies } from "./apps-script.ts";
+import { buildCalendar, nightsForCalendar } from "./calendar.ts";
 import { sha256Base64, timingSafeEqual } from "./crypto.ts";
 import { checkoutOkKey, getOrder, listPrefixedIds, markOrderPaid, newOrder, pendingVippsKey, putOrder, saveStatus } from "./orders.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
@@ -93,6 +94,16 @@ function vippsCreds(env: Env): VippsCreds {
 
 function clientIp(request: Request): string {
   return (request.headers.get("cf-connecting-ip") || "unknown").slice(0, 80);
+}
+
+function requestOrigin(request: Request): string {
+  try {
+    const url = new URL(request.url);
+    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
 }
 
 function checkoutReady(order: StoredOrder): boolean {
@@ -298,6 +309,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
     returnUrl: returnUrlFor(env, clip(body.returnUrl, 300), idempotencyKey),
   };
   const order = newOrder(input, captureModeOf(env), now.toISOString());
+  order.workerOrigin = requestOrigin(request);
   const leaseToken = crypto.randomUUID();
   const inProgress = () =>
     json(409, {
@@ -308,6 +320,7 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   const replay = async (ready: StoredOrder): Promise<Response> => {
     ready.customer = order.customer;
     ready.meta = order.meta;
+    if (!ready.workerOrigin) ready.workerOrigin = order.workerOrigin;
     ready.updatedAt = now.toISOString();
     await putOrder(env.ORDERS, ready);
     return checkoutResponse(ready, env, cors, true);
@@ -703,6 +716,23 @@ async function onCapture(request: Request, env: Env, orderId: string, deps: Deps
   return json(200, publicOrder(fresh), cors);
 }
 
+async function onIcs(request: Request, env: Env, deps: Deps, cors: Headers): Promise<Response> {
+  const url = new URL(request.url);
+  const orderId = url.searchParams.get("order") || "";
+  const missing = () => new Response(null, { status: 404, headers: cors });
+  if (!UUID.test(orderId)) return missing();
+  const order = await getOrder(env.ORDERS, orderId);
+  if (!order || (order.status !== "paid" && order.status !== "reserved")) return missing();
+  const nights = nightsForCalendar(order, url.searchParams);
+  if (!nights) return missing();
+  const headers = new Headers(cors);
+  headers.set("content-type", "text/calendar; charset=utf-8");
+  headers.set("content-disposition", "inline; filename=hustle-oslo.ics");
+  headers.set("cache-control", "private, max-age=300");
+  const stamp = (deps.now || (() => new Date()))();
+  return new Response(buildCalendar(order.orderId, nights, stamp), { status: 200, headers });
+}
+
 export async function handleRequest(request: Request, env: Env, deps: Deps = {}): Promise<Response> {
   const cors = corsHeaders(request, env);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -721,6 +751,7 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
         vippsApi,
       }, cors);
     }
+    if (request.method === "GET" && path === "/ics") return onIcs(request, env, deps, cors);
     if (request.method === "POST" && path === "/checkout") return beginCheckout(request, env, deps, cors);
     if (request.method === "POST" && path === "/webhooks/stripe") return onStripeWebhook(request, env, deps, cors);
     if (request.method === "POST" && path === "/webhooks/vipps") return onVippsWebhook(request, env, deps, cors);

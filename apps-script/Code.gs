@@ -51,6 +51,9 @@
  * The follow-up omits top-level transactionNumber so an older deployed
  * script rejects it before appending a blank row; this script reads
  * confirmationTransactionNumber.
+ * Paid confirmation mail includes calendar links when the worker sends
+ * calendarIcs and calendarNights. Those are plain URLs, not attachments.
+ * Unpaid payment-pending mail has neither field, so it stays unchanged.
  *
  * Sender is the account the web app runs as (hustleinoslo@gmail.com,
  * Execute as Me). MailApp uses display name "Hustle Oslo" and replyTo
@@ -529,9 +532,33 @@ function confirmationBody_(data, nights) {
   lines.push(
     "Questions? Reply to this email or contact " + DEFAULT_NOTIFY + "."
   );
+  appendCalendarLinks_(lines, data);
   lines.push("");
   lines.push("Hustle Oslo");
   return lines.join("\n");
+}
+
+function appendCalendarLinks_(lines, data) {
+  var ics = plain_(data.calendarIcs);
+  var nights = data.calendarNights;
+  var list = [];
+  if (Array.isArray(nights)) {
+    for (var i = 0; i < nights.length; i++) {
+      if (nights[i] && typeof nights[i] === "object") list.push(nights[i]);
+    }
+  }
+  if (!ics && !list.length) return;
+  lines.push("");
+  lines.push("Add to calendar");
+  if (ics) lines.push("All nights (.ics): " + ics);
+  for (var n = 0; n < list.length; n++) {
+    var night = list[n];
+    var label = plain_(night.summary) || plain_(night.eventDate) || "Night";
+    var google = plain_(night.googleUrl);
+    var one = plain_(night.icsUrl);
+    if (google) lines.push(label + " (Google Calendar): " + google);
+    if (one) lines.push(label + " (.ics): " + one);
+  }
 }
 
 function nightsForConfirmation_(data) {

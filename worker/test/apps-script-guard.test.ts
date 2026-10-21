@@ -262,6 +262,40 @@ test("one paid booking appends one row and sends one confirmation email", () => 
   assert.equal(script.counts().appendsWhileUnlocked, 0);
 });
 
+test("a paid confirmation email links to the hosted calendar and does not attach a file", () => {
+  const script = loadScript();
+  const ics = "https://payments.test/ics?order=11111111-1111-4111-8111-111111111111";
+  const google = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Hustle%20Oslo&dates=20261102T170000Z/20261102T180000Z";
+  const paid = script.post(
+    pendingSignup({
+      transactionNumber: "pi_test_1",
+      paymentStatus: "paid",
+      paymentProvider: "stripe",
+      paymentId: "pi_test_1",
+      sendAttendeeConfirmation: true,
+      SHARED_SECRET: "shared-secret-value",
+      confirmationNights: [NIGHT],
+      calendarIcs: ics,
+      calendarNights: [{ summary: "Hustle Oslo – Beginner class", eventDate: "2026-11-02", googleUrl: google, icsUrl: ics + "&eventId=2026-11-02-class-gymsalen" }],
+    }),
+  );
+  assert.equal(paid.ok, true);
+  const attendee = script.emails.filter((mail) => mail.to === "ada@example.com")[0];
+  assert.match(attendee.body || "", /Add to calendar/);
+  assert.match(attendee.body || "", new RegExp(ics.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(attendee.body || "", /calendar\.google\.com\/calendar\/render/);
+  assert.equal((attendee.body || "").includes("BEGIN:VCALENDAR"), false);
+  assert.equal((attendee as { attachments?: unknown }).attachments, undefined);
+  const row = script.sheets.get("All signups")?.rows[1] || [];
+  assert.equal(row.join("\n").includes("/ics"), false);
+
+  const unpaid = loadScript();
+  unpaid.post(pendingSignup({ sendAttendeeConfirmation: true }));
+  const pendingMail = unpaid.emails.find((mail) => mail.to === "ada@example.com");
+  assert.equal((pendingMail?.body || "").includes("Add to calendar"), false);
+  assert.equal((pendingMail?.body || "").includes("calendar.google.com"), false);
+});
+
 test("a lock failure does not append a row", () => {
   const script = loadScript();
   script.setLockFailure("busy");

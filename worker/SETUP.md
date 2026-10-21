@@ -77,6 +77,8 @@ Apple Pay and Google Pay use one PaymentIntent with `automatic_payment_methods`.
 
 Test card: `4242 4242 4242 4242`, any future expiry, any CVC, any name. Declined card: `4000 0000 0000 0002`.
 
+`GET /ics?order=<orderId>` returns the booking as a calendar file after the order is `paid` or `reserved`. Add `&eventId=` or `&night=` (0-based) for one night. Unknown, pending, and failed orders are 404. The file has one event per night, Europe/Oslo times, and no customer name, email, or phone. The confirmation email links to that URL and to a Google Calendar template. The checkout request’s origin is stored on the order so the link still works when the sheet write is retried by cron. Set `WORKER_PUBLIC_URL` only if that origin was never stored.
+
 ## 3. Vipps test sales unit
 
 Use the **test** environment only. Do not open the production keys.
