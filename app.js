@@ -273,6 +273,18 @@
     return window.matchMedia("(min-width: 601px)").matches;
   }
 
+  function drawerMode() {
+    return window.matchMedia("(min-width: 960px)").matches;
+  }
+
+  function bookingScroller(sheet) {
+    if (drawerMode()) {
+      const frame = sheet.querySelector(".bk-frame");
+      if (frame) return frame;
+    }
+    return sheet;
+  }
+
   function wideCheckout() {
     return state.view === "checkout" && isDesktop();
   }
@@ -382,6 +394,13 @@
     return (month + " " + day).trim();
   }
 
+  function upcomingDateHtml(ev) {
+    const parts = String(ev.date || "").split("-");
+    // Landing cards omit the October date. The event itself is unchanged.
+    if (Number(parts[1]) === 10) return "";
+    return '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>";
+  }
+
   function upcomingKind(ev) {
     if (ev.type === "class") return "Class + social";
     if (ev.type === "social") return "Social only";
@@ -405,7 +424,7 @@
       .map((ev) => {
         return (
           '<article class="upcoming-card" role="listitem">' +
-          '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>" +
+          upcomingDateHtml(ev) +
           '<p class="upcoming-kind">' + escapeHtml(upcomingKind(ev)) + "</p>" +
           "</article>"
         );
@@ -531,7 +550,7 @@
     }
     if (view === "done") renderDone();
     updatePayChrome();
-    sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
+    bookingScroller(sheet).scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
       if (heading) heading.focus({ preventScroll: true });
