@@ -394,6 +394,13 @@
     return (month + " " + day).trim();
   }
 
+  function upcomingDateHtml(ev) {
+    const parts = String(ev.date || "").split("-");
+    // Landing cards omit the October date. The event itself is unchanged.
+    if (Number(parts[1]) === 10) return "";
+    return '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>";
+  }
+
   function upcomingKind(ev) {
     if (ev.type === "class") return "Class + social";
     if (ev.type === "social") return "Social only";
@@ -417,7 +424,7 @@
       .map((ev) => {
         return (
           '<article class="upcoming-card" role="listitem">' +
-          '<p class="upcoming-date">' + escapeHtml(upcomingDateLabel(ev)) + "</p>" +
+          upcomingDateHtml(ev) +
           '<p class="upcoming-kind">' + escapeHtml(upcomingKind(ev)) + "</p>" +
           "</article>"
         );
