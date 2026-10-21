@@ -2375,6 +2375,20 @@ body.bk-open {
   width: 100%;
 }
 
+.bk-wait-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+a.bk-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .bk-row .bk-btn-primary,
 .bk-row .bk-btn-vipps {
   flex: 1;

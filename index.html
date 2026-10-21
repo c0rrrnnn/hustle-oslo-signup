@@ -404,6 +404,13 @@
           <div id="bk-fail-card-slot"></div>
         </section>
 
+        <section class="bk-step" id="bk-step-waiting" aria-labelledby="bk-waiting-heading" hidden>
+          <div class="bk-center">
+            <h2 class="bk-h" id="bk-waiting-heading" tabindex="-1">Waiting for payment…</h2>
+            <p class="bk-sub" id="bk-waiting-sub">We haven’t seen a payment yet, so this isn’t booked.</p>
+          </div>
+        </section>
+
         <section class="bk-step" id="bk-step-done" aria-labelledby="bk-done-heading" hidden>
           <div id="bk-save-banner" class="bk-banner" hidden role="status"></div>
           <div class="bk-center">
@@ -492,6 +499,13 @@
             <span class="bk-pay-spinner" hidden aria-hidden="true"></span>
             <span id="bk-fail-retry-text">Pay 0 kr</span>
           </button>
+        </div>
+
+        <div class="bk-foot-panel" id="bk-foot-waiting" hidden>
+          <div class="bk-wait-actions">
+            <a class="bk-btn bk-btn-primary bk-btn-block" id="bk-vipps-again" href="" hidden>Open Vipps again</a>
+            <button type="button" class="bk-btn bk-btn-secondary bk-btn-block" data-action="start-over">Start over</button>
+          </div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-done" hidden>

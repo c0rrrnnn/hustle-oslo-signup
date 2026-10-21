@@ -46,7 +46,7 @@ test("the deployed allow-list is the public site and live mode stays off", () =>
   const origins = toml.split("\n").find((line) => line.startsWith("ALLOWED_ORIGINS"));
   assert.equal(
     origins,
-    'ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com,https://hustle-oslo-test.pages.dev"',
+    'ALLOWED_ORIGINS = "https://hustleoslo.com,https://www.hustleoslo.com"',
   );
   assert.match(toml, /ALLOW_LIVE_PAYMENTS = "false"/);
 });

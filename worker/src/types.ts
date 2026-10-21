@@ -106,6 +106,8 @@ export interface StoredOrder {
   checkoutLeaseUntil: string | null;
   checkoutLeaseToken: string | null;
   vippsCheckedAt: string | null;
+  /** Last time GET /order asked Stripe about a still-pending card payment. */
+  stripeCheckedAt?: string | null;
   confirmationSent: boolean;
   failureReason: string | null;
   /** Origin of the checkout request, so confirmation mail can link to GET /ics. */

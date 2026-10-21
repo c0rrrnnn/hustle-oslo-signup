@@ -4,7 +4,7 @@ import { sha256Base64, timingSafeEqual } from "./crypto.ts";
 import { checkoutOkKey, getOrder, listPrefixedIds, markOrderPaid, newOrder, pendingVippsKey, putOrder, saveStatus } from "./orders.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
-import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, verifyStripeSignature } from "./stripe.ts";
+import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, stripePayMethod, verifyStripeSignature } from "./stripe.ts";
 import type { CaptureMode, CheckoutInput, Deps, Env, PayMethod, SignupMeta, StoredOrder } from "./types.ts";
 import {
   captureVippsPayment,
@@ -22,6 +22,7 @@ import {
 export { appsScriptBodies, clearVippsTokenCache };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** 30 new checkouts per 10 minutes per hashed IP. Replaying an order does not count. */
 const CHECKOUT_LIMIT = 30;
 const CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
 const CHECKOUT_WAIT_MS = 8000;
@@ -72,6 +73,14 @@ function clip(value: unknown, max: number): string {
 
 function emailOk(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 200;
+}
+
+/** Optional. Digits and spaces, with an optional leading +. */
+function phoneOk(value: string): boolean {
+  if (!value) return true;
+  if (!/^\+?[0-9 ]+$/.test(value)) return false;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15;
 }
 
 function allowLive(env: Env): boolean {
@@ -178,6 +187,7 @@ function publicOrder(order: StoredOrder) {
     appsScriptPosted: order.appsScriptPosted,
     confirmationSent: order.confirmationSent,
     failureReason: order.status === "failed" ? order.failureReason : null,
+    redirectUrl: order.status === "pending" && order.provider === "vipps" ? order.redirectUrl : null,
   };
 }
 
@@ -284,6 +294,9 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
   };
   if (customer.fullName.length < 2 || !emailOk(customer.email)) {
     return json(400, { ok: false, error: "customer", message: "Check your name and email." }, cors);
+  }
+  if (!phoneOk(customer.phone)) {
+    return json(400, { ok: false, error: "phone", message: "Enter a phone number, or leave it blank." }, cors);
   }
   const now = (deps.now || (() => new Date()))();
   const nightsRaw = Array.isArray(body.nights) ? (body.nights as { eventId?: string; ticketId?: string; priceTier?: string }[]) : [];
@@ -512,15 +525,57 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
     return json(500, { ok: false, error: error instanceof Error ? error.message : "stripe-retrieve" }, cors);
   }
   const decision = decideStripe(intent, order);
+  const noted = await noteStripeMethod(env, order, intent, now.toISOString());
+  if (type === "payment_intent.payment_failed" && decision.action !== "paid") {
+    const reason = decision.action === "failed" ? decision.reason : "declined";
+    await saveStatus(env.ORDERS, noted, "failed", reason, now.toISOString(), reason);
+    return json(200, { ok: true, status: "failed", reason }, cors);
+  }
   if (decision.action === "paid") {
-    await acceptPaid(env, deps, order, decision.paymentId, "succeeded", now);
+    await acceptPaid(env, deps, noted, decision.paymentId, "succeeded", now);
     console.info(JSON.stringify({ msg: "timing", step: "webhook-paid", provider: "stripe", orderId, ms: Date.now() - webhookStarted }));
     return json(200, { ok: true, status: "paid" }, cors);
   }
   if (decision.action === "failed") {
-    await saveStatus(env.ORDERS, order, "failed", decision.reason, now.toISOString(), decision.reason);
+    await saveStatus(env.ORDERS, noted, "failed", decision.reason, now.toISOString(), decision.reason);
   }
   return json(200, { ok: true, status: decision.action, reason: decision.reason }, cors);
+}
+
+async function noteStripeMethod(env: Env, order: StoredOrder, intent: Awaited<ReturnType<typeof retrievePaymentIntent>>, nowIso: string): Promise<StoredOrder> {
+  const method = stripePayMethod(intent);
+  const current = (await getOrder(env.ORDERS, order.orderId)) || order;
+  if (!method || current.method === method) return current;
+  current.method = method;
+  current.updatedAt = nowIso;
+  await putOrder(env.ORDERS, current);
+  return current;
+}
+
+/** Webhook fallback: a pending card order is marked from the retrieved PaymentIntent. */
+async function syncStripeOrder(env: Env, deps: Deps, order: StoredOrder): Promise<StoredOrder> {
+  const now = (deps.now || (() => new Date()))();
+  const fresh = (await getOrder(env.ORDERS, order.orderId)) || order;
+  if (fresh.provider !== "stripe" || fresh.status !== "pending" || !fresh.paymentId) return fresh;
+  const checked = fresh.stripeCheckedAt ? Date.parse(fresh.stripeCheckedAt) : 0;
+  if (Number.isFinite(checked) && now.getTime() - checked < VIPPS_SYNC_THROTTLE_MS) return fresh;
+  fresh.stripeCheckedAt = now.toISOString();
+  await putOrder(env.ORDERS, fresh);
+  const fetcher = deps.fetch || fetch;
+  let intent;
+  try {
+    intent = await retrievePaymentIntent(fetcher, env.STRIPE_SECRET_KEY, fresh.paymentId);
+  } catch {
+    console.info(JSON.stringify({ msg: "stripe-retrieve-failed", orderId: fresh.orderId }));
+    return (await getOrder(env.ORDERS, fresh.orderId)) || fresh;
+  }
+  const noted = await noteStripeMethod(env, fresh, intent, now.toISOString());
+  const decision = decideStripe(intent, noted);
+  if (decision.action === "paid") return acceptPaid(env, deps, noted, decision.paymentId, "succeeded", now);
+  if (decision.action === "failed") {
+    return saveStatus(env.ORDERS, noted, "failed", decision.reason, now.toISOString(), decision.reason);
+  }
+  return (await getOrder(env.ORDERS, fresh.orderId)) || noted;
 }
 
 async function settleVipps(
@@ -761,6 +816,8 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
       if (!order) return json(404, { ok: false, error: "not-found" }, cors);
       if (order.provider === "vipps" && (order.status === "pending" || order.status === "reserved")) {
         order = await syncVippsOrder(env, deps, order, false);
+      } else if (order.provider === "stripe" && order.status === "pending") {
+        order = await syncStripeOrder(env, deps, order);
       }
       return json(200, publicOrder(order), cors);
     }

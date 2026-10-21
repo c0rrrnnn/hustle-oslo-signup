@@ -27,9 +27,10 @@ test("the return page errors on an unknown order and can mount a live publishabl
   assert.equal(unknown.ok, false);
   assert.match(unknown.message || "", /couldn’t find that payment/i);
   assert.equal(unknown.booking, undefined);
-  const pending = api.resultFromOrder({ status: "pending", appsScriptPosted: false, confirmationSent: false });
-  assert.equal(pending.ok, true);
-  assert.equal(pending.booking?.pendingConfirmation, true);
+  const pending = api.resultFromOrder({ status: "pending", appsScriptPosted: false, confirmationSent: false, provider: "vipps" });
+  assert.equal(pending.ok, false);
+  assert.equal(pending.booking, undefined);
+  assert.doesNotMatch(pending.message || "", /you’re booked/i);
   const paid = api.resultFromOrder({ status: "paid", paymentId: "pi_test", appsScriptPosted: false, confirmationSent: false });
   assert.equal(paid.ok, true);
   assert.equal(paid.booking?.ok, true);

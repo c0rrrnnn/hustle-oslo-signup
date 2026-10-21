@@ -684,7 +684,22 @@ test("a vipps webhook that is not authorized yet does not capture", async () => 
 
 test("order status omits the Stripe client secret", async () => {
   const { env } = await seedCardOrder();
-  const response = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, { now: () => NOW });
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        amount: 22000,
+        currency: "nok",
+        status: "requires_payment_method",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    throw new Error("unexpected " + call.url);
+  });
+  const response = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, {
+    fetch: recorded.fetcher,
+    now: () => NOW,
+  });
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.status, "pending");

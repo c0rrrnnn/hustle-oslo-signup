@@ -10,6 +10,13 @@ export interface StripeIntent {
   status?: string;
   client_secret?: string;
   metadata?: { orderId?: string };
+  last_payment_error?: { code?: string; message?: string; decline_code?: string } | null;
+  payment_method?: string | StripePaymentMethod | null;
+}
+
+export interface StripePaymentMethod {
+  type?: string;
+  card?: { wallet?: { type?: string } | null } | null;
 }
 
 export type StripeDecision =
@@ -65,7 +72,22 @@ export function decideStripe(
   if (intent.amount !== order.amountMinor) return { action: "failed", reason: "amount-mismatch" };
   if (intent.status === "succeeded") return { action: "paid", paymentId: intent.id };
   if (intent.status === "canceled") return { action: "failed", reason: "canceled" };
+  if (intent.status === "requires_payment_method" && intent.last_payment_error) {
+    const code = intent.last_payment_error.decline_code || intent.last_payment_error.code || "declined";
+    return { action: "failed", reason: String(code).slice(0, 40) };
+  }
   return { action: "pending", reason: intent.status || "pending" };
+}
+
+/** Card, or the wallet Stripe recorded on that card. A bare payment-method id is not enough. */
+export function stripePayMethod(intent: StripeIntent | null): "card" | "apple" | "google" | null {
+  const method = intent?.payment_method;
+  if (!method || typeof method === "string") return null;
+  const wallet = method.card?.wallet?.type;
+  if (wallet === "apple_pay") return "apple";
+  if (wallet === "google_pay") return "google";
+  if (method.type === "card") return "card";
+  return null;
 }
 
 export function assertStripeTestKey(secretKey: string, publishableKey: string): string | null {
@@ -134,13 +156,16 @@ export async function retrievePaymentIntent(
   secretKey: string,
   paymentIntentId: string,
 ): Promise<StripeIntent> {
-  const response = await fetcher(`${STRIPE_API}/payment_intents/${encodeURIComponent(paymentIntentId)}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      "Stripe-Version": STRIPE_VERSION,
+  const response = await fetcher(
+    `${STRIPE_API}/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=payment_method`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Stripe-Version": STRIPE_VERSION,
+      },
     },
-  });
+  );
   const payload = (await response.json().catch(() => ({}))) as StripeIntent & { error?: { message?: string } };
   if (!response.ok || !payload.id) {
     throw new Error(payload.error?.message || `Stripe retrieve failed (${response.status})`);

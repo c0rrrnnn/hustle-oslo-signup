@@ -65,8 +65,8 @@
   const WEEKDAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const WEEKDAYS_NARROW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
-  const VIEWS = ["student", "dates", "confirm", "details", "checkout", "failed", "done"];
-  const PROGRESS = { student: 1, dates: 2, confirm: 2, details: 3, checkout: 4, failed: 4, done: 4 };
+  const VIEWS = ["student", "dates", "confirm", "details", "checkout", "failed", "waiting", "done"];
+  const PROGRESS = { student: 1, dates: 2, confirm: 2, details: 3, checkout: 4, failed: 4, waiting: 4, done: 4 };
   const HEADINGS = {
     student: "bk-student-heading",
     dates: "bk-dates-heading",
@@ -74,6 +74,7 @@
     details: "bk-details-heading",
     checkout: "bk-checkout-heading",
     failed: "bk-failed-heading",
+    waiting: "bk-waiting-heading",
     done: "bk-done-heading",
   };
 
@@ -95,6 +96,7 @@
     complete: false,
     announcedBusy: false,
     js: null,
+    resumeGen: 0,
     timer: null,
     mountChain: null,
   };
@@ -108,7 +110,7 @@
     calendarFocusDate: null,
     calendarYear: null,
     calendarMonth: null,
-    paymentMethod: "apple",
+    paymentMethod: "card",
     paymentPending: true,
     transactionNumber: "",
     termsAcceptedAt: "",
@@ -513,6 +515,7 @@
       details: "Your details.",
       checkout: "Checkout.",
       failed: "Checkout.",
+      waiting: "Waiting for payment.",
       done: "You’re booked.",
     };
     if (view === "failed" || view === "done") return names[view];
@@ -575,6 +578,7 @@
   }
 
   function closeSheet() {
+    paymentUi.resumeGen += 1;
     if (state.submitting) return;
     const sheet = $("#book-sheet");
     const submitted = state.submitted;
@@ -594,7 +598,7 @@
     state.calendarFocusDate = null;
     state.calendarYear = null;
     state.calendarMonth = null;
-    state.paymentMethod = "apple";
+    state.paymentMethod = "card";
     state.paymentPending = true;
     state.transactionNumber = "";
     state.termsAcceptedAt = "";
@@ -638,6 +642,10 @@
     if (state.view === "details") return go("confirm");
     if (state.view === "checkout") return go(isDesktop() ? "confirm" : "details");
     if (state.view === "failed") return go("checkout");
+    if (state.view === "waiting") {
+      paymentUi.resumeGen += 1;
+      return go(state.selections.length ? "checkout" : "student");
+    }
   }
 
   function setTier(tier) {
@@ -1007,8 +1015,10 @@
   }
 
   function normalizeLiveMethod() {
-    if (!paymentsLive()) return;
-    if (state.paymentMethod === "apple" || state.paymentMethod === "google") state.paymentMethod = "card";
+    const methods = methodChoices();
+    if (methods.indexOf(state.paymentMethod) === -1) {
+      state.paymentMethod = methods.indexOf("card") !== -1 ? "card" : methods[0] || "card";
+    }
   }
 
   function renderPayMethods() {
@@ -1144,7 +1154,7 @@
   function updatePayChrome() {
     normalizeLiveMethod();
     const amt = currentAmount();
-    const method = state.paymentMethod || "apple";
+    const method = state.paymentMethod || "card";
     const who = method === "vipps" ? "Vipps" : "Stripe";
     const payText = $("#bk-pay-text");
     if (payText && !state.submitting) payText.textContent = "Pay " + amt + " kr";
@@ -1533,8 +1543,9 @@
     const walletHost = $("#bk-express-checkout");
     if (!cardHost || !walletHost || !window.Stripe) return { ok: false, message: PAY_FAIL };
     unmountStripeElements();
-    const stripe = window.Stripe(created.publishableKey);
+    const stripe = window.Stripe(created.publishableKey, { locale: "en" });
     const elements = stripe.elements({
+      locale: "en",
       clientSecret: created.clientSecret,
       appearance: {
         theme: "night",
@@ -1657,16 +1668,33 @@
     }
   }
 
-  function resultFromOrder(data, confirmOutcome) {
-    const result = window.HustlePaymentStatus.checkoutResult(data, confirmOutcome || null);
+  function resultFromOrder(data) {
+    const result = window.HustlePaymentStatus.checkoutResult(data);
     if (result.ok) return result;
-    if (result.reason === "missing") {
-      return {
-        ok: false,
-        message: "We couldn’t find that payment. If money left your account, don’t pay again. Email hustleinoslo@gmail.com.",
-      };
+    if (result.reason === "missing") return { ok: false, message: failureMessage("missing") };
+    return { ok: false, message: failureMessage(result.failureReason || result.reason) };
+  }
+
+  function failureMessage(reason) {
+    if (reason === "missing") {
+      return "We couldn’t find that payment. If money left your account, don’t pay again. Email hustleinoslo@gmail.com.";
     }
-    return { ok: false, message: PAY_FAIL };
+    const stopped = { aborted: 1, expired: 1, cancelled: 1, terminated: 1 };
+    if (reason && stopped[String(reason).toLowerCase()]) {
+      return "Vipps didn’t complete the payment. You haven’t been charged.";
+    }
+    return PAY_FAIL;
+  }
+
+  async function fetchOrder(orderId) {
+    try {
+      const res = await fetch(workerUrl("/order/" + encodeURIComponent(orderId)));
+      const data = await res.json().catch(function () { return {}; });
+      if (res.status === 404 || (data && data.error === "not-found")) return { status: "unknown", error: "not-found" };
+      return data;
+    } catch (err) {
+      return { status: "pending" };
+    }
   }
 
   async function pollOrder(orderId, options) {
@@ -1694,20 +1722,22 @@
   }
 
   async function resolveConfirmed(orderId, confirmed, started) {
-    const decision = window.HustlePaymentStatus.stripeConfirmOutcome(confirmed);
-    if (decision.kind === "failed") {
-      return { ok: false, message: decision.message || PAY_FAIL };
+    const immediate = window.HustlePaymentStatus.clientPaymentResult(confirmed);
+    if (immediate) {
+      if (immediate.ok) {
+        // The webhook, or this read, writes the sheet. The page does not wait for it.
+        fetch(workerUrl("/order/" + encodeURIComponent(orderId))).catch(function () {});
+      }
+      logTiming("success-resolve", started, { orderId: orderId, ok: !!immediate.ok, immediate: true });
+      return immediate.ok ? immediate : { ok: false, message: immediate.message || PAY_FAIL };
     }
     const pollStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const polled = await pollOrder(orderId, { stripeSucceeded: decision.succeeded === true });
-    logTiming("order-poll", pollStarted, {
-      orderId: orderId,
-      status: polled && polled.status,
-      stripeSucceeded: decision.succeeded === true,
-    });
-    const result = resultFromOrder(polled, decision);
-    logTiming("success-resolve", started, { orderId: orderId, ok: !!(result && result.ok) });
-    return result;
+    const polled = await pollOrder(orderId, { stripeSucceeded: false });
+    logTiming("order-poll", pollStarted, { orderId: orderId, status: polled && polled.status });
+    const screen = window.HustlePaymentStatus.returnScreen(polled);
+    logTiming("success-resolve", started, { orderId: orderId, ok: screen.kind === "paid" });
+    if (screen.kind === "paid") return resultFromOrder(polled);
+    return { ok: false, message: failureMessage(screen.kind === "failed" ? screen.reason : "pending") };
   }
 
   function savePaymentSession(orderId) {
@@ -1778,20 +1808,73 @@
     window.history.replaceState({}, "", next);
   }
 
-  async function resumePayment(orderId) {
-    paymentUi.orderId = orderId;
-    state.submitting = true;
-    const polled = await pollOrder(orderId);
-    state.submitting = false;
-    stripPaymentQuery();
-    const result = resultFromOrder(polled);
-    if (result.ok) {
-      state.transactionNumber = result.transactionNumber || "";
-      state.paymentPending = false;
-      showConfirmation(result.booking);
-      return;
+  function showVippsWaiting(provider, redirectUrl) {
+    const heading = $("#bk-waiting-heading");
+    const sub = $("#bk-waiting-sub");
+    const again = $("#bk-vipps-again");
+    const vipps = provider === "vipps";
+    if (heading) heading.textContent = vipps ? "Waiting for Vipps…" : "Waiting for payment…";
+    if (sub) sub.textContent = "We haven’t seen a payment yet, so this isn’t booked.";
+    const url = typeof redirectUrl === "string" ? redirectUrl : "";
+    const open = vipps && /^https:\/\//.test(url);
+    if (again) {
+      again.hidden = !open;
+      if (open) again.href = url;
+      else again.removeAttribute("href");
     }
-    showPaymentFailed(result.message);
+    if (state.view !== "waiting") go("waiting");
+    const step = $("#bk-step-status");
+    if (step) step.textContent = vipps ? "Waiting for Vipps." : "Waiting for payment.";
+  }
+
+  function startOver() {
+    paymentUi.resumeGen += 1;
+    try {
+      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
+    } catch (err) {
+      /* private mode */
+    }
+    stripPaymentQuery();
+    resetBooking();
+    go("student");
+  }
+
+  async function resumePayment(orderId) {
+    const gen = (paymentUi.resumeGen += 1);
+    paymentUi.orderId = orderId;
+    const deadline = Date.now() + window.HustlePaymentStatus.returnWaitMs();
+    let attempt = 0;
+    let redirectUrl = "";
+    let provider = state.paymentMethod === "vipps" ? "vipps" : "";
+    while (gen === paymentUi.resumeGen && Date.now() < deadline) {
+      const data = await fetchOrder(orderId);
+      if (gen !== paymentUi.resumeGen) return;
+      const screen = window.HustlePaymentStatus.returnScreen(data);
+      if (screen.kind === "paid") {
+        stripPaymentQuery();
+        state.transactionNumber = screen.transactionNumber || "";
+        state.paymentPending = false;
+        showConfirmation({
+          ok: true,
+          confirmationSent: screen.confirmationSent === true,
+          paidByWorker: true,
+        });
+        return;
+      }
+      if (screen.kind === "failed") {
+        stripPaymentQuery();
+        showPaymentFailed(failureMessage(screen.reason));
+        return;
+      }
+      if (screen.provider) provider = screen.provider;
+      if (screen.redirectUrl) redirectUrl = screen.redirectUrl;
+      showVippsWaiting(provider, redirectUrl);
+      const wait = window.HustlePaymentStatus.returnPollDelayMs(attempt);
+      attempt += 1;
+      if (Date.now() + wait >= deadline) break;
+      await new Promise(function (resolve) { window.setTimeout(resolve, wait); });
+    }
+    if (gen === paymentUi.resumeGen) showVippsWaiting(provider, redirectUrl);
   }
 
   function maybeResumePayment() {
@@ -1800,12 +1883,16 @@
     const orderId = params.get("order");
     if (!orderId) return;
     restorePaymentSession(orderId);
-    openSheet();
     if (params.get("redirect_status") === "failed") {
+      state.view = "failed";
+      openSheet();
       stripPaymentQuery();
       showPaymentFailed(PAY_FAIL);
       return;
     }
+    state.view = "waiting";
+    openSheet();
+    if (state.paymentMethod === "vipps") showVippsWaiting("vipps", "");
     resumePayment(orderId);
   }
 
@@ -2301,6 +2388,13 @@
       }
     }
     const list = $("#bk-done-list");
+    const cal = $("#bk-cal-actions");
+    if (!saved) {
+      if (list) list.innerHTML = "";
+      if (cal) cal.innerHTML = "";
+      if (mark) mark.hidden = true;
+      return;
+    }
     const hosted = !!hostedIcsUrl();
     if (list) {
       list.innerHTML = state.selections
@@ -2520,6 +2614,7 @@
     if (action === "edit-details") return go("details");
     if (action === "pay") return onPay();
     if (action === "fail-back") return go("checkout");
+    if (action === "start-over") return startOver();
     if (action === "done") return closeSheet();
     if (action === "ics-one") {
       const sel = state.selections.find((s) => s.event.id === actionEl.dataset.eventId);
