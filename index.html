@@ -469,19 +469,23 @@
             <button type="button" class="bk-choice bk-btn-block" id="bk-student-yes" data-action="student" data-value="student" aria-pressed="false">Yes</button>
             <button type="button" class="bk-choice bk-btn-block" id="bk-student-no" data-action="student" data-value="standard" aria-pressed="false">No</button>
           </div>
+          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-dates" hidden>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-dates-next" data-action="dates-next" disabled>Next</button>
+          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-confirm" hidden>
           <div class="bk-subtotal"><span>Subtotal</span><strong id="bk-subtotal">0 kr</strong></div>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-confirm-next" data-action="confirm-next">Continue to Payment</button>
+          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-details" hidden>
           <button type="submit" class="bk-btn bk-btn-primary bk-btn-block" id="bk-details-continue" form="bk-details-form">Continue</button>
+          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-checkout" hidden>
@@ -490,7 +494,9 @@
             <span class="bk-pay-spinner" hidden aria-hidden="true"></span>
             <span id="bk-pay-text">Pay 0 kr</span>
           </button>
-          <p class="bk-tos" id="bk-checkout-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          <div class="bk-foot-note">
+            <p class="bk-tos" id="bk-checkout-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          </div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-failed" hidden>
@@ -499,7 +505,9 @@
             <span class="bk-pay-spinner" hidden aria-hidden="true"></span>
             <span id="bk-fail-retry-text">Pay 0 kr</span>
           </button>
-          <p class="bk-tos" id="bk-fail-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          <div class="bk-foot-note">
+            <p class="bk-tos" id="bk-fail-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          </div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-waiting" hidden>
@@ -507,13 +515,16 @@
             <a class="bk-btn bk-btn-primary bk-btn-block" id="bk-vipps-again" href="" hidden>Open Vipps again</a>
             <button type="button" class="bk-btn bk-btn-secondary bk-btn-block" data-action="start-over">Start over</button>
           </div>
+          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-done" hidden>
           <div class="bk-row">
             <button type="button" class="bk-btn bk-btn-primary bk-btn-block" data-action="done">Done</button>
           </div>
-          <p class="bk-mini">Questions? DM <a href="https://instagram.com/hustleoslo" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> on Instagram</p>
+          <div class="bk-foot-note">
+            <p class="bk-mini">Questions? DM <a href="https://instagram.com/hustleoslo" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> (opens in a new tab)</span></a> on Instagram</p>
+          </div>
         </div>
       </footer>
     </div>

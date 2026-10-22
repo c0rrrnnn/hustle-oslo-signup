@@ -1169,14 +1169,69 @@
     });
   }
 
-  // The terms line wraps, so the sticky footer's height is measured rather
-  // than hard-coded. --bk-foot-h is the border box, which already includes
-  // the footer's own safe-area padding. The content pad adds that inset once
-  // more so the last payment row can clear the home indicator.
+  // The Pay terms set the reserved line under every button. Measure a clone
+  // so a hidden step still reports the wrapped height at the footer's width.
+  function noteBlockHeight(source, foot) {
+    if (!source || !foot || typeof source.cloneNode !== "function" || typeof document.createElement !== "function") return 0;
+    const probe = source.cloneNode(true);
+    probe.removeAttribute("id");
+    probe.hidden = false;
+    const slot = document.createElement("div");
+    slot.className = "bk-foot-note";
+    slot.setAttribute("aria-hidden", "true");
+    slot.style.position = "absolute";
+    slot.style.visibility = "hidden";
+    slot.style.pointerEvents = "none";
+    slot.style.left = "0";
+    slot.style.right = "0";
+    slot.style.minHeight = "0";
+    slot.style.marginTop = "0";
+    slot.appendChild(probe);
+    foot.appendChild(slot);
+    const rect = typeof probe.getBoundingClientRect === "function" ? probe.getBoundingClientRect() : null;
+    const height = rect && Number.isFinite(rect.height) ? Math.ceil(rect.height) : 0;
+    slot.remove();
+    return height;
+  }
+
+  function syncFootNote() {
+    const sheet = $("#book-sheet");
+    const foot = sheet && $(".bk-foot", sheet);
+    if (!sheet || !foot || !foot.clientWidth) return;
+    const height = Math.max(noteBlockHeight($("#bk-checkout-tos"), foot), noteBlockHeight($(".bk-mini"), foot));
+    if (height > 0 && sheet.style && typeof sheet.style.setProperty === "function") {
+      sheet.style.setProperty("--bk-foot-note", height + "px");
+    }
+  }
+
+  // Pin the sheet to the visible viewport so a collapsing Safari or Chrome
+  // toolbar cannot cover the fine print. dvh/svh remain the CSS fallback.
+  function syncVisualViewport() {
+    const sheet = $("#book-sheet");
+    if (!sheet || !sheet.style || typeof sheet.style.setProperty !== "function") return;
+    const vv = window.visualViewport;
+    if (!vv || !vv.height) return;
+    const height = Math.round(vv.height) + "px";
+    if (sheet.style.height !== height) sheet.style.setProperty("height", height);
+    if (sheet.style.maxHeight !== height) sheet.style.setProperty("max-height", height);
+    const top = Math.round(vv.offsetTop || 0);
+    const topValue = top ? top + "px" : "";
+    if ((sheet.style.top || "") !== topValue) {
+      if (topValue) sheet.style.setProperty("top", topValue);
+      else if (typeof sheet.style.removeProperty === "function") sheet.style.removeProperty("top");
+    }
+  }
+
+  // The terms line wraps, so the reserved note and the footer are measured
+  // rather than hard-coded. --bk-foot-h is the border box, which already
+  // includes the footer's own safe-area padding. The footer is in the column
+  // under the body, so the body does not pad by that height (that pad was
+  // the empty black gap). revealPayRows scrolls the card clear of the bar.
   function syncFootPad() {
     const sheet = $("#book-sheet");
     const foot = sheet && $(".bk-foot", sheet);
     if (!sheet || !foot) return;
+    syncFootNote();
     let height = 0;
     if (typeof foot.getBoundingClientRect === "function") {
       const rect = foot.getBoundingClientRect();
@@ -1210,7 +1265,11 @@
   }
 
   function watchFootPad() {
-    syncFootPad();
+    const onViewport = function () {
+      syncVisualViewport();
+      syncFootPad();
+    };
+    onViewport();
     const foot = $(".bk-foot");
     if (foot && typeof ResizeObserver === "function") {
       const observer = new ResizeObserver(function () {
@@ -1219,7 +1278,12 @@
       observer.observe(foot);
     }
     if (typeof window.addEventListener === "function") {
-      window.addEventListener("resize", syncFootPad);
+      window.addEventListener("resize", onViewport);
+    }
+    const vv = window.visualViewport;
+    if (vv && typeof vv.addEventListener === "function") {
+      vv.addEventListener("resize", onViewport);
+      vv.addEventListener("scroll", onViewport);
     }
   }
 

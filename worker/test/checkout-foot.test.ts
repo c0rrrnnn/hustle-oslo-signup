@@ -47,6 +47,23 @@ test("the payment footer is measured and the error card keeps a red fill without
   const checkoutFoot = html.slice(html.indexOf('id="bk-foot-checkout"'), html.indexOf('id="bk-foot-failed"'));
   assert.ok(failedFoot.indexOf('id="bk-fail-retry"') < failedFoot.indexOf('id="bk-fail-tos"'));
   assert.ok(checkoutFoot.indexOf('id="bk-pay"') < checkoutFoot.indexOf('id="bk-checkout-tos"'));
+  assert.match(css, /\.bk-foot-note\s*\{[^}]*min-height:\s*var\(--bk-foot-note/);
+  assert.match(css, /\.bk-foot-panel\s*\{[^}]*flex-direction:\s*column;/);
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(js, /visualViewport/);
+  assert.match(js, /--bk-foot-note/);
+  assert.match(js, /function syncFootNote\(/);
+  for (const name of ["student", "dates", "confirm", "details", "checkout", "failed", "waiting", "done"]) {
+    const start = html.indexOf('id="bk-foot-' + name + '"');
+    const next = html.indexOf('id="bk-foot-', start + 12);
+    const slice = html.slice(start, next === -1 ? html.indexOf("</footer>", start) : next);
+    assert.ok(slice.includes('class="bk-foot-note"'), name + " reserves the note slot");
+  }
+  assert.ok(checkoutFoot.indexOf('id="bk-pay"') < checkoutFoot.indexOf("bk-foot-note"));
+  assert.ok(checkoutFoot.indexOf("bk-foot-note") < checkoutFoot.indexOf('id="bk-checkout-tos"'));
+  const doneFoot = html.slice(html.indexOf('id="bk-foot-done"'), html.indexOf("</footer>", html.indexOf('id="bk-foot-done"')));
+  assert.ok(doneFoot.indexOf('data-action="done"') < doneFoot.indexOf("bk-foot-note"));
+  assert.ok(doneFoot.indexOf("bk-foot-note") < doneFoot.indexOf("bk-mini"));
   assert.equal(html.includes("Secure payment by"), false);
   assert.equal(css.includes("bk-brand-visa"), false);
   assert.equal(/margin-top:\s*calc\(-1\s*\*\s*var\(--bk-foot-h/.test(css), false);
