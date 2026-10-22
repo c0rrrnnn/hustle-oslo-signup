@@ -48,14 +48,61 @@ async function paidEnv(kv: OrderKv = memoryKv()) {
   return { kv, env };
 }
 
-test("Apps Script 302 is posted again with the same body and the flag is saved", async () => {
+test("Apps Script 302 is followed with GET and the success JSON marks the order posted", async () => {
+  const { kv, env } = await paidEnv();
+  const recorded = recordFetch((call) => {
+    assert.equal(call.redirect, "manual");
+    if (call.url === env.APPS_SCRIPT_URL) {
+      assert.equal(call.method, "POST");
+      assert.equal(call.headers["content-type"], "text/plain;charset=utf-8");
+      assert.ok(call.body.length > 0);
+      return new Response(null, { status: 302, headers: { Location: ECHO } });
+    }
+    assert.equal(call.url, ECHO);
+    assert.equal(call.method, "GET");
+    assert.equal(call.body, "");
+    assert.equal(call.headers["content-type"], undefined);
+    return jsonResponse({ ok: true, confirmationSent: true });
+  });
+  const result = await deliverPaidBooking(env, { fetch: recorded.fetcher, now: () => NOW }, ORDER_ID);
+  assert.equal(result, "posted");
+  assert.equal(recorded.calls.length, 2);
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.appsScriptPosted, true);
+  assert.equal(order?.confirmationSent, true);
+  assert.equal(order?.appsScriptLeaseToken, null);
+  assert.equal(order?.appsScriptAttempts, 0);
+  assert.equal((await kv.list({ prefix: "unposted:" })).keys.length, 0);
+});
+
+test("Apps Script 302 followed by error JSON does not mark the order posted", async () => {
+  const { kv, env } = await paidEnv();
+  const recorded = recordFetch((call) => {
+    if (call.url === env.APPS_SCRIPT_URL) {
+      assert.equal(call.method, "POST");
+      return new Response(null, { status: 302, headers: { Location: ECHO } });
+    }
+    assert.equal(call.method, "GET");
+    assert.equal(call.body, "");
+    return jsonResponse({ ok: false, error: "sheet-rejected" });
+  });
+  const result = await deliverPaidBooking(env, { fetch: recorded.fetcher, now: () => NOW }, ORDER_ID);
+  assert.equal(result, "failed");
+  assert.equal(recorded.calls.length, 2);
+  const order = await getOrder(kv, ORDER_ID);
+  assert.equal(order?.appsScriptPosted, false);
+  assert.equal(order?.failureReason, "sheet-rejected");
+  assert.equal(order?.appsScriptLeaseToken, null);
+});
+
+test("Apps Script 307 is posted again with the same body", async () => {
   const { kv, env } = await paidEnv();
   const recorded = recordFetch((call) => {
     assert.equal(call.method, "POST");
     assert.equal(call.redirect, "manual");
     assert.equal(call.headers["content-type"], "text/plain;charset=utf-8");
     if (call.url === env.APPS_SCRIPT_URL) {
-      return new Response(null, { status: 302, headers: { Location: ECHO } });
+      return new Response(null, { status: 307, headers: { Location: ECHO } });
     }
     assert.equal(call.url, ECHO);
     return jsonResponse({ ok: true, confirmationSent: true });
@@ -64,12 +111,10 @@ test("Apps Script 302 is posted again with the same body and the flag is saved",
   assert.equal(result, "posted");
   assert.equal(recorded.calls.length, 2);
   assert.equal(recorded.calls[1].body, recorded.calls[0].body);
+  assert.ok(recorded.calls[1].body.length > 0);
   const order = await getOrder(kv, ORDER_ID);
   assert.equal(order?.appsScriptPosted, true);
   assert.equal(order?.confirmationSent, true);
-  assert.equal(order?.appsScriptLeaseToken, null);
-  assert.equal(order?.appsScriptAttempts, 0);
-  assert.equal((await kv.list({ prefix: "unposted:" })).keys.length, 0);
 });
 
 test("a transient 404 and 500 are retried in the same request", async () => {

@@ -130,8 +130,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Apps Script answers 302 and expects the same POST, body included, at the echo URL. */
-function canRepost(next: URL, current: URL): boolean {
+/** 301/302/303 are the Apps Script echo page: GET it. 307/308 keep the POST. */
+function redirectMethod(status: number): "GET" | "POST" | null {
+  if (status === 301 || status === 302 || status === 303) return "GET";
+  if (status === 307 || status === 308) return "POST";
+  return null;
+}
+
+function canFollow(next: URL, current: URL): boolean {
   if (next.protocol !== "https:") return false;
   if (next.host === current.host) return true;
   return next.host === "script.google.com" || next.host === "script.googleusercontent.com";
@@ -139,28 +145,31 @@ function canRepost(next: URL, current: URL): boolean {
 
 async function postJson(fetcher: typeof fetch, url: string, body: string, timeoutMs: number): Promise<Response> {
   let current = url;
+  let method: "GET" | "POST" = "POST";
   let response: Response | null = null;
   for (let hop = 0; hop <= REDIRECT_HOPS; hop++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       response = await fetcher(current, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body,
+        method,
+        headers: method === "POST" ? { "Content-Type": "text/plain;charset=utf-8" } : undefined,
+        body: method === "POST" ? body : undefined,
         redirect: "manual",
         signal: controller.signal,
       });
     } finally {
       clearTimeout(timer);
     }
-    if (response.status < 300 || response.status >= 400) return response;
+    const nextMethod = redirectMethod(response.status);
+    if (!nextMethod) return response;
     await response.body?.cancel();
     const location = response.headers.get("Location");
     if (!location || hop === REDIRECT_HOPS) return response;
     const next = new URL(location, current);
-    if (!canRepost(next, new URL(current))) return response;
+    if (!canFollow(next, new URL(current))) return response;
     current = next.href;
+    method = nextMethod;
   }
   return response as Response;
 }
