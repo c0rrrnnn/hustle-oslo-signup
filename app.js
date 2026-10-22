@@ -49,6 +49,15 @@
     bundle: "2 class bundle",
     social: "Social only",
   };
+  // Booked-screen class lines. Swap these when Claire renames a ticket
+  // (for example "2 class bundle", "Social night"). Calendar titles are separate.
+  const CLASS_LINE_LABELS = {
+    beginners: "Beginner class",
+    intermediate: "Intermediate class",
+    bundle: "2 class bundle",
+    social: "Social only",
+    socialNight: "Social night",
+  };
   const METHOD_LABEL = {
     apple: "Apple Pay",
     google: "Google Pay",
@@ -212,6 +221,14 @@
   function ticketLabel(ticket) {
     if (!ticket) return "";
     return TICKET_LABELS[ticket.id] || ticket.name || "";
+  }
+
+  function classLineName(sel) {
+    const ticket = sel && sel.ticket;
+    const ev = sel && sel.event;
+    if (!ticket) return "";
+    if (ev && ev.type === "social") return CLASS_LINE_LABELS.socialNight;
+    return CLASS_LINE_LABELS[ticket.id] || ticketLabel(ticket);
   }
 
   function ticketTime(ev, ticketId) {
@@ -543,6 +560,7 @@
       renderFailed();
       renderPayMethods();
     }
+    closeGcalList(false);
     if (view === "done") renderDone();
     updatePayChrome();
     schedulePrepare();
@@ -568,6 +586,7 @@
   }
 
   function closeSheet() {
+    closeGcalList(false);
     paymentUi.resumeGen += 1;
     if (state.submitting) return;
     const sheet = $("#book-sheet");
@@ -2222,8 +2241,16 @@
     return { start: range[0], end: range[1] || range[0] };
   }
 
-  const CALENDAR_DETAILS = "What to bring: non-grippy shoes. No partner needed.\nQuestions? DM @hustleoslo on Instagram";
   const CALENDAR_ADDRESS = "Sentralen, Øvre Slottsgate 3, 0157 Oslo";
+  const CALENDAR_NAMES = {
+    beginners: "Beginner class",
+    intermediate: "Intermediate class",
+    bundle: "Beginner & Intermediate Class",
+    socialClass: "Social Only",
+    socialNight: "Social",
+  };
+  const ICON_CAL = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"></rect><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>';
+  const ICON_PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path></svg>';
   const ORDER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function calendarPlatform() {
@@ -2243,9 +2270,37 @@
     return state.selections.map((sel) => calendarDateLabel(sel.event)).filter(Boolean).join(", ");
   }
 
-  function calendarLocationText(ev) {
+  function calendarName(ticketId, eventType) {
+    if (ticketId === "beginners" || ticketId === "intermediate" || ticketId === "bundle") return CALENDAR_NAMES[ticketId];
+    if (ticketId === "social") return eventType === "class" ? CALENDAR_NAMES.socialClass : CALENDAR_NAMES.socialNight;
+    return "Class";
+  }
+
+  function calendarTitle(sel) {
+    const ticket = sel && sel.ticket;
+    const ev = sel && sel.event;
+    return "Hustle Oslo: " + calendarName(ticket && ticket.id, ev && ev.type);
+  }
+
+  function calendarRoomNote(ev) {
     const room = ev && ev.location ? String(ev.location).trim() : "";
-    return room ? CALENDAR_ADDRESS + ", " + room : CALENDAR_ADDRESS;
+    return room ? "Room: " + room : "";
+  }
+
+  function icsAlarms(title) {
+    const desc = icsEscape(title);
+    return [
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-P1D",
+      "DESCRIPTION:" + desc,
+      "END:VALARM",
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-PT2H",
+      "DESCRIPTION:" + desc,
+      "END:VALARM",
+    ].join("\r\n");
   }
 
   function osloBasicStamp(date, hm) {
@@ -2281,10 +2336,11 @@
     const end = osloBasicStamp(sel.event.date, times.end);
     const params = new URLSearchParams({
       action: "TEMPLATE",
-      text: "Hustle Oslo – " + ticketLabel(sel.ticket),
-      location: calendarLocationText(sel.event),
-      details: CALENDAR_DETAILS,
+      text: calendarTitle(sel),
+      location: CALENDAR_ADDRESS,
     });
+    const notes = calendarRoomNote(sel.event);
+    if (notes) params.set("details", notes);
     return "https://calendar.google.com/calendar/render?" + params.toString() + "&dates=" + start + "/" + end;
   }
 
@@ -2302,62 +2358,136 @@
     }
   }
 
+  function icsButtonHtml(href) {
+    const dates = calendarDatePhrase();
+    const many = state.selections.length > 1;
+    const aria = "Add " + (many ? "all nights" : dates || "this night") + " to Apple Calendar or Outlook (.ics)";
+    const label = ICON_CAL + "<span>Apple / Outlook (.ics)</span>";
+    if (!href) {
+      return (
+        '<button type="button" class="bk-btn bk-btn-secondary cf-cal-btn" data-action="ics-all" aria-label="' +
+        escapeHtml(aria) +
+        '">' +
+        label +
+        "</button>"
+      );
+    }
+    const download = calendarPlatform() === "ios" ? "" : ' download="hustle-oslo.ics"';
+    return (
+      '<a class="bk-btn bk-btn-secondary cf-cal-btn" href="' +
+      escapeHtml(href) +
+      '"' +
+      download +
+      ' aria-label="' +
+      escapeHtml(aria) +
+      '">' +
+      label +
+      "</a>"
+    );
+  }
+
+  function googleButtonHtml() {
+    if (state.selections.length > 1) {
+      return (
+        '<button type="button" class="bk-btn bk-btn-secondary cf-cal-btn" id="bk-gcal-open" data-action="gcal-open" aria-haspopup="dialog" aria-expanded="false" aria-controls="cf-gcal-list">' +
+        ICON_PLUS +
+        "<span>Google Calendar</span></button>"
+      );
+    }
+    const sel = state.selections[0];
+    if (!sel) return "";
+    const label = "Add " + formatCheckoutDate(sel.event) + " to Google Calendar (opens in a new tab)";
+    return (
+      '<a class="bk-btn bk-btn-secondary cf-cal-btn" target="_blank" rel="noopener noreferrer" href="' +
+      escapeHtml(googleCalendarHref(sel)) +
+      '" aria-label="' +
+      escapeHtml(label) +
+      '">' +
+      ICON_PLUS +
+      "<span>Google Calendar</span></a>"
+    );
+  }
+
+  function calendarPairHtml(href) {
+    return '<div class="cf-cal-pair">' + icsButtonHtml(href) + googleButtonHtml() + "</div>";
+  }
+
   function hostedCalendarHtml() {
     const all = hostedIcsUrl();
     if (!all) return "";
-    const platform = calendarPlatform();
-    const dates = calendarDatePhrase();
-    let primary = "";
-    if (platform === "android") {
-      primary =
-        '<ul class="bk-cal-list">' +
-        state.selections
-          .map((sel) => {
-            const label = "Add " + calendarDateLabel(sel.event) + " to Google Calendar";
-            return (
-              '<li><a class="bk-btn bk-btn-secondary bk-btn-block bk-cal-link" target="_blank" rel="noopener noreferrer" href="' +
-              escapeHtml(googleCalendarHref(sel)) +
-              '" aria-label="' +
-              escapeHtml(label) +
-              '">' +
-              escapeHtml(label) +
-              "</a></li>"
-            );
-          })
-          .join("") +
-        "</ul>";
-    } else if (platform === "ios") {
-      const text = state.selections.length > 1 ? "Add all nights to Calendar" : "Add " + (dates || "this night") + " to Calendar";
-      const aria = state.selections.length > 1 ? "Add all nights to Calendar, " + dates : text;
-      primary =
-        '<a class="bk-btn bk-btn-secondary bk-btn-block bk-cal-link" href="' +
-        escapeHtml(all) +
-        '" aria-label="' +
-        escapeHtml(aria) +
-        '">' +
-        escapeHtml(text) +
-        "</a>";
-    }
-    const otherAria = "Other calendar (.ics)" + (dates ? ", " + dates : "");
-    const other =
-      '<a class="bk-cal-other' +
-      (primary ? "" : " is-only") +
-      '" href="' +
-      escapeHtml(all) +
-      '" aria-label="' +
-      escapeHtml(otherAria) +
-      '">Other calendar (.ics)</a>';
-    return primary + other;
+    return calendarPairHtml(all);
   }
 
   function fallbackCalendarHtml() {
-    const dates = calendarDatePhrase();
-    const aria = dates ? "Add all to calendar (.ics), " + dates : "Add all to calendar (.ics)";
+    return calendarPairHtml("");
+  }
+
+  function gcalIsDesktop() {
+    return window.matchMedia("(min-width: 960px)").matches;
+  }
+
+  function closeGcalList(restoreFocus) {
+    const list = $("#cf-gcal-list");
+    const scrim = $(".cf-gl-scrim");
+    if (list) list.remove();
+    if (scrim) scrim.remove();
+    const btn = $("#bk-gcal-open");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    if (restoreFocus && btn && typeof btn.focus === "function") btn.focus();
+  }
+
+  function gcalListHtml(desktop) {
+    const rows = state.selections
+      .map((sel) => {
+        const name = classLineName(sel);
+        const meta = formatCheckoutDate(sel.event) + ", " + ticketTime(sel.event, sel.ticket.id);
+        const label = "Add " + name + ", " + formatCheckoutDate(sel.event) + " to Google Calendar (opens in a new tab)";
+        return (
+          '<li class="cf-gl-row"><span class="cf-gl-main"><span class="cf-gl-name">' +
+          escapeHtml(name) +
+          '</span><span class="cf-gl-meta">' +
+          escapeHtml(meta) +
+          "</span></span>" +
+          '<a class="bk-btn bk-btn-secondary cf-gl-add" target="_blank" rel="noopener noreferrer" href="' +
+          escapeHtml(googleCalendarHref(sel)) +
+          '" aria-label="' +
+          escapeHtml(label) +
+          '">Add</a></li>'
+        );
+      })
+      .join("");
     return (
-      '<button type="button" class="bk-btn bk-btn-secondary bk-btn-block bk-ics-all" id="bk-ics-all" data-action="ics-all" aria-label="' +
-      escapeHtml(aria) +
-      '">Add all to calendar (.ics)</button>'
+      '<div class="cf-gl' +
+      (desktop ? "" : " cf-gl--sheet") +
+      '" id="cf-gcal-list" role="dialog" aria-modal="' +
+      (desktop ? "false" : "true") +
+      '" aria-labelledby="cf-gl-title">' +
+      (desktop ? "" : '<div class="bk-grab" aria-hidden="true"></div>') +
+      '<div class="cf-gl-hd"><p class="cf-gl-title" id="cf-gl-title">Add to Google Calendar</p>' +
+      '<button type="button" class="cf-gl-x" data-action="gcal-close" aria-label="Close">&#10005;</button></div>' +
+      '<p class="cf-gl-sub">Google adds one night at a time.</p>' +
+      '<ul class="cf-gl-list">' +
+      rows +
+      "</ul></div>"
     );
+  }
+
+  function openGcalList() {
+    closeGcalList(false);
+    const desktop = gcalIsDesktop();
+    const html = gcalListHtml(desktop);
+    if (desktop) {
+      const sec = $(".cf-cal-sec");
+      if (sec) sec.insertAdjacentHTML("beforeend", html);
+    } else {
+      const sheet = $("#book-sheet");
+      if (!sheet) return;
+      sheet.insertAdjacentHTML("beforeend", '<div class="cf-gl-scrim" data-action="gcal-close" aria-hidden="true"></div>' + html);
+    }
+    const btn = $("#bk-gcal-open");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    const closeBtn = $("#cf-gcal-list .cf-gl-x");
+    if (closeBtn && typeof closeBtn.focus === "function") closeBtn.focus();
   }
 
   function renderCalendarActions() {
@@ -2373,16 +2503,20 @@
         const times = timeParts(sel);
         const start = sel.event.date.replace(/-/g, "") + "T" + times.start.replace(":", "") + "00";
         const end = sel.event.date.replace(/-/g, "") + "T" + times.end.replace(":", "") + "00";
-        return [
+        const title = calendarTitle(sel);
+        const notes = calendarRoomNote(sel.event);
+        const lines = [
           "BEGIN:VEVENT",
           "UID:" + sel.event.id + "-" + sel.ticket.id + "@hustleoslo.com",
           "DTSTAMP:" + stamp,
           "DTSTART;TZID=Europe/Oslo:" + start,
           "DTEND;TZID=Europe/Oslo:" + end,
-          "SUMMARY:" + icsEscape("Hustle Oslo — " + ticketLabel(sel.ticket)),
-          "LOCATION:" + icsEscape("Sentralen, Øvre Slottsgate 3, 0157 Oslo"),
-          "END:VEVENT",
-        ].join("\r\n");
+          "SUMMARY:" + icsEscape(title),
+          "LOCATION:" + icsEscape(CALENDAR_ADDRESS),
+        ];
+        if (notes) lines.push("DESCRIPTION:" + icsEscape(notes));
+        lines.push(icsAlarms(title), "END:VEVENT");
+        return lines.join("\r\n");
       })
       .join("\r\n");
     return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hustle Oslo//Signup//EN", "CALSCALE:GREGORIAN", events, "END:VCALENDAR", ""].join("\r\n");
@@ -2427,7 +2561,7 @@
     }
     if (mark) mark.hidden = !saved;
     if (sub) {
-      if (emailed) sub.textContent = "Confirmation sent to " + email;
+      if (emailed) sub.innerHTML = "See you on the dance floor! Confirmation sent to <b>" + escapeHtml(email) + "</b>";
       else if (pendingConfirmation) sub.textContent = "We’re confirming your payment.";
       else if (!state.paymentPending) sub.textContent = "Paid " + amt + " kr";
       else sub.textContent = "";
@@ -2453,34 +2587,40 @@
         banner.innerHTML = "";
       }
     }
-    const list = $("#bk-done-list");
+    const table = $("#bk-done-table");
     const cal = $("#bk-cal-actions");
+    const sec = $(".cf-cal-sec");
     if (!saved) {
-      if (list) list.innerHTML = "";
+      if (table) {
+        table.innerHTML = "";
+        table.hidden = true;
+      }
       if (cal) cal.innerHTML = "";
+      if (sec) sec.hidden = true;
       if (mark) mark.hidden = true;
       return;
     }
-    const hosted = !!hostedIcsUrl();
-    if (list) {
-      list.innerHTML = state.selections
+    if (table) {
+      const nights = state.selections
         .map((s) => {
-          const one = hosted
-            ? ""
-            : '<button type="button" class="bk-textlink" data-action="ics-one" data-event-id="' +
-              escapeHtml(s.event.id) +
-              '" aria-label="' +
-              escapeHtml("Add " + calendarDateLabel(s.event) + " to calendar") +
-              '">+ Calendar</button>';
-          return (
-            '<article class="bk-calcard"><div><p class="bk-calcard-date">' + escapeHtml(ticketLabel(s.ticket)) +
-            '</p><p class="bk-calcard-meta">' + escapeHtml(formatCheckoutDate(s.event)) +
-            "<br>" + escapeHtml(ticketTime(s.event, s.ticket.id) + " · " + venueDot(s.event).replace(" • ", ", ")) + "</p></div>" +
-            one + "</article>"
-          );
+          const meta = formatCheckoutDate(s.event) + ", " + ticketTime(s.event, s.ticket.id);
+          return "<li>" + escapeHtml(classLineName(s)) + '<span class="cf-night-meta">' + escapeHtml(meta) + "</span></li>";
         })
         .join("");
+      const method = METHOD_LABEL[state.paymentMethod] || "";
+      table.hidden = false;
+      table.innerHTML =
+        '<div class="cf-row"><dt>Class(es)</dt><dd><ul class="cf-nights">' +
+        nights +
+        "</ul></dd></div>" +
+        '<div class="cf-row"><dt>Payment method</dt><dd>' +
+        escapeHtml(method) +
+        "</dd></div>" +
+        '<div class="cf-row cf-row--total"><dt>Total</dt><dd>' +
+        currentAmount() +
+        " kr</dd></div>";
     }
+    if (sec) sec.hidden = false;
     renderCalendarActions();
   }
 
@@ -2601,6 +2741,11 @@
     if (!sheet || sheet.hidden) return;
     if (onStudentChoiceKey(e)) return;
     if (e.key === "Escape") {
+      if ($("#cf-gcal-list")) {
+        closeGcalList(true);
+        e.preventDefault();
+        return;
+      }
       const help = $("#bk-phone-help");
       const helpBtn = $("#bk-phone-help-btn");
       if (help && !help.hidden) {
@@ -2677,6 +2822,12 @@
     if (action === "fail-back") return go("checkout");
     if (action === "start-over") return startOver();
     if (action === "done") return closeSheet();
+    if (action === "gcal-open") {
+      if ($("#cf-gcal-list")) closeGcalList(true);
+      else openGcalList();
+      return;
+    }
+    if (action === "gcal-close") return closeGcalList(true);
     if (action === "ics-one") {
       const sel = state.selections.find((s) => s.event.id === actionEl.dataset.eventId);
       if (sel) downloadIcs([sel], "hustle-oslo-" + sel.event.date + ".ics");

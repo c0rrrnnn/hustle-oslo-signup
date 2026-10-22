@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { appsScriptBodies } from "../src/apps-script.ts";
-import { osloLocalToUtc, utcBasic } from "../src/calendar.ts";
+import { buildCalendar, calendarSummary, googleCalendarUrl, osloLocalToUtc, utcBasic } from "../src/calendar.ts";
+import type { PricedNight } from "../src/types.ts";
 import { handleRequest } from "../src/handler.ts";
 import { getOrder, markOrderPaid, putOrder } from "../src/orders.ts";
 import { deliverPaidBooking } from "../src/sheet-sync.ts";
@@ -79,16 +80,23 @@ test("GET /ics serves a paid booking and hides every other status", async () => 
   assert.equal(body.split("BEGIN:VEVENT").length - 1, 2);
   assert.match(body, /BEGIN:VTIMEZONE/);
   assert.match(body, /TZID:Europe\/Oslo/);
-  assert.match(body, /SUMMARY:Hustle Oslo – Beginner class/);
-  assert.match(body, /SUMMARY:Hustle Oslo – Social only/);
+  assert.match(body, /SUMMARY:Hustle Oslo: Beginner class/);
+  assert.match(body, /SUMMARY:Hustle Oslo: Social\r\n/);
+  assert.equal(body.includes("Social Only"), false);
   assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261102T180000/);
   assert.match(body, /DTEND;TZID=Europe\/Oslo:20261102T190000/);
   assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261109T180000/);
   assert.match(body, /DTEND;TZID=Europe\/Oslo:20261109T200000/);
-  assert.match(body, /LOCATION:Sentralen\\, Øvre Slottsgate 3\\, 0157 Oslo\\, Gymsalen/);
-  assert.match(body, /LOCATION:Sentralen\\, Øvre Slottsgate 3\\, 0157 Oslo\\, Kronesalen/);
-  assert.match(body, /non-grippy shoes/);
-  assert.match(body, /DM @hustleoslo on Instagram/);
+  assert.match(body, /LOCATION:Sentralen\\, Øvre Slottsgate 3\\, 0157 Oslo/);
+  assert.equal(/LOCATION:[^\r\n]*(Gymsalen|Kronesalen)/.test(body), false);
+  assert.match(body, /DESCRIPTION:Room: Gymsalen/);
+  assert.match(body, /DESCRIPTION:Room: Kronesalen/);
+  assert.equal(body.includes("non-grippy shoes"), false);
+  assert.equal(body.includes("DM @hustleoslo on Instagram"), false);
+  assert.equal(body.match(/TRIGGER:-P1D/g)?.length, 2);
+  assert.equal(body.match(/TRIGGER:-PT2H/g)?.length, 2);
+  assert.equal(body.match(/ACTION:DISPLAY/g)?.length, 4);
+  assert.equal(/\r\nURL:/.test(body), false);
   assert.match(body, new RegExp(`UID:${ORDER_ID}-${BEGINNER}@hustleoslo.com`));
   assert.equal(body.includes("Claire"), false);
   assert.equal(body.includes("claire@example.com"), false);
@@ -102,10 +110,10 @@ test("GET /ics serves a paid booking and hides every other status", async () => 
   const one = unfold(await (await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_ID}&eventId=${BEGINNER}`), env)).text());
   assert.equal(one.split("BEGIN:VEVENT").length - 1, 1);
   assert.match(one, /Beginner class/);
-  assert.equal(one.includes("Social only"), false);
+  assert.equal(one.includes("Hustle Oslo: Social"), false);
 
   const second = unfold(await (await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_ID}&night=1`), env)).text());
-  assert.match(second, /Social only/);
+  assert.match(second, /SUMMARY:Hustle Oslo: Social\r\n/);
   assert.equal(second.includes("Beginner class"), false);
 
   assert.equal((await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_ID}&night=9`), env)).status, 404);
@@ -137,10 +145,14 @@ test("the confirmation post carries hosted calendar links and not the customer",
   assert.equal(posted[0].calendarIcs, `https://payments.test/ics?order=${ORDER_ID}`);
   const nights = posted[0].calendarNights as { googleUrl: string; icsUrl: string; summary: string }[];
   assert.equal(nights.length, 1);
-  assert.equal(nights[0].summary, "Hustle Oslo – Beginner class");
+  assert.equal(nights[0].summary, "Hustle Oslo: Beginner class");
   assert.match(nights[0].googleUrl, /^https:\/\/calendar\.google\.com\/calendar\/render\?/);
   assert.match(nights[0].googleUrl, /dates=20261102T170000Z\/20261102T180000Z/);
   assert.match(nights[0].googleUrl, /action=TEMPLATE/);
+  assert.match(nights[0].googleUrl, /text=Hustle\+Oslo%3A\+Beginner\+class/);
+  const google = new URL(nights[0].googleUrl);
+  assert.equal(google.searchParams.get("location"), "Sentralen, Øvre Slottsgate 3, 0157 Oslo");
+  assert.equal(google.searchParams.get("details"), "Room: Gymsalen");
   assert.equal(JSON.stringify(nights).includes("claire@example.com"), false);
   assert.equal(JSON.stringify(nights).includes("Claire"), false);
   assert.equal(JSON.stringify(nights).includes("46862806"), false);
@@ -160,7 +172,13 @@ test("the confirmation screen uses hosted links and does not download a blob", (
   assert.match(html, /id="bk-cal-actions"/);
   const hosted = js.slice(js.indexOf("function googleCalendarHref"), js.indexOf("function fallbackCalendarHtml"));
   assert.match(hosted, /calendar\.google\.com\/calendar\/render\?/);
-  assert.match(hosted, /Other calendar \(\.ics\)/);
+  assert.match(hosted, /Apple \/ Outlook \(\.ics\)/);
+  assert.match(hosted, /Google Calendar/);
+  assert.match(hosted, /aria-controls="cf-gcal-list"/);
+  assert.match(hosted, /aria-haspopup="dialog"/);
+  assert.equal(hosted.includes("Other calendar (.ics)"), false);
+  assert.equal(hosted.includes("bk-cal-list"), false);
+  assert.equal(hosted.includes("bk-cal-other"), false);
   assert.match(hosted, /aria-label/);
   assert.equal(hosted.includes("createObjectURL"), false);
   assert.equal(hosted.includes(".download"), false);
@@ -168,4 +186,53 @@ test("the confirmation screen uses hosted links and does not download a blob", (
   assert.equal(hosted.includes("await"), false);
   assert.match(hosted, /target="_blank" rel="noopener noreferrer"/);
   assert.match(js, /function calendarPlatform/);
+  assert.match(js, /CLASS_LINE_LABELS/);
+  assert.match(js, /TRIGGER:-P1D/);
+  assert.match(js, /TRIGGER:-PT2H/);
+  assert.equal(js.includes("CALENDAR_DETAILS"), false);
+  assert.match(html, /class="cf-badge"/);
+  assert.match(html, /id="bk-done-table"/);
+  assert.match(html, /data-action="done"/);
+});
+
+function sampleNight(overrides: Partial<PricedNight>): PricedNight {
+  return {
+    eventId: "2026-11-02-class-gymsalen",
+    eventDate: "2026-11-02",
+    eventType: "class",
+    eventLocation: "Gymsalen",
+    eventLabel: "Class night",
+    eventVenue: "Sentralen, Oslo",
+    eventStart: "18:00",
+    eventEnd: "21:00",
+    sheetTabHint: "Class",
+    ticketId: "beginners",
+    ticketName: "Beginner class",
+    priceTier: "standard",
+    amount: 150,
+    ...overrides,
+  };
+}
+
+test("bundle and social-on-a-class-night use the calendar titles, literal ampersand, and 20:00 social", () => {
+  const bundle = sampleNight({ ticketId: "bundle", ticketName: "2 class bundle", amount: 220 });
+  const social = sampleNight({ ticketId: "social", ticketName: "Social only", amount: 50, eventId: "2026-11-02-class-gymsalen-social" });
+  assert.equal(calendarSummary(bundle), "Hustle Oslo: Beginner & Intermediate Class");
+  assert.equal(calendarSummary(social), "Hustle Oslo: Social Only");
+  const body = unfold(buildCalendar("order-1", [bundle, social], NOW));
+  assert.match(body, /SUMMARY:Hustle Oslo: Beginner & Intermediate Class/);
+  assert.match(body, /SUMMARY:Hustle Oslo: Social Only/);
+  assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261102T180000/);
+  assert.match(body, /DTEND;TZID=Europe\/Oslo:20261102T200000/);
+  assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261102T200000/);
+  assert.match(body, /DTEND;TZID=Europe\/Oslo:20261102T210000/);
+  assert.equal(body.match(/TRIGGER:-P1D/g)?.length, 2);
+  assert.equal(body.match(/TRIGGER:-PT2H/g)?.length, 2);
+  const google = googleCalendarUrl(bundle);
+  assert.match(google, /text=Hustle\+Oslo%3A\+Beginner\+%26\+Intermediate\+Class/);
+  const params = new URL(google).searchParams;
+  assert.equal(params.get("text"), "Hustle Oslo: Beginner & Intermediate Class");
+  assert.equal(params.get("location"), "Sentralen, Øvre Slottsgate 3, 0157 Oslo");
+  assert.equal(params.get("details"), "Room: Gymsalen");
+  assert.match(google, /dates=20261102T170000Z\/20261102T190000Z/);
 });

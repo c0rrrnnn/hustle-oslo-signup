@@ -1,7 +1,21 @@
 import type { PricedNight, StoredOrder } from "./types.ts";
 
 const ADDRESS = "Sentralen, Øvre Slottsgate 3, 0157 Oslo";
-const DETAILS = "What to bring: non-grippy shoes. No partner needed.\nQuestions? DM @hustleoslo on Instagram";
+
+/** Calendar titles only. Page and email class lines keep their own labels. */
+const CALENDAR_NAMES = {
+  beginners: "Beginner class",
+  intermediate: "Intermediate class",
+  bundle: "Beginner & Intermediate Class",
+  socialClass: "Social Only",
+  socialNight: "Social",
+} as const;
+
+export function calendarName(ticketId: string, eventType: string): string {
+  if (ticketId === "beginners" || ticketId === "intermediate" || ticketId === "bundle") return CALENDAR_NAMES[ticketId];
+  if (ticketId === "social") return eventType === "class" ? CALENDAR_NAMES.socialClass : CALENDAR_NAMES.socialNight;
+  return "Class";
+}
 
 const VTIMEZONE = [
   "BEGIN:VTIMEZONE",
@@ -38,13 +52,16 @@ export function ticketSpan(night: PricedNight): { start: string; end: string } {
 }
 
 export function calendarSummary(night: PricedNight): string {
-  const name = night.ticketName || (night.eventType === "social" ? "Social" : "Class");
-  return `Hustle Oslo – ${name}`;
+  return `Hustle Oslo: ${calendarName(night.ticketId, night.eventType)}`;
 }
 
-export function calendarLocation(night: PricedNight): string {
+export function calendarLocation(): string {
+  return ADDRESS;
+}
+
+export function calendarNotes(night: PricedNight): string {
   const room = String(night.eventLocation || "").trim();
-  return room ? `${ADDRESS}, ${room}` : ADDRESS;
+  return room ? `Room: ${room}` : "";
 }
 
 export function calendarUid(orderId: string, eventId: string): string {
@@ -92,9 +109,10 @@ export function googleCalendarUrl(night: PricedNight): string {
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: calendarSummary(night),
-    location: calendarLocation(night),
-    details: DETAILS,
+    location: calendarLocation(),
   });
+  const notes = calendarNotes(night);
+  if (notes) params.set("details", notes);
   return `https://calendar.google.com/calendar/render?${params.toString()}&dates=${start}/${end}`;
 }
 
@@ -201,17 +219,32 @@ export function buildCalendar(orderId: string, nights: PricedNight[], stamp: Dat
   const dtStamp = utcBasic(stamp);
   const events = nights.map((night) => {
     const span = ticketSpan(night);
-    return [
+    const title = calendarSummary(night);
+    const notes = calendarNotes(night);
+    const lines = [
       "BEGIN:VEVENT",
       `UID:${icsEscape(calendarUid(orderId, night.eventId))}`,
       `DTSTAMP:${dtStamp}`,
       `DTSTART;TZID=Europe/Oslo:${localStamp(night.eventDate, span.start)}`,
       `DTEND;TZID=Europe/Oslo:${localStamp(night.eventDate, span.end)}`,
-      `SUMMARY:${icsEscape(calendarSummary(night))}`,
-      `LOCATION:${icsEscape(calendarLocation(night))}`,
-      `DESCRIPTION:${icsEscape(DETAILS)}`,
+      `SUMMARY:${icsEscape(title)}`,
+      `LOCATION:${icsEscape(calendarLocation())}`,
+    ];
+    if (notes) lines.push(`DESCRIPTION:${icsEscape(notes)}`);
+    lines.push(
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-P1D",
+      `DESCRIPTION:${icsEscape(title)}`,
+      "END:VALARM",
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-PT2H",
+      `DESCRIPTION:${icsEscape(title)}`,
+      "END:VALARM",
       "END:VEVENT",
-    ].join("\r\n");
+    );
+    return lines.join("\r\n");
   });
   const body = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hustle Oslo//Signup//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", VTIMEZONE, ...events, "END:VCALENDAR", ""].join("\r\n");
   return foldIcs(body);
