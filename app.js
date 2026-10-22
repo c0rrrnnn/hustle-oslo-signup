@@ -298,6 +298,18 @@
     return window.matchMedia("(min-width: 601px)").matches;
   }
 
+  function drawerMode() {
+    return window.matchMedia("(min-width: 960px)").matches;
+  }
+
+  function bookingScroller(sheet) {
+    if (drawerMode()) {
+      const frame = sheet.querySelector(".bk-frame");
+      if (frame) return frame;
+    }
+    return sheet;
+  }
+
   function wideCheckout() {
     return state.view === "checkout" && isDesktop();
   }
@@ -407,6 +419,21 @@
     return (month + " " + day).trim();
   }
 
+  function osloTodayKey() {
+    const now = osloNow();
+    return now.y + "-" + pad2(now.m) + "-" + pad2(now.d);
+  }
+
+  // Landing cards use the Oslo calendar date at page load. A night today stays
+  // listed. Signup keeps isEventPast, which closes booking at 18:00 that day.
+  function landingUpcomingEvents() {
+    const today = osloTodayKey();
+    return (window.HUSTLE_EVENTS || []).filter((ev) => {
+      const date = String((ev && ev.date) || "");
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= today;
+    });
+  }
+
   function upcomingKind(ev) {
     if (ev.type === "class") return "Class + social";
     if (ev.type === "social") return "Social only";
@@ -417,7 +444,7 @@
     const host = $("#upcoming-events");
     if (!host) return;
     const empty = $("#upcoming-empty");
-    const events = upcomingEvents();
+    const events = landingUpcomingEvents();
     if (!events.length) {
       host.innerHTML = "";
       host.hidden = true;
@@ -501,7 +528,7 @@
   }
 
   function setInert(on) {
-    ["#main", ".site-footer", ".skip-link"].forEach((sel) => {
+    ["#main", ".landing-nav", ".site-footer", ".skip-link"].forEach((sel) => {
       const el = $(sel);
       if (el) el.inert = on;
     });
@@ -562,11 +589,11 @@
     schedulePrepare();
     const body = $(".bk-body", sheet);
     if (body) body.scrollTop = 0;
-    sheet.scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
+    bookingScroller(sheet).scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
     revealPayRows();
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
-      if (heading) heading.focus({ preventScroll: true });
+      if (heading) heading.focus({ preventScroll: true, focusVisible: false });
     }
   }
 

@@ -20,6 +20,23 @@
 <body class="is-landing">
   <a class="skip-link" href="#main">Skip to content</a>
 
+  <header class="landing-nav">
+    <nav class="landing-nav-inner" aria-label="Primary">
+      <a class="landing-nav-logo" href="/">
+        <img src="assets/logo.png" alt="Hustle Oslo" width="818" height="463" />
+      </a>
+      <a
+        class="landing-nav-contact"
+        href="https://www.instagram.com/hustleoslo/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Contact us
+        <span class="visually-hidden"> — @hustleoslo on Instagram (opens in a new tab)</span>
+      </a>
+    </nav>
+  </header>
+
   <header class="site-header" hidden>
     <div class="site-header-inner">
       <div class="brand">
@@ -41,14 +58,8 @@
   <main id="main">
     <!-- Panel 1: Landing / intro -->
     <section class="panel active landing-panel" id="panel-1" data-panel="1" aria-labelledby="intro-heading">
-      <img
-        class="landing-logo"
-        src="assets/logo.png"
-        alt=""
-        width="818"
-        height="463"
-      />
-
+      <div class="landing-cols">
+        <div class="landing-col landing-col-main">
       <div class="hero-visual">
         <video
           id="hero-video"
@@ -94,14 +105,7 @@
 
       <h1 id="intro-heading" class="landing-title">Beginner, Intermediate Class &amp; Social</h1>
 
-      <section class="landing-section" aria-labelledby="about-heading">
-        <h2 id="about-heading" class="landing-label">About hustle</h2>
-        <p class="landing-about">
-          Partner hustle dance classes and social dancing every Monday at Sentralen, Oslo. Beginners 18:00–19:00, Intermediate 19:00–20:00, then social dancing 20:00–21:00. No partner needed, just come as you are.
-        </p>
-      </section>
-
-      <section class="landing-section" aria-labelledby="upcoming-heading">
+      <section class="landing-section" id="landing-upcoming" aria-labelledby="upcoming-heading">
         <h2 id="upcoming-heading" class="landing-label">Upcoming events</h2>
         <div
           id="upcoming-events"
@@ -113,7 +117,43 @@
         <p id="upcoming-empty" class="upcoming-empty" hidden>No upcoming nights right now.</p>
       </section>
 
-      <section class="landing-section" aria-labelledby="schedule-heading">
+      <section class="landing-section" id="landing-about" aria-labelledby="about-heading">
+        <h2 id="about-heading" class="landing-label">About hustle</h2>
+        <p class="landing-about">
+          Partner hustle dance classes and social dancing every Monday at Sentralen, Oslo. Beginners 18:00–19:00, Intermediate 19:00–20:00, then social dancing 20:00–21:00. No partner needed, just come as you are.
+        </p>
+      </section>
+
+      <section class="landing-section" id="landing-details" aria-labelledby="more-details-heading">
+        <h2 id="more-details-heading" class="landing-label">More Details</h2>
+        <ul class="detail-checks">
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <circle cx="10" cy="10" r="9" fill="#2f6b3a"></circle>
+              <path d="M6 10.2 8.6 12.8 14.2 7.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>No partner needed</span>
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <circle cx="10" cy="10" r="9" fill="#2f6b3a"></circle>
+              <path d="M6 10.2 8.6 12.8 14.2 7.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>Non-grippy shoes you can turn in</span>
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <circle cx="10" cy="10" r="9" fill="#2f6b3a"></circle>
+              <path d="M6 10.2 8.6 12.8 14.2 7.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>Willingness to learn and have fun</span>
+          </li>
+        </ul>
+      </section>
+        </div>
+
+        <div class="landing-col landing-col-side">
+      <section class="landing-section" id="landing-schedule" aria-labelledby="schedule-heading">
         <h2 id="schedule-heading" class="landing-label">Class schedule</h2>
         <ul class="class-schedule">
           <li>
@@ -131,37 +171,39 @@
         </ul>
       </section>
 
-      <section class="landing-section" aria-labelledby="prices-caption">
-        <table class="price-table">
-          <caption id="prices-caption" class="landing-label">Prices (NOK)</caption>
-          <thead>
-            <tr>
-              <th scope="col">Ticket</th>
-              <th scope="col">Standard</th>
-              <th scope="col">Student</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th scope="row">Single class</th>
-              <td>150 kr</td>
-              <td>100 kr</td>
-            </tr>
-            <tr>
-              <th scope="row">Same-night bundle (Beginners + Intermediate back to back, same night only, can’t be split across weeks)</th>
-              <td>220 kr</td>
-              <td>150 kr</td>
-            </tr>
-            <tr>
-              <th scope="row">Social dancing only</th>
-              <td>50 kr</td>
-              <td>50 kr</td>
-            </tr>
-          </tbody>
-        </table>
+      <section class="landing-section" id="landing-prices" aria-labelledby="prices-caption">
+        <h2 id="prices-caption" class="landing-label">Prices (NOK)</h2>
+        <div class="price-card">
+          <table class="price-table" aria-labelledby="prices-caption">
+            <thead>
+              <tr>
+                <th scope="col">Ticket</th>
+                <th scope="col">Standard</th>
+                <th scope="col">Student</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Single class</th>
+                <td>150 kr</td>
+                <td>100 kr</td>
+              </tr>
+              <tr>
+                <th scope="row">Same-night bundle (Beginners + Intermediate)</th>
+                <td>220 kr</td>
+                <td>150 kr</td>
+              </tr>
+              <tr>
+                <th scope="row">Social dancing only</th>
+                <td>50 kr</td>
+                <td>50 kr</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <section class="landing-section" aria-labelledby="location-heading">
+      <section class="landing-section" id="landing-location" aria-labelledby="location-heading">
         <h2 id="location-heading" class="landing-label">Location</h2>
         <div class="address-line">
           <p id="venue-address" class="address-text">Sentralen - Øvre Slottsgate 3, 0157 Oslo</p>
@@ -192,48 +234,18 @@
           ></iframe>
         </div>
       </section>
-
-      <section class="landing-section" aria-labelledby="more-details-heading">
-        <h2 id="more-details-heading" class="landing-label">More Details</h2>
-        <ul class="detail-checks">
-          <li>
-            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-            <span>No partner needed</span>
-          </li>
-          <li>
-            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-            <span>Non-grippy shoes you can turn in</span>
-          </li>
-          <li>
-            <svg class="check-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-              <path d="M4 10.5 8 14.5 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-            <span>Willingness to learn and have fun</span>
-          </li>
-        </ul>
-      </section>
+        </div>
+      </div>
 
       <div class="landing-actions">
         <button type="button" class="btn btn-primary" id="btn-start">Register for class</button>
-        <a
-          class="btn btn-secondary"
-          href="https://www.instagram.com/hustleoslo/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Contact us
-          <span class="visually-hidden"> — @hustleoslo on Instagram (opens in a new tab)</span>
-        </a>
       </div>
     </section>
 
   </main>
 
   <div id="book-sheet" class="bk-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="bk-student-heading">
+    <div class="bk-scrim" data-action="close" aria-hidden="true"></div>
     <div class="bk-frame">
       <header class="bk-top">
         <div class="bk-grab" aria-hidden="true"></div>
@@ -525,16 +537,16 @@
       <div>
         <p class="foot-name">Hustle Oslo</p>
         <p>Org.nr 937234503</p>
-        <p>c/o Claire Wu, H0203<br>Oslo gate 16, 0192 Oslo</p>
       </div>
       <div>
-        <p><a href="tel:+4746862806">+47 468 62 806</a></p>
         <p><a href="mailto:hustleinoslo@gmail.com">hustleinoslo@gmail.com</a></p>
         <p><a href="https://www.instagram.com/hustleoslo/" target="_blank" rel="noopener">@hustleoslo<span class="vh"> on Instagram (opens in a new tab)</span></a></p>
       </div>
-      <nav aria-label="Legal"><p><a href="/termsofsale" data-i18n-foot>Terms of sale</a></p></nav>
+      <nav class="foot-legal" aria-label="Legal">
+        <p><a href="/termsofsale" data-i18n-foot>Terms of sale</a></p>
+        <p class="foot-copy">© 2026 Hustle Oslo</p>
+      </nav>
     </div>
-    <p class="foot-copy">© 2026 Hustle Oslo</p>
   </footer>
 
   <script src="events.js"></script>
