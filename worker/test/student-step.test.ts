@@ -17,7 +17,7 @@ test("the student step has no separate Next button", () => {
   assert.match(html, /id="bk-dates-next"[^>]*>Next</);
   assert.match(html, /id="bk-dates-heading"[^>]*tabindex="-1"/);
   assert.match(html, /id="bk-student-heading"[^>]*tabindex="-1"/);
-  assert.match(css, /padding:\s*12px 16px calc\(14px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+  assert.match(css, /padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);
   assert.match(css, /#bk-foot-student \.bk-choices \{[^}]*flex-direction:\s*column;/);
 });
 
@@ -320,7 +320,7 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.dates.hidden, false);
   assert.equal(ui.document.activeElement, ui.datesHeading);
   assert.equal(ui.datesHeading.getAttribute("tabindex"), "-1");
-  assert.match(ui.status.textContent, /Select a date/);
+  assert.match(ui.status.textContent, /Select dates/);
   assert.equal(ui.no.getAttribute("aria-pressed"), "true");
   assert.equal(ui.no.classList.contains("is-on"), true);
   assert.equal(ui.yes.getAttribute("aria-pressed"), "false");

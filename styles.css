@@ -58,6 +58,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
   font-size: 1rem;
   line-height: 1.55;
@@ -2381,11 +2382,25 @@ body.bk-open {
   position: fixed;
   inset: 0;
   z-index: 80;
-  overflow: auto;
+  /* 100vh sits under the mobile browser toolbar. dvh tracks the visible
+     viewport; svh stays the small viewport so the toolbar cannot cover Pay. */
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: #121214;
   color: #f4f4f5;
   font-family: var(--font);
   color-scheme: dark;
+}
+
+@supports (height: 100svh) {
+  .bk-sheet {
+    height: 100svh;
+    max-height: 100svh;
+  }
 }
 
 .bk-sheet[hidden],
@@ -2408,11 +2423,14 @@ body.bk-open {
 }
 
 .bk-frame {
-  min-height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   width: min(480px, 100%);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .bk-sheet.is-wide .bk-frame {
@@ -2483,7 +2501,10 @@ body.bk-open {
 }
 
 .bk-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 20px 16px 16px;
 }
 
@@ -2510,13 +2531,15 @@ body.bk-open {
 }
 
 .bk-foot {
-  position: sticky;
-  bottom: 0;
+  position: relative;
+  bottom: auto;
+  flex-shrink: 0;
+  margin-top: 0;
   z-index: 4;
-  margin-top: auto;
   background: #121214;
   border-top: 1px solid #2a2a2e;
-  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  /* 12px of extra margin past the larger of 16px and the home-indicator inset. */
+  padding: 12px 16px calc(12px + max(16px, env(safe-area-inset-bottom, 0px)));
 }
 
 .bk-row {
@@ -3300,55 +3323,6 @@ a.bk-btn {
   flex: 1;
 }
 
-.bk-brands {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.bk-brand-visa {
-  background: #fff;
-  color: #1a1f71;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  border-radius: 4px;
-  height: 22px;
-  min-width: 34px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 5px;
-}
-
-.bk-brand-mc {
-  width: 34px;
-  height: 22px;
-  display: inline-block;
-  position: relative;
-}
-
-.bk-brand-mc i {
-  position: absolute;
-  top: 1px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-}
-
-.bk-brand-mc i:first-child {
-  left: 0;
-  background: #eb001b;
-}
-
-.bk-brand-mc i:last-child {
-  right: 0;
-  background: #f79e1b;
-}
-
-.bk-brand-mc i:last-child {
-  mix-blend-mode: normal;
-}
-
 .bk-it {
   width: 26px;
   height: 26px;
@@ -3457,10 +3431,6 @@ a.bk-btn {
   line-height: 1.4;
 }
 
-#bk-foot-failed .bk-tos {
-  margin: 0 0 10px;
-}
-
 .bk-checkout-layout {
   display: flex;
   flex-direction: column;
@@ -3478,7 +3448,7 @@ a.bk-btn {
 }
 
 .bk-banner b {
-  color: #fff;
+  color: #ff8a8a;
   display: block;
   margin-bottom: 2px;
 }
@@ -3623,14 +3593,6 @@ a.bk-cal-link:hover {
   font: 500 0.95rem var(--font);
   cursor: pointer;
   padding: 8px 0;
-}
-
-.bk-secure {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #a1a1aa;
-  font-size: 0.9rem;
 }
 
 @media (min-width: 601px) {
@@ -3868,10 +3830,9 @@ a.bk-cal-link:hover {
 }
 
 /* Checkout and the failed-payment step: the terms line and Pay button stay
-   on screen, without the opaque band. The sheet itself does not scroll.
-   The body is the scrollport and the bar sits underneath it, so a short
-   phone cannot draw Pay over a payment row. The body pad is the bar's
-   measured height plus the home-indicator inset. */
+   on screen, without an opaque band. The foot is in the column under the
+   body, so the body does not pad by the foot height (that pad was the empty
+   black gap under the card box). */
 .bk-sheet.is-clear-foot {
   overflow: hidden;
   display: flex;
@@ -3890,7 +3851,7 @@ a.bk-cal-link:hover {
   min-height: 0;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 16px;
 }
 
 .bk-sheet.is-clear-foot .bk-foot {
@@ -3946,7 +3907,7 @@ a.bk-cal-link:hover {
     border-left: 1px solid #2a2a2e;
     border-radius: 18px 0 0 18px;
     box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
-    overflow: auto;
+    overflow: hidden;
     animation: bk-drawer-in 0.28s ease-out;
   }
 

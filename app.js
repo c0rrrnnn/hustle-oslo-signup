@@ -535,9 +535,9 @@
     const n = PROGRESS[view] || 1;
     const names = {
       student: "Are you a student?",
-      dates: "Select a date.",
+      dates: "Select dates.",
       confirm: "Confirm selection.",
-      details: "Your details.",
+      details: "Enter your details.",
       checkout: "Checkout.",
       failed: "Checkout.",
       waiting: "Waiting for payment.",
@@ -1247,20 +1247,22 @@
     revealPayRows();
   }
 
-  // On a short phone the last payment row starts just past the end of the
-  // scrollport. Bring that row fully above the pay bar. Rows already above
-  // the bar are left where the customer scrolled them.
+  // On a short phone the card box can start below the visible body. Bring
+  // that box, or the last payment row, fully above the pay bar.
   function revealPayRows() {
     const sheet = $("#book-sheet");
     const body = sheet && $(".bk-body", sheet);
     const foot = sheet && $(".bk-foot", sheet);
     if (!sheet || !body || !foot || !sheet.classList.contains("is-clear-foot") || foot.hidden) return;
-    const rows = $$("#bk-pay-list .bk-mrow").filter(function (row) {
+    const slots = $$("#bk-card-slot.is-open, #bk-fail-card-slot.is-open").filter(function (slot) {
+      return slot.offsetParent !== null;
+    });
+    const rows = $$("#bk-pay-list .bk-mrow, #bk-fail-pay .bk-mrow").filter(function (row) {
       return row.offsetParent !== null;
     });
-    const last = rows[rows.length - 1];
-    if (!last) return;
-    const extra = last.getBoundingClientRect().bottom - foot.getBoundingClientRect().top;
+    const target = slots[slots.length - 1] || rows[rows.length - 1];
+    if (!target) return;
+    const extra = target.getBoundingClientRect().bottom - foot.getBoundingClientRect().top;
     if (extra > 1) body.scrollTop += Math.ceil(extra) + 8;
   }
 
