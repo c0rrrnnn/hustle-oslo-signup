@@ -37,7 +37,10 @@ test("checkout stays in the 480px drawer and the selected card closes its box", 
   const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
   const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
-  assert.match(js, /function wideCheckout\(\) \{[^}]*return false;/);
+  assert.equal(js.includes("wideCheckout"), false);
+  assert.equal(js.includes("paySeg"), false);
+  assert.equal(css.includes("is-wide"), false);
+  assert.equal(css.includes("bk-pay-seg"), false);
   assert.match(js, /if \(state\.view === "checkout"\) return go\("details"\)/);
   assert.match(js, /return go\("details"\)/);
   assert.equal(js.includes("brandMarks"), false);
@@ -46,6 +49,11 @@ test("checkout stays in the 480px drawer and the selected card closes its box", 
   assert.match(css, /\.bk-pay-list:has\(\+ \.is-open\) \.bk-mrow\.is-on\[data-method="card"\]/);
   assert.equal(html.includes("Secure checkout"), false);
   assert.equal(html.includes("bk-brands"), false);
+  assert.equal(html.includes("bk-pay-seg"), false);
+  assert.equal(html.includes("bk-deskbar"), false);
+  assert.match(html, /id="bk-pay-heading">Payment methods</);
+  assert.match(html, /id="bk-fail-pay-heading">Payment methods</);
+  assert.match(html, /id="bk-pay-list"[^>]*role="radiogroup"/);
 });
 
 test("checkout has no provider trust line and field errors keep the normal border", () => {
@@ -72,5 +80,5 @@ test("desktop landing is two columns and signup opens in a right-side drawer", (
   const desktop = css.slice(css.indexOf("@media (min-width: 960px)"));
   assert.match(desktop, /\.landing-cols\s*\{[^}]*grid-template-columns:/);
   assert.match(desktop, /\.bk-frame\s*\{[^}]*right:\s*0;/);
-  assert.match(css, /@media \(max-width: 600px\)/);
+  assert.match(desktop, /\.bk-frame\s*\{[^}]*width:\s*min\(480px,\s*100%\)/);
 });

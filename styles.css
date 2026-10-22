@@ -2414,8 +2414,6 @@ body.bk-open {
 .bk-note[hidden],
 .bk-err[hidden],
 #bk-first-timer[hidden],
-#bk-desk-details[hidden],
-#bk-inline-pay[hidden],
 #bk-payment-host[hidden],
 #bk-payment-note[hidden],
 #bk-wallet-host[hidden] {
@@ -2431,10 +2429,6 @@ body.bk-open {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.bk-sheet.is-wide .bk-frame {
-  width: min(480px, 100%);
 }
 
 .bk-top {
@@ -2871,8 +2865,7 @@ a.bk-btn {
 
 .bk-opt:focus-within,
 .bk-return:focus-within,
-.bk-mrow:focus-within,
-.bk-seg-btn:focus-within {
+.bk-mrow:focus-within {
   box-shadow: var(--focus);
 }
 
@@ -3270,10 +3263,6 @@ a.bk-btn {
   margin-top: 8px;
 }
 
-.bk-pay-seg {
-  display: none;
-}
-
 .bk-mrow {
   position: relative;
   display: flex;
@@ -3293,8 +3282,7 @@ a.bk-btn {
   border-color: #f4f4f5;
 }
 
-.bk-mrow input,
-.bk-seg-btn input {
+.bk-mrow input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -3358,11 +3346,6 @@ a.bk-btn {
 .bk-it-cd {
   background: #2a2a2e;
   color: #f4f4f5;
-}
-
-.bk-seg-btn.is-on .bk-it-cd {
-  background: #e4e4e7;
-  color: #121214;
 }
 
 .bk-wallet-host {
@@ -3581,254 +3564,6 @@ a.bk-cal-link:hover {
   margin: 12px 0 0;
 }
 
-.bk-deskbar,
-.bk-desk-details {
-  display: none;
-}
-
-.bk-desk-back {
-  background: none;
-  border: 0;
-  color: #f4f4f5;
-  font: 500 0.95rem var(--font);
-  cursor: pointer;
-  padding: 8px 0;
-}
-
-@media (min-width: 601px) {
-  .bk-top,
-  .bk-body,
-  .bk-foot {
-    padding-left: 32px;
-    padding-right: 32px;
-  }
-
-  .bk-sheet.is-wide .bk-top,
-  .bk-sheet.is-wide .bk-foot {
-    display: none;
-  }
-
-  .bk-sheet.is-wide .bk-body {
-    padding: 28px 40px 48px;
-  }
-
-  .bk-sheet.is-wide .bk-deskbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 18px;
-  }
-
-  .bk-sheet.is-wide #bk-checkout-heading {
-    font-size: 2rem;
-    margin: 0 0 20px;
-  }
-
-  .bk-sheet.is-wide .bk-checkout-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
-    column-gap: 40px;
-    align-items: start;
-  }
-
-  .bk-sheet.is-wide .bk-summary-col {
-    grid-column: 2;
-    grid-row: 1;
-    position: sticky;
-    top: 24px;
-  }
-
-  .bk-sheet.is-wide .bk-pay-col {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .bk-sheet.is-wide .bk-who-card {
-    display: none;
-  }
-
-  .bk-sheet.is-wide .bk-desk-details {
-    display: block;
-  }
-
-  .bk-sheet.is-wide .bk-desk-details-title,
-  .bk-sheet.is-wide #bk-pay-heading {
-    font-size: 1.1rem;
-    margin: 0 0 12px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-heading {
-    margin-top: 28px;
-  }
-
-  .bk-sheet.is-wide .bk-card-fields {
-    margin-top: 16px;
-  }
-
-  .bk-sheet.is-wide .bk-order-card {
-    padding: 20px;
-  }
-
-  .bk-sheet.is-wide .bk-order-title {
-    font-size: 1.1rem;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #fff;
-  }
-
-  .bk-sheet.is-wide .bk-sub2 {
-    display: flex;
-    justify-content: space-between;
-    color: #a1a1aa;
-    font-size: 0.9rem;
-    border-top: 1px solid #2a2a2e;
-    margin-top: 10px;
-    padding-top: 12px;
-  }
-
-  .bk-sheet.is-wide .bk-order-card .bk-tot {
-    align-items: baseline;
-    margin-top: 12px;
-    padding-top: 14px;
-    font-weight: 500;
-  }
-
-  .bk-sheet.is-wide .bk-order-card .bk-tot strong {
-    font-size: 1.6rem;
-    font-weight: 700;
-  }
-
-  .bk-sheet.is-wide #bk-inline-pay .bk-tos {
-    text-align: center;
-    margin: 16px 0 10px;
-  }
-
-  .bk-sheet.is-wide .bk-btn-pay {
-    height: 52px;
-    margin-top: 6px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-seg {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-    gap: 4px;
-    background: #121214;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 4px;
-    margin-top: 12px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-list {
-    display: none;
-  }
-
-  /* Ticket cards stack in one column. A full-width square in the 480px
-     column is about 416px tall, so each card stays a 280px square,
-     centred. The phone keeps the full-width rows. */
-  #bk-options .bk-options {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    gap: 12px;
-    margin-top: 14px;
-  }
-
-  #bk-options .bk-dl {
-    justify-self: stretch;
-    width: 100%;
-    grid-column: 1 / -1;
-    margin: 2px 0 0;
-  }
-
-  #bk-options .bk-opt {
-    aspect-ratio: 1 / 1;
-    width: min(100%, 280px);
-    margin-top: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    align-items: start;
-    align-content: start;
-    column-gap: 8px;
-    row-gap: 8px;
-    padding: 12px;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  #bk-options .bk-opt .bk-rd {
-    grid-column: 1;
-    grid-row: 1;
-    margin-top: 1px;
-  }
-
-  #bk-options .bk-opt-price {
-    position: static;
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
-    align-self: start;
-    line-height: 1.2;
-  }
-
-  #bk-options .bk-opt-main {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    padding-right: 0;
-    min-width: 0;
-  }
-
-  #bk-options .bk-opt-name {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 6px;
-    font-size: 0.92rem;
-    line-height: 1.25;
-  }
-
-  #bk-options .bk-badge {
-    margin-left: 0;
-  }
-
-  #bk-options .bk-opt small {
-    font-size: 0.75rem;
-    line-height: 1.3;
-    overflow-wrap: break-word;
-  }
-}
-
-.bk-seg-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  border-radius: 9px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #a1a1aa;
-  cursor: pointer;
-}
-
-.bk-seg-btn.is-on {
-  background: #fff;
-  color: #121214;
-}
-
-.bk-seg-btn .bk-it {
-  width: 24px;
-  height: 24px;
-}
-
-@media (max-width: 600px) {
-  .bk-sheet.is-wide #bk-pay-seg {
-    display: none;
-  }
-}
-
 /* Checkout and the failed-payment step: the terms line and Pay button stay
    on screen, without an opaque band. The foot is in the column under the
    body, so the body does not pad by the foot height (that pad was the empty
@@ -3911,10 +3646,6 @@ a.bk-cal-link:hover {
     animation: bk-drawer-in 0.28s ease-out;
   }
 
-  .bk-sheet.is-wide .bk-frame {
-    width: min(480px, 100%);
-  }
-
   .bk-grab {
     display: none;
   }
@@ -3931,41 +3662,5 @@ a.bk-cal-link:hover {
     height: 40px;
     border-radius: 10px;
     background: #2a2a2e;
-  }
-
-  .bk-sheet.is-wide .bk-top {
-    display: block;
-    position: sticky;
-    top: 0;
-    height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-    background: transparent;
-    backdrop-filter: none;
-    z-index: 6;
-  }
-
-  .bk-sheet.is-wide .bk-grab,
-  .bk-sheet.is-wide .bk-bar-title,
-  .bk-sheet.is-wide .bk-prog,
-  .bk-sheet.is-wide #bk-back {
-    display: none;
-  }
-
-  .bk-sheet.is-wide .bk-bar {
-    position: relative;
-    height: 0;
-    justify-content: flex-end;
-  }
-
-  .bk-sheet.is-wide #bk-close {
-    position: absolute;
-    top: 12px;
-    right: 16px;
-  }
-
-  .bk-sheet.is-wide .bk-deskbar {
-    padding-right: 52px;
   }
 }

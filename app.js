@@ -306,49 +306,12 @@
     return sheet;
   }
 
-  function wideCheckout() {
-    // Signup stays in the 480px drawer on desktop, including checkout.
-    return false;
-  }
-
   function orderLine(sel) {
     return (
       '<div class="bk-li"><span>' + escapeHtml(ticketLabel(sel.ticket)) +
       "<small>" + escapeHtml(formatCheckoutDate(sel.event)) + "</small></span><span>" +
       amountForSelection(sel) + " kr</span></div>"
     );
-  }
-
-  function placeDetailsForm() {
-    const form = $("#bk-details-form");
-    const mount = $("#bk-details-mount");
-    const step = $("#bk-step-details");
-    const block = $("#bk-desk-details");
-    if (!form || !mount || !step) return;
-    if (wideCheckout()) {
-      if (form.parentElement !== mount) mount.appendChild(form);
-      if (block) block.hidden = false;
-    } else {
-      if (form.parentElement !== step) step.appendChild(form);
-      if (block) block.hidden = true;
-    }
-  }
-
-  function placePayActions() {
-    const pay = $("#bk-pay");
-    const tos = $("#bk-checkout-tos");
-    const inline = $("#bk-inline-pay");
-    const foot = $("#bk-foot-checkout");
-    if (!pay || !tos || !inline || !foot) return;
-    if (wideCheckout()) {
-      inline.hidden = false;
-      if (tos.parentElement !== inline) inline.appendChild(tos);
-      if (pay.parentElement !== inline) inline.appendChild(pay);
-    } else {
-      inline.hidden = true;
-      if (pay.parentElement !== foot) foot.appendChild(pay);
-      if (tos.parentElement !== foot) foot.appendChild(tos);
-    }
   }
 
   function setErr(key, on) {
@@ -552,7 +515,6 @@
     state.view = view;
     const sheet = $("#book-sheet");
     if (!sheet) return;
-    sheet.classList.toggle("is-wide", wideCheckout());
     const headingId = HEADINGS[view];
     if (headingId) sheet.setAttribute("aria-labelledby", headingId);
     VIEWS.forEach((name) => {
@@ -1049,13 +1011,9 @@
     normalizeLiveMethod();
     const methods = methodChoices();
     const list = $("#bk-pay-list");
-    const seg = $("#bk-pay-seg");
     const fail = $("#bk-fail-pay");
     if (list) {
       list.innerHTML = methods.map((id) => payRow(id, "pay-mobile")).join("");
-    }
-    if (seg) {
-      seg.innerHTML = methods.map((id) => paySeg(id, "pay-desktop")).join("");
     }
     if (fail) {
       fail.innerHTML = methods.map((id) => payRow(id, "pay-failed")).join("");
@@ -1071,16 +1029,6 @@
       '<span class="bk-radio" aria-hidden="true"></span>' +
       methodIcon(id) +
       '<span class="bk-pay-name">' + METHOD_LABEL[id] + "</span></label>"
-    );
-  }
-
-  function paySeg(id, name) {
-    const on = state.paymentMethod === id;
-    return (
-      '<label class="bk-seg-btn' + (on ? " is-on" : "") + '" data-method="' + id + '">' +
-      '<input type="radio" name="' + name + '" value="' + id + '" data-pay="1"' + (on ? " checked" : "") + ">" +
-      methodIcon(id) +
-      "<span>" + METHOD_LABEL[id] + "</span></label>"
     );
   }
 
@@ -1109,7 +1057,7 @@
     const show = !paymentsLive() && state.paymentMethod === "card" && (state.view === "checkout" || state.view === "failed");
     if (!fields) return;
     fields.hidden = !show;
-    fields.classList.toggle("is-attached", show && !wideCheckout());
+    fields.classList.toggle("is-attached", show);
   }
 
   function paymentsLive() {
@@ -1185,9 +1133,8 @@
     });
     const payBtn = $("#bk-pay");
     if (payBtn) {
-      const orange = wideCheckout() && method === "vipps";
-      payBtn.classList.toggle("bk-btn-vipps", orange);
-      payBtn.classList.toggle("bk-btn-primary", !orange);
+      payBtn.classList.remove("bk-btn-vipps");
+      payBtn.classList.add("bk-btn-primary");
     }
     const retry = $("#bk-fail-retry-text");
     if (retry && !state.submitting) retry.textContent = "Pay " + amt + " kr";
@@ -1200,10 +1147,6 @@
     if (payBtn) payBtn.hidden = wallet && !state.submitting;
     if (retryBtn) retryBtn.hidden = wallet && !state.submitting;
     syncPayBusy();
-    const sheet = $("#book-sheet");
-    if (sheet) sheet.classList.toggle("is-wide", wideCheckout());
-    placeDetailsForm();
-    placePayActions();
     placeCardFields();
     placeWalletHost();
     placePaymentHost();
@@ -1242,7 +1185,7 @@
     if (sheet.style && typeof sheet.style.setProperty === "function") {
       sheet.style.setProperty("--bk-foot-h", height + "px");
     }
-    const payBar = (state.view === "checkout" || state.view === "failed") && !wideCheckout() && !foot.hidden;
+    const payBar = (state.view === "checkout" || state.view === "failed") && !foot.hidden;
     sheet.classList.toggle("is-clear-foot", payBar);
     revealPayRows();
   }
@@ -2513,11 +2456,6 @@
   async function onPay() {
     if (state.submitting) return;
     if (!state.selections.length) return;
-    if (wideCheckout() && !validateDetails(true)) {
-      const first = $("#bk-details-form [aria-invalid='true']");
-      if (first) first.focus();
-      return;
-    }
     if (!state.paymentMethod) {
       setErr("pay", true);
       announce("Choose how you’d like to pay.");
@@ -2736,13 +2674,6 @@
     if (form) form.addEventListener("submit", onDetailsSubmit);
     document.addEventListener("keydown", onKeydown);
     watchFootPad();
-    const wide = window.matchMedia("(min-width: 601px)");
-    if (typeof wide.addEventListener === "function") {
-      wide.addEventListener("change", () => {
-        if (!state.sheetOpen) return;
-        updatePayChrome();
-      });
-    }
   }
 
   window.HustleOsloLookup = lookupByEmail;
