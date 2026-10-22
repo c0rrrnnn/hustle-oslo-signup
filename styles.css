@@ -85,6 +85,10 @@ a:hover {
   color: var(--orange);
 }
 
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -2492,8 +2496,10 @@ body.bk-open {
   line-height: 1.2;
 }
 
-.bk-h:focus {
+.bk-h:focus,
+.bk-h:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 .bk-sub {
@@ -3148,8 +3154,8 @@ a.bk-btn {
 
 .bk-input[aria-invalid="true"],
 .bk-select[aria-invalid="true"] {
-  border-color: #ff8a8a;
-  box-shadow: 0 0 0 1px #ff8a8a;
+  border-color: #2a2a2e;
+  background-color: #2e2528;
 }
 
 .bk-err {
@@ -3431,32 +3437,6 @@ a.bk-btn {
 
 .bk-field-wide {
   grid-column: 1 / -1;
-}
-
-.bk-trust {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #a1a1aa;
-  font-size: 0.78rem;
-  margin: 0 0 8px;
-  flex-wrap: wrap;
-}
-
-.bk-trust .bk-brand-visa,
-.bk-trust .bk-brand-mc {
-  height: 18px;
-}
-
-.bk-trust .bk-brand-mc i {
-  width: 16px;
-  height: 16px;
-  top: 1px;
-}
-
-.bk-trust .bk-brand-mc {
-  width: 28px;
 }
 
 .bk-tos {

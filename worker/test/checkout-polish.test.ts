@@ -1,0 +1,59 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+test("a decline clears submitting before the failed screen prepares the card form", () => {
+  const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
+  const failed = js.slice(js.indexOf("function showPaymentFailed"), js.indexOf("function buildPersonFields"));
+  const submitting = failed.indexOf("state.submitting = false");
+  const reset = failed.indexOf("resetPaymentAttempt()");
+  const go = failed.indexOf('go("failed")');
+  assert.ok(submitting >= 0 && reset > submitting && go > reset);
+  assert.match(js, /if \(state\.submitting\) return;/);
+});
+
+test("step headings take programmatic focus without a visible ring", () => {
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
+  assert.match(css, /:focus:not\(:focus-visible\)\s*\{\s*outline:\s*none;/);
+  assert.match(css, /\.bk-h:focus,\s*\.bk-h:focus-visible\s*\{[^}]*box-shadow:\s*none;/);
+  assert.match(js, /heading\.focus\(\{\s*preventScroll:\s*true,\s*focusVisible:\s*false\s*\}\)/);
+  for (const id of [
+    "bk-student-heading",
+    "bk-dates-heading",
+    "bk-confirm-heading",
+    "bk-details-heading",
+    "bk-checkout-heading",
+    "bk-failed-heading",
+    "bk-waiting-heading",
+    "bk-done-heading",
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '" tabindex="-1"'));
+  }
+});
+
+test("checkout has no provider trust line and field errors keep the normal border", () => {
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  assert.equal(html.includes("Secure payment by"), false);
+  assert.equal(html.includes("bk-trust"), false);
+  const invalid = css.match(/\.bk-input\[aria-invalid="true"\],\s*\.bk-select\[aria-invalid="true"\]\s*\{[^}]+\}/);
+  assert.ok(invalid, "missing invalid field rule");
+  assert.match(invalid[0], /border-color:\s*#2a2a2e/);
+  assert.match(invalid[0], /background-color:\s*#2e2528/);
+  assert.equal(invalid[0].includes("#ff8a8a"), false);
+  assert.match(css, /\.bk-err\s*\{[^}]*color:\s*#ffb4b4/);
+});
+
+test("desktop landing is two columns and signup opens in a right-side drawer", () => {
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  assert.match(html, /landing-col-main/);
+  assert.match(html, /landing-col-side/);
+  assert.match(html, /class="bk-scrim"/);
+  const desktop = css.slice(css.indexOf("@media (min-width: 960px)"));
+  assert.match(desktop, /\.landing-cols\s*\{[^}]*grid-template-columns:/);
+  assert.match(desktop, /\.bk-frame\s*\{[^}]*right:\s*0;/);
+  assert.match(css, /@media \(max-width: 600px\)/);
+});

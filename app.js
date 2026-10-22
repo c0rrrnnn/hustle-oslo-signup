@@ -1186,7 +1186,6 @@
     normalizeLiveMethod();
     const amt = currentAmount();
     const method = state.paymentMethod || "card";
-    const who = method === "vipps" ? "Vipps" : "Stripe";
     const payText = $("#bk-pay-text");
     if (payText && !state.submitting) payText.textContent = "Pay " + amt + " kr";
     ["bk-order-total", "bk-order-sub", "bk-fail-total", "bk-subtotal"].forEach((id) => {
@@ -1210,9 +1209,6 @@
     if (payBtn) payBtn.hidden = wallet && !state.submitting;
     if (retryBtn) retryBtn.hidden = wallet && !state.submitting;
     syncPayBusy();
-    $$(".bk-trust-by").forEach((el) => {
-      el.textContent = who;
-    });
     const sheet = $("#book-sheet");
     if (sheet) sheet.classList.toggle("is-wide", wideCheckout());
     placeDetailsForm();
@@ -2037,6 +2033,9 @@
   }
 
   function showPaymentFailed(message) {
+    // go() calls schedulePrepare(), which bails while a payment is in flight.
+    // Clear that flag first so a decline remounts the card form.
+    state.submitting = false;
     resetPaymentAttempt();
     const el = $("#bk-fail-message");
     if (el) {
