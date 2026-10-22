@@ -90,30 +90,155 @@ async function readAppsScriptReply(
   return { success: false, error: response.ok ? "invalid-response" : `HTTP ${response.status}` };
 }
 
+/** First try plus three quick retries for a transient 404 or 5xx. */
+const STATUS_ATTEMPTS = 4;
+/** A hung connection is tried once more, so two attempts still fit in the sheet lease. */
+const NETWORK_ATTEMPTS = 2;
+const RETRY_MS = [200, 500, 1000];
+/**
+ * A paid Apps Script write has taken about 50s. Stay above that, and abort a
+ * fetch that never returns so the result can be saved instead of leaving the lease.
+ */
+const POST_TIMEOUT_MS = 70_000;
+const REDIRECT_HOPS = 2;
+
+export type SheetWrite = {
+  postedNights: number;
+  confirmationSent: boolean;
+  /** True once this 2xx finishes the booking, including confirmation when it was due. */
+  posted: boolean;
+};
+
+export type PostOptions = {
+  timeoutMs?: number;
+  onWritten?: (write: SheetWrite) => Promise<void>;
+};
+
+function retryableStatus(status: number): boolean {
+  return status === 404 || (status >= 500 && status < 600);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.name === "AbortError" || error.name === "TimeoutError") return "timeout";
+    return error.message || "apps-script";
+  }
+  return "apps-script";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Apps Script answers 302 and expects the same POST, body included, at the echo URL. */
+function canRepost(next: URL, current: URL): boolean {
+  if (next.protocol !== "https:") return false;
+  if (next.host === current.host) return true;
+  return next.host === "script.google.com" || next.host === "script.googleusercontent.com";
+}
+
+async function postJson(fetcher: typeof fetch, url: string, body: string, timeoutMs: number): Promise<Response> {
+  let current = url;
+  let response: Response | null = null;
+  for (let hop = 0; hop <= REDIRECT_HOPS; hop++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      response = await fetcher(current, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body,
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (response.status < 300 || response.status >= 400) return response;
+    await response.body?.cancel();
+    const location = response.headers.get("Location");
+    if (!location || hop === REDIRECT_HOPS) return response;
+    const next = new URL(location, current);
+    if (!canRepost(next, new URL(current))) return response;
+    current = next.href;
+  }
+  return response as Response;
+}
+
+async function postJsonWithRetries(
+  fetcher: typeof fetch,
+  url: string,
+  body: string,
+  timeoutMs: number,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < STATUS_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(RETRY_MS[Math.min(attempt - 1, RETRY_MS.length - 1)]);
+    try {
+      const response = await postJson(fetcher, url, body, timeoutMs);
+      if (retryableStatus(response.status) && attempt < STATUS_ATTEMPTS - 1) {
+        await response.body?.cancel();
+        console.info(JSON.stringify({ msg: "sheet-post-retry", status: response.status, attempt: attempt + 1 }));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= NETWORK_ATTEMPTS - 1) throw error;
+      console.info(
+        JSON.stringify({
+          msg: "sheet-post-retry",
+          error: errorMessage(error),
+          attempt: attempt + 1,
+        }),
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("apps-script");
+}
+
+async function send(
+  fetcher: typeof fetch,
+  url: string,
+  body: string,
+  timeoutMs: number,
+): Promise<{ success: true; data: ScriptReply } | { success: false; error: string }> {
+  try {
+    return await readAppsScriptReply(await postJsonWithRetries(fetcher, url, body, timeoutMs));
+  } catch (error) {
+    return { success: false, error: errorMessage(error) };
+  }
+}
+
 export async function postPaidBooking(
   fetcher: typeof fetch,
   url: string,
   order: StoredOrder,
   secret: string,
   calendarBase = "",
+  options: PostOptions = {},
 ): Promise<{ ok: boolean; confirmationSent: boolean; error?: string }> {
   if (order.status !== "paid") return { ok: false, confirmationSent: false, error: "not-paid" };
   if (!secret) return { ok: false, confirmationSent: false, error: "missing-secret" };
   const bodies = appsScriptBodies(order, secret, calendarBase);
+  const timeoutMs = options.timeoutMs ?? POST_TIMEOUT_MS;
   let confirmationSent = order.confirmationSent;
+  const note = async (posted: boolean) => {
+    if (!options.onWritten) return;
+    await options.onWritten({
+      postedNights: order.appsScriptPostedNights,
+      confirmationSent,
+      posted,
+    });
+  };
   try {
     for (let index = order.appsScriptPostedNights; index < bodies.length; index++) {
-      const response = await fetcher(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(bodies[index]),
-      });
-      const parsed = await readAppsScriptReply(response);
-      if (!parsed.success) {
-        return { ok: false, confirmationSent: false, error: parsed.error };
-      }
+      const parsed = await send(fetcher, url, JSON.stringify(bodies[index]), timeoutMs);
+      if (!parsed.success) return { ok: false, confirmationSent: false, error: parsed.error };
       order.appsScriptPostedNights = index + 1;
       if (parsed.data.confirmationSent === true) confirmationSent = true;
+      const nightsDone = order.appsScriptPostedNights >= bodies.length;
+      await note(nightsDone && confirmationSent);
     }
     const lastIndex = bodies.length - 1;
     const lastWasPosted = order.appsScriptPostedNights > lastIndex;
@@ -134,19 +259,13 @@ export async function postPaidBooking(
         vippsNumber: "48782",
         ...calendarFields(order, calendarBase),
       };
-      const response = await fetcher(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(followUp),
-      });
-      const parsed = await readAppsScriptReply(response);
-      if (!parsed.success) {
-        return { ok: false, confirmationSent: false, error: parsed.error };
-      }
+      const parsed = await send(fetcher, url, JSON.stringify(followUp), timeoutMs);
+      if (!parsed.success) return { ok: false, confirmationSent: false, error: parsed.error };
       confirmationSent = parsed.data.confirmationSent === true;
+      await note(true);
     }
     return { ok: true, confirmationSent };
   } catch (error) {
-    return { ok: false, confirmationSent: false, error: error instanceof Error ? error.message : "apps-script" };
+    return { ok: false, confirmationSent: false, error: errorMessage(error) };
   }
 }

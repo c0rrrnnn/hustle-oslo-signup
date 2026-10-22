@@ -99,6 +99,7 @@ export interface RecordedCall {
   method: string;
   body: string;
   headers: Record<string, string>;
+  redirect?: string;
 }
 
 function headerRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -132,6 +133,7 @@ export function recordFetch(
       method: (init?.method || "GET").toUpperCase(),
       body: typeof init?.body === "string" ? init.body : "",
       headers: headerRecord(init?.headers),
+      redirect: init?.redirect,
     };
     calls.push(call);
     return handle(call);

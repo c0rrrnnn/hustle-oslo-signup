@@ -1,7 +1,7 @@
-import { postPaidBooking } from "./apps-script.ts";
+import { postPaidBooking, type SheetWrite } from "./apps-script.ts";
 import { calendarBaseFor } from "./calendar.ts";
 import { getOrder, listUnpostedOrderIds, putOrder, UNPOSTED_TTL_SEC, unpostedKey } from "./orders.ts";
-import type { Deps, Env } from "./types.ts";
+import type { Deps, Env, StoredOrder } from "./types.ts";
 
 /** After a failed sheet write: 5m, 15m, 30m, 1h, 3h, then 6h. */
 const BACKOFF_MS = [5, 15, 30, 60, 180, 360].map((minutes) => minutes * 60_000);
@@ -19,12 +19,14 @@ export type SheetSyncResult = "posted" | "failed" | "skipped";
  * Post one paid order to Apps Script. Success is only HTTP 2xx and ok: true.
  * A lease stops a webhook and the cron from writing the same order at once.
  * Cron passes respectSchedule so a recent failure waits out its backoff.
+ * The posted flag is written as soon as that 2xx is read. A stale read of the
+ * lease must not drop the result and leave the order in progress.
  */
 export async function deliverPaidBooking(
   env: Env,
   deps: Deps,
   orderId: string,
-  options: { respectSchedule?: boolean } = {},
+  options: { respectSchedule?: boolean; timeoutMs?: number } = {},
 ): Promise<SheetSyncResult> {
   const now = (deps.now || (() => new Date()))();
   const nowMs = now.getTime();
@@ -53,6 +55,32 @@ export async function deliverPaidBooking(
   const claimed = await getOrder(env.ORDERS, orderId);
   if (!claimed || claimed.appsScriptLeaseToken !== token) return "skipped";
 
+  const saveWrite = async (write: SheetWrite) => {
+    const latest = await getOrder(env.ORDERS, orderId);
+    if (latest?.appsScriptLeaseToken && latest.appsScriptLeaseToken !== token) return;
+    const next: StoredOrder = { ...claimed };
+    next.appsScriptPostedNights = write.postedNights;
+    if (write.confirmationSent) next.confirmationSent = true;
+    next.updatedAt = nowIso;
+    if (write.posted) {
+      next.appsScriptPosted = true;
+      next.failureReason = null;
+      next.appsScriptNextAttemptAt = null;
+      next.appsScriptLeaseToken = null;
+      next.appsScriptLeaseUntil = null;
+    }
+    await putOrder(env.ORDERS, next);
+    if (write.posted) await env.ORDERS.delete(unpostedKey(orderId));
+    claimed.appsScriptPostedNights = next.appsScriptPostedNights;
+    claimed.confirmationSent = next.confirmationSent;
+    claimed.appsScriptPosted = next.appsScriptPosted;
+    claimed.failureReason = next.failureReason;
+    claimed.appsScriptNextAttemptAt = next.appsScriptNextAttemptAt;
+    claimed.appsScriptLeaseToken = next.appsScriptLeaseToken;
+    claimed.appsScriptLeaseUntil = next.appsScriptLeaseUntil;
+    claimed.updatedAt = next.updatedAt;
+  };
+
   const postStarted = Date.now();
   const result = await postPaidBooking(
     deps.fetch || fetch,
@@ -60,6 +88,7 @@ export async function deliverPaidBooking(
     claimed,
     env.APPS_SCRIPT_SHARED_SECRET,
     calendarBaseFor(claimed, env),
+    { timeoutMs: options.timeoutMs, onWritten: saveWrite },
   );
   console.info(
     JSON.stringify({
@@ -70,29 +99,31 @@ export async function deliverPaidBooking(
       ok: result.ok,
     }),
   );
-  const latest = (await getOrder(env.ORDERS, orderId)) || claimed;
-  if (latest.appsScriptLeaseToken !== token) return "skipped";
-  latest.appsScriptPostedNights = claimed.appsScriptPostedNights;
-  latest.appsScriptLeaseToken = null;
-  latest.appsScriptLeaseUntil = null;
-  latest.updatedAt = nowIso;
+  if (claimed.appsScriptPosted) return "posted";
+  const latest = await getOrder(env.ORDERS, orderId);
+  if (latest?.appsScriptPosted) return "posted";
+  if (latest?.appsScriptLeaseToken && latest.appsScriptLeaseToken !== token) return "skipped";
+
+  claimed.appsScriptLeaseToken = null;
+  claimed.appsScriptLeaseUntil = null;
+  claimed.updatedAt = nowIso;
   if (result.ok) {
-    latest.appsScriptPosted = true;
-    latest.confirmationSent = result.confirmationSent;
-    latest.failureReason = null;
-    latest.appsScriptNextAttemptAt = null;
-    await putOrder(env.ORDERS, latest);
+    claimed.appsScriptPosted = true;
+    claimed.confirmationSent = result.confirmationSent;
+    claimed.failureReason = null;
+    claimed.appsScriptNextAttemptAt = null;
+    await putOrder(env.ORDERS, claimed);
     await env.ORDERS.delete(unpostedKey(orderId));
     return "posted";
   }
-  const attempts = (latest.appsScriptAttempts || 0) + 1;
-  latest.appsScriptAttempts = attempts;
-  latest.appsScriptPosted = false;
-  latest.failureReason = result.error || "apps-script";
-  latest.appsScriptNextAttemptAt = new Date(nowMs + sheetBackoffMs(attempts)).toISOString();
-  await putOrder(env.ORDERS, latest);
+  const attempts = (claimed.appsScriptAttempts || 0) + 1;
+  claimed.appsScriptAttempts = attempts;
+  claimed.appsScriptPosted = false;
+  claimed.failureReason = result.error || "apps-script";
+  claimed.appsScriptNextAttemptAt = new Date(nowMs + sheetBackoffMs(attempts)).toISOString();
+  await putOrder(env.ORDERS, claimed);
   await env.ORDERS.put(unpostedKey(orderId), orderId, { expirationTtl: UNPOSTED_TTL_SEC });
-  console.info(JSON.stringify({ msg: "sheet-post-failed", orderId, attempts, error: latest.failureReason }));
+  console.info(JSON.stringify({ msg: "sheet-post-failed", orderId, attempts, error: claimed.failureReason }));
   return "failed";
 }
 
