@@ -759,14 +759,24 @@ body.bk-open .landing-actions {
 
 .landing-actions .btn {
   width: 100%;
-  min-height: 52px;
-  font-size: 1.02rem;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 22px;
+  border-radius: 9999px;
+  font-size: 1rem;
   font-weight: 600;
+  line-height: 1;
 }
 
 .landing-actions .btn-primary {
   background: #ffffff;
   color: #111114;
+  box-shadow: none;
+}
+
+.landing-actions .btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -902,8 +912,10 @@ body.bk-open .landing-actions {
     display: flex;
     width: min(820px, 100%);
     margin-inline: auto;
-    border-radius: 14px;
-    min-height: 52px;
+    height: 50px;
+    min-height: 50px;
+    border-radius: 9999px;
+    font-size: 1rem;
     background: #f4f4f5;
     color: #121214;
   }
@@ -2517,6 +2529,19 @@ body.bk-open {
   box-shadow: none;
 }
 
+/* Selected and focused controls in the signup flow use a white stroke.
+   Headings stay unringed when focus is moved there by script. */
+.bk-sheet button:focus-visible,
+.bk-sheet a:focus-visible,
+.bk-sheet input:focus-visible,
+.bk-sheet select:focus-visible,
+.bk-sheet textarea:focus-visible,
+.bk-sheet [tabindex]:focus-visible:not(.bk-h) {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
 .bk-sub {
   color: #a1a1aa;
   font-size: 0.92rem;
@@ -2800,6 +2825,7 @@ a.bk-btn {
 .bk-day.is-selected {
   background: #3a3a40;
   color: #fff;
+  box-shadow: 0 0 0 2px #fff;
 }
 
 .bk-day-num {
@@ -2868,7 +2894,7 @@ a.bk-btn {
 }
 
 .bk-opt.is-on {
-  border-color: #f4f4f5;
+  border-color: #fff;
 }
 
 .bk-opt input {
@@ -2885,8 +2911,11 @@ a.bk-btn {
 
 .bk-opt:focus-within,
 .bk-return:focus-within,
-.bk-mrow:focus-within {
-  box-shadow: var(--focus);
+.bk-mrow:focus-within,
+.bk-choice:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 .bk-rd {
@@ -3191,7 +3220,7 @@ a.bk-btn {
 .bk-input[aria-invalid="true"],
 .bk-select[aria-invalid="true"] {
   border-color: #2a2a2e;
-  background-color: #2e2528;
+  background: #1c1c1f;
 }
 
 .bk-err {
@@ -3299,7 +3328,7 @@ a.bk-btn {
 }
 
 .bk-mrow.is-on {
-  border-color: #f4f4f5;
+  border-color: #fff;
 }
 
 .bk-mrow input {
@@ -3398,7 +3427,7 @@ a.bk-btn {
 
 #bk-card-slot.is-open,
 #bk-fail-card-slot.is-open {
-  border: 1px solid #f4f4f5;
+  border: 1px solid #fff;
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #1c1c1f;

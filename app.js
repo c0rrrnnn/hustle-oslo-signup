@@ -1612,7 +1612,7 @@
       appearance: {
         theme: "night",
         variables: {
-          colorPrimary: "#df8026",
+          colorPrimary: "#ffffff",
           colorBackground: "#1c1c1f",
           colorText: "#f4f4f5",
           borderRadius: "12px",

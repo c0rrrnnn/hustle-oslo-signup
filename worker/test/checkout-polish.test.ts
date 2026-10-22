@@ -45,7 +45,7 @@ test("checkout stays in the 480px drawer and the selected card closes its box", 
   assert.match(js, /return go\("details"\)/);
   assert.equal(js.includes("brandMarks"), false);
   assert.equal(css.includes("1100px"), false);
-  assert.match(css, /#bk-card-slot\.is-open,\s*#bk-fail-card-slot\.is-open\s*\{[^}]*border:\s*1px solid #f4f4f5;/);
+  assert.match(css, /#bk-card-slot\.is-open,\s*#bk-fail-card-slot\.is-open\s*\{[^}]*border:\s*1px solid #fff;/);
   assert.match(css, /\.bk-pay-list:has\(\+ \.is-open\) \.bk-mrow\.is-on\[data-method="card"\]/);
   assert.equal(html.includes("Secure checkout"), false);
   assert.equal(html.includes("bk-brands"), false);
@@ -66,9 +66,25 @@ test("checkout has no provider trust line and field errors keep the normal borde
   const invalid = css.match(/\.bk-input\[aria-invalid="true"\],\s*\.bk-select\[aria-invalid="true"\]\s*\{[^}]+\}/);
   assert.ok(invalid, "missing invalid field rule");
   assert.match(invalid[0], /border-color:\s*#2a2a2e/);
-  assert.match(invalid[0], /background-color:\s*#2e2528/);
+  assert.match(invalid[0], /background:\s*#1c1c1f/);
+  assert.equal(invalid[0].includes("#2e2528"), false);
   assert.equal(invalid[0].includes("#ff8a8a"), false);
   assert.match(css, /\.bk-err\s*\{[^}]*color:\s*#ffb4b4/);
+  assert.match(html, /id="btn-start"[^>]*aria-label="Register"/);
+  assert.equal(html.includes("Register for class"), false);
+  assert.equal(html.includes("Book a class"), false);
+  assert.match(html, /class="bk-bar-title">Register</);
+  assert.match(css, /\.bk-sheet button:focus-visible[\s\S]*outline:\s*2px solid #fff;/);
+  assert.equal(js.includes('colorPrimary: "#df8026"'), false);
+  const err = [255, 180, 180];
+  const sheet = [18, 18, 20];
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = (rgb: number[]) => 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+  const contrast = (lum(err) + 0.05) / (lum(sheet) + 0.05);
+  assert.ok(contrast >= 4.5, "error text contrast " + contrast.toFixed(2));
 });
 
 test("desktop landing is two columns and signup opens in a right-side drawer", () => {
