@@ -192,7 +192,9 @@ test("the confirmation screen uses hosted links and does not download a blob", (
   assert.equal(js.includes("CALENDAR_DETAILS"), false);
   assert.match(html, /class="cf-badge"/);
   assert.match(html, /id="bk-done-table"/);
-  assert.match(html, /data-action="done"/);
+  assert.equal(html.includes('data-action="done"'), false);
+  assert.match(html, /id="bk-close"[^>]*aria-label="Close"/);
+  assert.match(html, /Questions\? DM/);
 });
 
 function sampleNight(overrides: Partial<PricedNight>): PricedNight {

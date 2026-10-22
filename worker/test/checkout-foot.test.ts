@@ -62,8 +62,13 @@ test("the payment footer is measured and the error card keeps a red fill without
   assert.ok(checkoutFoot.indexOf('id="bk-pay"') < checkoutFoot.indexOf("bk-foot-note"));
   assert.ok(checkoutFoot.indexOf("bk-foot-note") < checkoutFoot.indexOf('id="bk-checkout-tos"'));
   const doneFoot = html.slice(html.indexOf('id="bk-foot-done"'), html.indexOf("</footer>", html.indexOf('id="bk-foot-done"')));
-  assert.ok(doneFoot.indexOf('data-action="done"') < doneFoot.indexOf("bk-foot-note"));
+  assert.equal(doneFoot.includes('data-action="done"'), false);
+  assert.equal(doneFoot.includes(">Done<"), false);
   assert.ok(doneFoot.indexOf("bk-foot-note") < doneFoot.indexOf("bk-mini"));
+  assert.match(html, /id="bk-back"[^>]*aria-label="Back"/);
+  assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*width:\s*40px/);
+  assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*height:\s*40px/);
+  assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*border-radius:\s*50%/);
   assert.equal(html.includes("Secure payment by"), false);
   assert.equal(css.includes("bk-brand-visa"), false);
   assert.equal(/margin-top:\s*calc\(-1\s*\*\s*var\(--bk-foot-h/.test(css), false);

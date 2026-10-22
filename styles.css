@@ -2571,7 +2571,7 @@ body.bk-open {
 }
 
 /* Same block under every primary button, tall enough for the Pay terms.
-   Empty on steps with no line, so Next, No, Pay, and Done share one position. */
+   Empty on steps with no line, so Next, No, and Pay share one position. */
 .bk-foot-note {
   flex: 0 0 auto;
   margin-top: 8px;
@@ -3708,6 +3708,7 @@ a.bk-cal-link:hover {
     -webkit-backdrop-filter: blur(16px);
   }
 
+  #bk-back,
   #bk-close {
     width: 40px;
     height: 40px;
@@ -3987,14 +3988,23 @@ a.cf-cal-btn:hover,
   margin-bottom: 12px;
 }
 
+#bk-back,
 #bk-close {
   width: 40px;
   height: 40px;
+  padding: 0;
   border-radius: 50%;
   background: #2a2a2e;
-  font-size: 18px;
+  color: #f4f4f5;
+  line-height: 0;
 }
 
+#bk-back svg,
+#bk-close svg {
+  display: block;
+}
+
+#bk-back:hover,
 #bk-close:hover {
   background: #35353a;
 }
