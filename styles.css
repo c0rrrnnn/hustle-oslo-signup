@@ -2416,7 +2416,7 @@ body.bk-open {
 }
 
 .bk-sheet.is-wide .bk-frame {
-  width: min(1100px, 100%);
+  width: min(480px, 100%);
 }
 
 .bk-top {
@@ -3410,23 +3410,33 @@ a.bk-btn {
 }
 
 .bk-card-fields.is-attached {
+  margin-top: 0;
+}
+
+.bk-pay-list:has(+ .is-open) .bk-mrow.is-on[data-method="card"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-width: 0;
+}
+
+#bk-card-slot.is-open,
+#bk-fail-card-slot.is-open {
   border: 1px solid #f4f4f5;
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #1c1c1f;
-  padding: 0 14px 14px;
+  padding: 2px 14px 14px;
   margin-top: 0;
 }
 
-.bk-mrow.is-on[data-method="card"] {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom-color: transparent;
-}
-
-.bk-sheet.is-wide .bk-mrow.is-on[data-method="card"] {
-  border-radius: 12px;
-  border-bottom-color: #f4f4f5;
+#bk-card-slot.is-open .bk-card-fields,
+#bk-fail-card-slot.is-open .bk-card-fields,
+#bk-card-slot.is-open .bk-payment-host,
+#bk-fail-card-slot.is-open .bk-payment-host {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .bk-card-grid {
@@ -3941,7 +3951,7 @@ a.bk-cal-link:hover {
   }
 
   .bk-sheet.is-wide .bk-frame {
-    width: min(1100px, calc(100% - 1.5rem));
+    width: min(480px, 100%);
   }
 
   .bk-grab {

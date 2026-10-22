@@ -294,10 +294,6 @@
     return ev.date + " " + kind + " " + ev.location;
   }
 
-  function isDesktop() {
-    return window.matchMedia("(min-width: 601px)").matches;
-  }
-
   function drawerMode() {
     return window.matchMedia("(min-width: 960px)").matches;
   }
@@ -311,7 +307,8 @@
   }
 
   function wideCheckout() {
-    return state.view === "checkout" && isDesktop();
+    // Signup stays in the 480px drawer on desktop, including checkout.
+    return false;
   }
 
   function orderLine(sel) {
@@ -671,7 +668,7 @@
     if (state.view === "dates") return go("student");
     if (state.view === "confirm") return go("dates");
     if (state.view === "details") return go("confirm");
-    if (state.view === "checkout") return go(isDesktop() ? "confirm" : "details");
+    if (state.view === "checkout") return go("details");
     if (state.view === "failed") return go("checkout");
     if (state.view === "waiting") {
       paymentUi.resumeGen += 1;
@@ -1033,10 +1030,6 @@
     return '<span class="bk-it bk-it-cd" aria-hidden="true">' + ICON_CARD + "</span>";
   }
 
-  function brandMarks() {
-    return '<span class="bk-brands" aria-hidden="true"><span class="bk-brand bk-brand-visa">VISA</span><span class="bk-brand bk-brand-mc"><i></i><i></i></span></span><span class="visually-hidden">Visa and Mastercard</span>';
-  }
-
   function methodChoices() {
     // Wallets are Stripe's own buttons when payments are on. A custom radio
     // cannot open the native sheet, because Pay would have to await the
@@ -1077,9 +1070,7 @@
       '<input type="radio" name="' + name + '" value="' + id + '" data-pay="1"' + (on ? " checked" : "") + ">" +
       '<span class="bk-radio" aria-hidden="true"></span>' +
       methodIcon(id) +
-      '<span class="bk-pay-name">' + METHOD_LABEL[id] + "</span>" +
-      (id === "card" ? brandMarks() : "") +
-      "</label>"
+      '<span class="bk-pay-name">' + METHOD_LABEL[id] + "</span></label>"
     );
   }
 
@@ -1216,7 +1207,23 @@
     placeCardFields();
     placeWalletHost();
     placePaymentHost();
+    syncCardBox();
     syncFootPad();
+  }
+
+  function syncCardBox() {
+    [
+      ["bk-card-slot", "checkout"],
+      ["bk-fail-card-slot", "failed"],
+    ].forEach(function (pair) {
+      const slot = document.getElementById(pair[0]);
+      if (!slot) return;
+      const fields = $("#bk-card-fields");
+      const host = $("#bk-payment-host");
+      const showFields = fields && fields.parentElement === slot && !fields.hidden;
+      const showHost = host && host.parentElement === slot && !host.hidden;
+      slot.classList.toggle("is-open", state.view === pair[1] && state.paymentMethod === "card" && (showFields || showHost));
+    });
   }
 
   // The terms line wraps, so the sticky footer's height is measured rather
@@ -2658,7 +2665,7 @@
     if (action === "remove-night") return removeNight(actionEl.dataset.eventId);
     if (action === "confirm-next") {
       if (!state.selections.length) return;
-      return go(isDesktop() ? "checkout" : "details");
+      return go("details");
     }
     if (action === "edit-order") return go("confirm");
     if (action === "edit-details") return go("details");
@@ -2731,8 +2738,7 @@
     if (typeof wide.addEventListener === "function") {
       wide.addEventListener("change", () => {
         if (!state.sheetOpen) return;
-        if (isDesktop() && state.view === "details") go("checkout");
-        else updatePayChrome();
+        updatePayChrome();
       });
     }
   }

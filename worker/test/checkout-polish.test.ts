@@ -33,11 +33,28 @@ test("step headings take programmatic focus without a visible ring", () => {
   }
 });
 
+test("checkout stays in the 480px drawer and the selected card closes its box", () => {
+  const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  assert.match(js, /function wideCheckout\(\) \{[^}]*return false;/);
+  assert.match(js, /if \(state\.view === "checkout"\) return go\("details"\)/);
+  assert.match(js, /return go\("details"\)/);
+  assert.equal(js.includes("brandMarks"), false);
+  assert.equal(css.includes("1100px"), false);
+  assert.match(css, /#bk-card-slot\.is-open,\s*#bk-fail-card-slot\.is-open\s*\{[^}]*border:\s*1px solid #f4f4f5;/);
+  assert.match(css, /\.bk-pay-list:has\(\+ \.is-open\) \.bk-mrow\.is-on\[data-method="card"\]/);
+  assert.equal(html.includes("Secure checkout"), false);
+  assert.equal(html.includes("bk-brands"), false);
+});
+
 test("checkout has no provider trust line and field errors keep the normal border", () => {
   const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   assert.equal(html.includes("Secure payment by"), false);
   assert.equal(html.includes("bk-trust"), false);
+  assert.equal(js.includes("VISA"), false);
   const invalid = css.match(/\.bk-input\[aria-invalid="true"\],\s*\.bk-select\[aria-invalid="true"\]\s*\{[^}]+\}/);
   assert.ok(invalid, "missing invalid field rule");
   assert.match(invalid[0], /border-color:\s*#2a2a2e/);
