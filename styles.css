@@ -3588,22 +3588,27 @@ a.bk-cal-link:hover {
     display: none;
   }
 
-  /* Ticket cards (Beginner, Intermediate, bundle, Social) are squares in the
-     booking column. The phone keeps the full-width rows. */
+  /* Ticket cards stack in one column. A full-width square in the 480px
+     column is about 416px tall, so each card stays a 280px square,
+     centred. The phone keeps the full-width rows. */
   #bk-options .bk-options {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
     gap: 12px;
     margin-top: 14px;
   }
 
   #bk-options .bk-dl {
+    justify-self: stretch;
+    width: 100%;
     grid-column: 1 / -1;
     margin: 2px 0 0;
   }
 
   #bk-options .bk-opt {
     aspect-ratio: 1 / 1;
+    width: min(100%, 280px);
     margin-top: 0;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
