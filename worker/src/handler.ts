@@ -16,7 +16,7 @@ import {
 import { markProviderChecked, providerCheckedRecently } from "./provider-check.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
-import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, stripePayMethod, verifyStripeSignature } from "./stripe.ts";
+import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, stripePayMethod, stripeSecretIsLive, verifyStripeSignature } from "./stripe.ts";
 import type { CaptureMode, CheckoutInput, Deps, Env, PayMethod, SignupMeta, StoredOrder } from "./types.ts";
 import {
   captureVippsPayment,
@@ -839,7 +839,7 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
     if (request.method === "GET" && path === "/health") {
       const live = allowLive(env);
       const vippsApi = vippsApiBase(live, env.VIPPS_API_BASE);
-      const stripeLive = (env.STRIPE_SECRET_KEY || "").startsWith("sk_live_");
+      const stripeLive = stripeSecretIsLive(env.STRIPE_SECRET_KEY || "");
       return json(200, {
         ok: true,
         mode: live && (stripeLive || vippsApi === VIPPS_LIVE_API) ? "live" : "test",

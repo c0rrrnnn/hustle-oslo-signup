@@ -90,20 +90,30 @@ export function stripePayMethod(intent: StripeIntent | null): "card" | "apple" |
   return null;
 }
 
+/** Secret keys (sk_) and restricted keys (rk_) are the same kind of server credential. */
+export function stripeSecretIsLive(secretKey: string): boolean {
+  return secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_");
+}
+
+function stripeSecretIsTest(secretKey: string): boolean {
+  return secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_");
+}
+
 export function assertStripeTestKey(secretKey: string, publishableKey: string): string | null {
-  if (!secretKey.startsWith("sk_test_")) return "Stripe secret key must be a test key (sk_test_).";
+  if (!stripeSecretIsTest(secretKey)) return "Stripe secret key must be a test key (sk_test_ or rk_test_).";
   if (!publishableKey.startsWith("pk_test_")) return "Stripe publishable key must be a test key (pk_test_).";
   return null;
 }
 
 /**
  * Live Stripe keys work only when allowLive is true, and the secret and
- * publishable key must be the same mode. The deployed config leaves allowLive false.
+ * publishable key must be the same mode. A restricted key (rk_) is accepted
+ * wherever a secret key (sk_) is. The deployed config leaves allowLive false.
  */
 export function paymentsModeError(allowLive: boolean, secretKey: string, publishableKey: string): string | null {
   if (!allowLive) return assertStripeTestKey(secretKey, publishableKey);
-  const secretLive = secretKey.startsWith("sk_live_");
-  const secretTest = secretKey.startsWith("sk_test_");
+  const secretLive = stripeSecretIsLive(secretKey);
+  const secretTest = stripeSecretIsTest(secretKey);
   const pubLive = publishableKey.startsWith("pk_live_");
   const pubTest = publishableKey.startsWith("pk_test_");
   if ((!secretLive && !secretTest) || (!pubLive && !pubTest)) {
