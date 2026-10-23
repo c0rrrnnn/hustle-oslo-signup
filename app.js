@@ -1692,7 +1692,7 @@
       },
       buttonHeight: 48,
       buttonTheme: { applePay: "white", googlePay: "white" },
-      layout: { maxColumns: 1, maxRows: 2, overflow: "never" },
+      layout: { maxColumns: 1, maxRows: 0, overflow: "never" },
     });
     element.on("ready", (event) => {
       if (paymentUi.wallets !== element) return;

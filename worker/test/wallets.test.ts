@@ -10,6 +10,8 @@ test("wallet buttons are Stripe's and exist only after the PaymentIntent", () =>
   assert.match(js, /applePay: "auto"/);
   assert.match(js, /googlePay: "auto"/);
   assert.match(js, /wallets: \{ applePay: "never", googlePay: "never", link: "never" \}/);
+  assert.match(js, /layout: \{ maxColumns: 1, maxRows: 0, overflow: "never" \}/);
+  assert.equal(js.includes('maxRows: 2, overflow: "never"'), false);
   assert.match(js, /address:\s*\{\s*country:\s*"NO"\s*\}/);
   assert.match(js, /availablePaymentMethods/);
   assert.match(js, /postCheckout\("card"\)/);
