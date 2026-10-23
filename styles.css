@@ -30,7 +30,6 @@
   --touch: 44px;
   /* Space between landing blocks. Desktop is 2x the old 1.2rem section margin. */
   --landing-section-gap: 1.75rem;
-  --landing-register-gap: 1.25rem;
 }
 
 *,
@@ -743,7 +742,7 @@ body.is-landing .site-footer a:hover {
   position: static;
   width: 100%;
   display: block;
-  margin: var(--landing-register-gap) 0 0;
+  margin: 0;
   padding: 0;
   background: none;
   border: 0;
@@ -797,8 +796,8 @@ body.is-landing .site-footer a:hover {
 }
 
 /* Desktop landing: two columns inside the same 820px shell as the nav and footer.
-   Below 960px the column wrappers disappear (display: contents) and flex order
-   restores the existing single-column sequence. */
+   Below 960px the column wrappers disappear (display: contents), so the DOM
+   order is the single-column sequence. */
 .landing-cols {
   display: flex;
   flex-direction: column;
@@ -809,19 +808,9 @@ body.is-landing .site-footer a:hover {
   display: contents;
 }
 
-.hero-visual { order: 1; }
-.landing-title { order: 2; }
-#landing-about { order: 3; }
-#landing-upcoming { order: 4; }
-#landing-schedule { order: 5; }
-#landing-prices { order: 6; }
-#landing-location { order: 7; }
-#landing-details { order: 8; }
-
 @media (min-width: 960px) {
   :root {
     --landing-section-gap: 2.4rem;
-    --landing-register-gap: 1.5rem;
   }
 
   body.is-landing main {
@@ -851,17 +840,6 @@ body.is-landing .site-footer a:hover {
     flex-direction: column;
     gap: var(--landing-section-gap);
     min-width: 0;
-  }
-
-  .landing-col > .hero-visual,
-  .landing-col > .landing-title,
-  .landing-col > #landing-about,
-  .landing-col > #landing-upcoming,
-  .landing-col > #landing-schedule,
-  .landing-col > #landing-prices,
-  .landing-col > #landing-location,
-  .landing-col > #landing-details {
-    order: 0;
   }
 
   body.is-landing .hero-visual {

@@ -71,9 +71,15 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.equal(invalid[0].includes("#ff8a8a"), false);
   assert.match(css, /\.bk-err\s*\{[^}]*color:\s*#ffb4b4/);
   assert.match(html, /id="btn-start"[^>]*aria-label="Register"/);
-  const about = html.slice(html.indexOf('id="landing-about"'), html.indexOf('id="landing-details"'));
-  assert.match(about, /id="btn-start"/);
+  const landingIds = ["hero-video", "intro-heading", "landing-upcoming", "btn-start", "landing-about", "landing-details", "landing-schedule", "landing-prices", "landing-location"];
+  landingIds.reduce((prev, id) => {
+    const at = html.indexOf('id="' + id + '"');
+    assert.ok(at > prev, id + " follows the landing order");
+    return at;
+  }, -1);
+  assert.equal(html.slice(html.indexOf('id="landing-about"'), html.indexOf('id="landing-details"')).includes("btn-start"), false);
   assert.equal(html.split('id="btn-start"').length - 1, 1);
+  assert.equal(/\border\s*:/.test(css), false);
   assert.equal(/\.landing-actions\s*\{[^}]*position:\s*fixed/.test(css), false);
   assert.equal(css.includes("--sticky-pad"), false);
   assert.match(css, /--landing-section-gap:\s*1\.75rem/);
