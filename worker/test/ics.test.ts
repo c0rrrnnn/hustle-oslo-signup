@@ -191,6 +191,13 @@ test("the confirmation screen uses hosted links and does not download a blob", (
   assert.match(js, /TRIGGER:-PT2H/);
   assert.equal(js.includes("CALENDAR_DETAILS"), false);
   assert.match(html, /class="cf-badge"/);
+  assert.match(html, /id="bk-done-mark"[^>]*aria-label="Registration confirmed"/);
+  assert.match(html, /id="bk-done-heading"[^>]*>You’re registered!</);
+  assert.match(js, /done: "You’re registered\."/);
+  assert.match(js, /step\.textContent = "You’re registered\."/);
+  assert.match(js, /saved \? "You’re registered!"/);
+  assert.equal(html.includes("You’re booked!"), false);
+  assert.equal(js.includes("You’re booked"), false);
   assert.match(html, /id="bk-done-table"/);
   assert.equal(html.includes('data-action="done"'), false);
   assert.match(html, /id="bk-close"[^>]*aria-label="Close"/);

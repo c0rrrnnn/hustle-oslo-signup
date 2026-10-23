@@ -521,7 +521,7 @@
       checkout: "Checkout.",
       failed: "Checkout.",
       waiting: "Waiting for payment.",
-      done: "You’re booked.",
+      done: "You’re registered.",
     };
     if (view === "failed" || view === "done") return names[view];
     return "Step " + n + " of 4. " + (names[view] || "");
@@ -2553,12 +2553,12 @@
     const step = $("#bk-step-status");
     if (step) {
       if (pendingConfirmation) step.textContent = "We’re confirming your payment.";
-      else if (saved) step.textContent = "You’re booked.";
+      else if (saved) step.textContent = "You’re registered.";
       else step.textContent = "We couldn’t save your booking.";
     }
     if (heading) {
       if (pendingConfirmation) heading.textContent = "We’re confirming your payment";
-      else heading.textContent = saved ? "You’re booked!" : "We couldn’t save your booking";
+      else heading.textContent = saved ? "You’re registered!" : "We couldn’t save your booking";
     }
     if (mark) mark.hidden = !saved;
     if (sub) {
