@@ -71,6 +71,13 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.equal(invalid[0].includes("#ff8a8a"), false);
   assert.match(css, /\.bk-err\s*\{[^}]*color:\s*#ffb4b4/);
   assert.match(html, /id="btn-start"[^>]*aria-label="Register"/);
+  const about = html.slice(html.indexOf('id="landing-about"'), html.indexOf('id="landing-details"'));
+  assert.match(about, /id="btn-start"/);
+  assert.equal(html.split('id="btn-start"').length - 1, 1);
+  assert.equal(/\.landing-actions\s*\{[^}]*position:\s*fixed/.test(css), false);
+  assert.equal(css.includes("--sticky-pad"), false);
+  assert.match(css, /--landing-section-gap:\s*1\.75rem/);
+  assert.match(css, /--landing-section-gap:\s*2\.4rem/);
   assert.equal(html.includes("Register for class"), false);
   assert.equal(html.includes("Book a class"), false);
   assert.match(html, /class="bk-bar-title">Register</);

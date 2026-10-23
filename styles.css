@@ -28,7 +28,9 @@
   --focus: 0 0 0 3px rgba(223, 128, 38, 0.65);
   --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --touch: 44px;
-  --sticky-pad: 5.5rem;
+  /* Space between landing blocks. Desktop is 2x the old 1.2rem section margin. */
+  --landing-section-gap: 1.75rem;
+  --landing-register-gap: 1.25rem;
 }
 
 *,
@@ -200,7 +202,7 @@ textarea:focus-visible,
 main {
   max-width: 480px;
   margin: 0 auto;
-  padding: 0.75rem 1.1rem calc(var(--sticky-pad) + 2rem);
+  padding: 0.75rem 1.1rem 2rem;
 }
 
 /* Steps — subtle progress dots / pills */
@@ -361,15 +363,15 @@ body.is-landing #step-nav {
 
 body.is-landing main {
   padding-top: 0.35rem;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0;
 }
 
 body.is-landing .site-footer {
   border-top: 1px solid #2a2a2e;
-  margin-top: 0.35rem;
+  margin-top: var(--landing-section-gap);
   background: #161618;
   color: #b4b4bc;
-  padding-bottom: calc(1.25rem + var(--sticky-pad) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 body.is-landing .site-footer a {
@@ -434,7 +436,7 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-panel {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0;
 }
 
 .landing-kicker {
@@ -445,7 +447,7 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-title {
-  margin: 0 0 1.2rem;
+  margin: 0;
   font-size: 1.7rem;
   font-weight: 700;
   line-height: 1.15;
@@ -458,7 +460,7 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-section {
-  margin: 0 0 1.2rem;
+  margin: 0;
 }
 
 .landing-label {
@@ -738,23 +740,14 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-actions {
-  position: fixed;
-  z-index: 40;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: min(480px, 100%);
-  display: grid;
-  gap: 0.7rem;
-  margin: 0;
-  padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  background: #121214;
-  border-top: 1px solid #2a2a2e;
+  position: static;
+  width: 100%;
+  display: block;
+  margin: var(--landing-register-gap) 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
   box-sizing: border-box;
-}
-
-body.bk-open .landing-actions {
-  visibility: hidden;
 }
 
 .landing-actions .btn {
@@ -809,6 +802,7 @@ body.bk-open .landing-actions {
 .landing-cols {
   display: flex;
   flex-direction: column;
+  gap: var(--landing-section-gap);
 }
 
 .landing-col {
@@ -825,9 +819,14 @@ body.bk-open .landing-actions {
 #landing-details { order: 8; }
 
 @media (min-width: 960px) {
+  :root {
+    --landing-section-gap: 2.4rem;
+    --landing-register-gap: 1.5rem;
+  }
+
   body.is-landing main {
     max-width: calc(820px + 2.5rem);
-    padding: 1.15rem 1.25rem calc(var(--sticky-pad) + 1.5rem);
+    padding: 1.15rem 1.25rem 0;
   }
 
   .landing-nav {
@@ -850,6 +849,7 @@ body.bk-open .landing-actions {
   .landing-col {
     display: flex;
     flex-direction: column;
+    gap: var(--landing-section-gap);
     min-width: 0;
   }
 
@@ -873,7 +873,7 @@ body.bk-open .landing-actions {
   }
 
   .landing-title {
-    margin: 1rem 0 1.15rem;
+    margin: 0;
     font-size: 1.85rem;
   }
 
@@ -895,29 +895,6 @@ body.bk-open .landing-actions {
 
   .map-frame {
     height: 180px;
-  }
-
-  .landing-actions {
-    left: 0;
-    right: 0;
-    width: 100%;
-    transform: none;
-    display: block;
-    padding: 1.1rem 1.25rem 1.15rem;
-    background: linear-gradient(to top, #121214 62%, rgba(18, 18, 20, 0));
-    border-top: 0;
-  }
-
-  .landing-actions .btn-primary {
-    display: flex;
-    width: min(820px, 100%);
-    margin-inline: auto;
-    height: 50px;
-    min-height: 50px;
-    border-radius: 9999px;
-    font-size: 1rem;
-    background: #f4f4f5;
-    color: #121214;
   }
 
   body.is-landing .foot-inner {
