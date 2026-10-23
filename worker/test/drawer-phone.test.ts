@@ -125,3 +125,16 @@ test("a cancelled payment keeps the cart and the next pay is a new order", () =>
   const done = app.slice(app.indexOf("function showConfirmation"), app.indexOf("async function saveAndConfirm"));
   assert.match(done, /clearSavedCart\(\)/);
 });
+
+test("pagehide saves the Vipps order even after a card form was prepared", () => {
+  const start = app.indexOf("async function startPayment(");
+  const vipps = app.indexOf('if (method === "vipps")', start);
+  const pin = app.indexOf("paymentUi.redirectOrderId = created.orderId;", vipps);
+  const assign = app.indexOf("window.location.assign(created.redirectUrl)", vipps);
+  assert.ok(vipps > start && pin > vipps && pin < assign, "the Vipps order is pinned before the redirect");
+  const hide = app.indexOf('addEventListener("pagehide"');
+  assert.ok(hide > 0);
+  assert.match(app.slice(hide, hide + 500), /savePaymentSession\(paymentUi\.redirectOrderId \|\| paymentUi\.orderId \|\| ""\)/);
+  const reset = app.indexOf("function resetPaymentAttempt(");
+  assert.match(app.slice(reset, reset + 900), /paymentUi\.redirectOrderId = "";/);
+});

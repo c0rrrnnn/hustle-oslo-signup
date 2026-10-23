@@ -1645,6 +1645,7 @@
     }
     unmountStripeElements();
     paymentUi.orderId = "";
+    paymentUi.redirectOrderId = "";
     paymentUi.surface = "";
     paymentUi.complete = false;
     paymentUi.keys = {};
@@ -2310,6 +2311,7 @@
       };
     }
     cancelPrepare();
+    paymentUi.redirectOrderId = "";
     const created = await postCheckout(method);
     if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
     if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
@@ -2319,6 +2321,10 @@
     }
     if (method === "vipps") {
       if (!created.redirectUrl) return { ok: false, message: PAY_FAIL };
+      // A card form prepared in the background can leave paymentUi.orderId on
+      // a different order. Pin the Vipps order so pagehide saves the one that
+      // ?order= comes back with, or a second cancel loses the cart.
+      paymentUi.redirectOrderId = created.orderId;
       savePaymentSession(created.orderId);
       window.location.assign(created.redirectUrl);
       return { ok: true, redirecting: true };
@@ -3238,7 +3244,7 @@
       window.addEventListener("pagehide", function () {
         if (state.submitted || !state.selections.length) return;
         if (state.view === "checkout" || state.view === "failed" || state.view === "waiting" || paymentUi.orderId) {
-          savePaymentSession(paymentUi.orderId || "");
+          savePaymentSession(paymentUi.redirectOrderId || paymentUi.orderId || "");
         }
       });
     }
