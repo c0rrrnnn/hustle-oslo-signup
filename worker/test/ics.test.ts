@@ -12,7 +12,7 @@ import { checkoutBody, jsonResponse, memoryKv, ORDER_ID, recordFetch, testEnv, N
 
 const ORDER_2 = "22222222-2222-4222-8222-222222222222";
 const BEGINNER = "2026-11-02-class-gymsalen";
-const SOCIAL = "2026-11-09-social-kronesalen";
+const SOCIAL = "2026-11-09-class-kronesalen";
 
 function unfold(ics: string): string {
   return ics.replace(/\r\n[ \t]/g, "");
@@ -81,12 +81,11 @@ test("GET /ics serves a paid booking and hides every other status", async () => 
   assert.match(body, /BEGIN:VTIMEZONE/);
   assert.match(body, /TZID:Europe\/Oslo/);
   assert.match(body, /SUMMARY:Hustle Oslo: Beginner class/);
-  assert.match(body, /SUMMARY:Hustle Oslo: Social\r\n/);
-  assert.equal(body.includes("Social Only"), false);
+  assert.match(body, /SUMMARY:Hustle Oslo: Social Only\r\n/);
   assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261102T180000/);
   assert.match(body, /DTEND;TZID=Europe\/Oslo:20261102T190000/);
-  assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261109T180000/);
-  assert.match(body, /DTEND;TZID=Europe\/Oslo:20261109T200000/);
+  assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261109T200000/);
+  assert.match(body, /DTEND;TZID=Europe\/Oslo:20261109T210000/);
   assert.match(body, /LOCATION:Sentralen\\, Øvre Slottsgate 3\\, 0157 Oslo/);
   assert.equal(/LOCATION:[^\r\n]*(Gymsalen|Kronesalen)/.test(body), false);
   assert.match(body, /DESCRIPTION:Room: Gymsalen/);
@@ -113,7 +112,7 @@ test("GET /ics serves a paid booking and hides every other status", async () => 
   assert.equal(one.includes("Hustle Oslo: Social"), false);
 
   const second = unfold(await (await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_ID}&night=1`), env)).text());
-  assert.match(second, /SUMMARY:Hustle Oslo: Social\r\n/);
+  assert.match(second, /SUMMARY:Hustle Oslo: Social Only\r\n/);
   assert.equal(second.includes("Beginner class"), false);
 
   assert.equal((await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_ID}&night=9`), env)).status, 404);
@@ -135,6 +134,23 @@ test("GET /ics serves a paid booking and hides every other status", async () => 
   const reservedFile = await handleRequest(new Request(`https://payments.test/ics?order=${ORDER_2}`), reserved.env);
   assert.equal(reservedFile.status, 200);
   assert.match(unfold(await reservedFile.text()), /Beginner class/);
+});
+
+test("a social-only night stays Social from 18:00 to 20:00", async () => {
+  const socialOnly = "33333333-3333-4333-8333-333333333333";
+  const { kv, env } = await checkout(
+    [{ eventId: "2026-12-14-social-gymsalen", ticketId: "social", priceTier: "standard" }],
+    socialOnly,
+  );
+  await markPaid(kv, socialOnly);
+  const response = await handleRequest(new Request(`https://payments.test/ics?order=${socialOnly}`), env, { now: () => NOW });
+  assert.equal(response.status, 200);
+  const body = unfold(await response.text());
+  assert.match(body, /SUMMARY:Hustle Oslo: Social\r\n/);
+  assert.equal(body.includes("Social Only"), false);
+  assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261214T180000/);
+  assert.match(body, /DTEND;TZID=Europe\/Oslo:20261214T200000/);
+  assert.match(body, /DESCRIPTION:Room: Gymsalen/);
 });
 
 test("the confirmation post carries hosted calendar links and not the customer", async () => {

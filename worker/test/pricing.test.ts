@@ -66,7 +66,7 @@ test("prices a class bundle and a social night from the catalogue", () => {
   if (beginners.ok) assert.equal(beginners.amountNok, 100);
 
   const social = priceOrder(
-    [{ eventId: "2026-11-09-social-kronesalen", ticketId: "social", priceTier: "student" }],
+    [{ eventId: "2026-11-09-class-kronesalen", ticketId: "social", priceTier: "student" }],
     NOW,
   );
   assert.equal(social.ok, true);
@@ -80,7 +80,7 @@ test("sums nights and ignores a client amount", () => {
   const priced = priceOrder(
     [
       { eventId: "2026-11-02-class-gymsalen", ticketId: "beginners", priceTier: "standard" },
-      { eventId: "2026-11-09-social-kronesalen", ticketId: "social", priceTier: "standard" },
+      { eventId: "2026-11-09-class-kronesalen", ticketId: "social", priceTier: "standard" },
     ],
     NOW,
     1,
@@ -93,8 +93,19 @@ test("sums nights and ignores a client amount", () => {
 
 test("rejects unknown nights, wrong tickets, duplicates, and closed nights", () => {
   assert.equal(priceOrder([{ eventId: "nope", ticketId: "social" }], NOW).ok, false);
+  const nov9 = priceOrder(
+    [{ eventId: "2026-11-09-class-kronesalen", ticketId: "beginners", priceTier: "standard" }],
+    NOW,
+  );
+  assert.equal(nov9.ok, true);
+  if (nov9.ok) {
+    assert.equal(nov9.amountNok, 150);
+    assert.equal(nov9.nights[0].sheetTabHint, "2026-11-09 Class Kronesalen");
+    assert.equal(nov9.nights[0].eventStart, "18:00");
+    assert.equal(nov9.nights[0].eventEnd, "21:00");
+  }
   assert.equal(
-    priceOrder([{ eventId: "2026-11-09-social-kronesalen", ticketId: "beginners" }], NOW).ok,
+    priceOrder([{ eventId: "2026-12-14-social-gymsalen", ticketId: "beginners" }], NOW).ok,
     false,
   );
   assert.equal(
