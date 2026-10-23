@@ -1243,10 +1243,9 @@
   }
 
   // The terms line wraps, so the reserved note and the footer are measured
-  // rather than hard-coded. --bk-foot-h is the border box, which already
-  // includes the footer's own safe-area padding. The footer is in the column
-  // under the body, so the body does not pad by that height (that pad was
-  // the empty black gap). revealPayRows scrolls the card clear of the bar.
+  // rather than hard-coded. --bk-foot-h is the bar's border box. The checkout
+  // body pads by that height plus the safe-area inset so the card fields can
+  // scroll fully above the bar, including when the iOS keyboard is open.
   function syncFootPad() {
     const sheet = $("#book-sheet");
     const foot = sheet && $(".bk-foot", sheet);
@@ -1265,21 +1264,27 @@
     revealPayRows();
   }
 
-  // On a short phone the card box can start below the visible body. Bring
-  // that box, or the last payment row, fully above the pay bar.
+  // On a short phone, or with the keyboard open, the card box can sit under
+  // the pay bar. Scroll the focused field, or the last card field, fully above it.
   function revealPayRows() {
     const sheet = $("#book-sheet");
     const body = sheet && $(".bk-body", sheet);
     const foot = sheet && $(".bk-foot", sheet);
     if (!sheet || !body || !foot || !sheet.classList.contains("is-clear-foot") || foot.hidden) return;
+    if (typeof foot.getBoundingClientRect !== "function") return;
+    const active = document.activeElement;
+    const inPay = active && typeof active.closest === "function" && (active.closest("#bk-step-checkout") || active.closest("#bk-step-failed") || active.closest("#bk-card-fields"));
+    const fields = $$("#bk-card-slot.is-open input, #bk-card-slot.is-open .bk-payment-host, #bk-fail-card-slot.is-open input, #bk-fail-card-slot.is-open .bk-payment-host").filter(function (el) {
+      return el.offsetParent !== null;
+    });
     const slots = $$("#bk-card-slot.is-open, #bk-fail-card-slot.is-open").filter(function (slot) {
       return slot.offsetParent !== null;
     });
     const rows = $$("#bk-pay-list .bk-mrow, #bk-fail-pay .bk-mrow").filter(function (row) {
       return row.offsetParent !== null;
     });
-    const target = slots[slots.length - 1] || rows[rows.length - 1];
-    if (!target) return;
+    const target = (inPay && typeof active.getBoundingClientRect === "function" && active) || fields[fields.length - 1] || slots[slots.length - 1] || rows[rows.length - 1];
+    if (!target || typeof target.getBoundingClientRect !== "function") return;
     const extra = target.getBoundingClientRect().bottom - foot.getBoundingClientRect().top;
     if (extra > 1) body.scrollTop += Math.ceil(extra) + 8;
   }
@@ -1304,6 +1309,11 @@
     if (vv && typeof vv.addEventListener === "function") {
       vv.addEventListener("resize", onViewport);
       vv.addEventListener("scroll", onViewport);
+    }
+    if (typeof document.addEventListener === "function") {
+      document.addEventListener("focusin", function () {
+        revealPayRows();
+      });
     }
   }
 
@@ -2068,15 +2078,27 @@
     };
   }
 
+  // The banner already titles the failure. Drop a repeated title so a decline
+  // or a cancelled payment shows "Payment didn’t go through" once.
+  function paymentFailDetail(message) {
+    const fallback = "Your card was declined. You haven’t been charged. Try again or pick another method.";
+    let text = String(message || "").trim();
+    if (!text) return fallback;
+    const title = "Payment didn’t go through";
+    if (text === title || text.indexOf(title + ".") === 0 || text.indexOf(title + " ") === 0) {
+      text = text.slice(title.length).replace(/^[.\s]+/, "").trim();
+      return text || fallback;
+    }
+    return text;
+  }
+
   function showPaymentFailed(message) {
     // go() calls schedulePrepare(), which bails while a payment is in flight.
     // Clear that flag first so a decline remounts the card form.
     state.submitting = false;
     resetPaymentAttempt();
     const el = $("#bk-fail-message");
-    if (el) {
-      el.textContent = message || "Your card was declined. You haven’t been charged. Try again or pick another method.";
-    }
+    if (el) el.textContent = paymentFailDetail(message);
     go("failed");
   }
 

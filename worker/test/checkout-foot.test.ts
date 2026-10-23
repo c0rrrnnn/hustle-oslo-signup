@@ -30,8 +30,9 @@ test("the payment footer is measured and the error card keeps a red fill without
   assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-foot \{[^}]*margin-top:\s*0;/);
   assert.match(css, /\.bk-sheet\.is-clear-foot \{[^}]*overflow:\s*hidden;/);
   assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*overflow:\s*auto;/);
-  assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*padding-bottom:\s*16px;/);
-  assert.equal(/\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*--bk-foot-h/.test(css), false);
+  assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*padding-bottom:\s*calc\(var\(--bk-foot-h, 0px\) \+ env\(safe-area-inset-bottom, 0px\)\);/);
+  assert.match(css, /\.bk-sheet\.is-clear-foot \.bk-body \{[^}]*scroll-padding-bottom:\s*calc\(var\(--bk-foot-h, 0px\) \+ env\(safe-area-inset-bottom, 0px\)\);/);
+  assert.match(js, /document\.addEventListener\("focusin"/);
   assert.match(css, /height:\s*100dvh/);
   assert.match(css, /height:\s*100svh/);
   assert.match(css, /padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);

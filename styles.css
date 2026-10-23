@@ -3578,9 +3578,9 @@ a.bk-cal-link:hover {
 }
 
 /* Checkout and the failed-payment step: the terms line and Pay button stay
-   on screen, without an opaque band. The foot is in the column under the
-   body, so the body does not pad by the foot height (that pad was the empty
-   black gap under the card box). */
+   on screen. The body can scroll every payment option and card field fully
+   above that bar, including the home-indicator inset and the iOS keyboard.
+   --bk-foot-h is the measured bar; the safe-area term is the extra clearance. */
 .bk-sheet.is-clear-foot {
   overflow: hidden;
   display: flex;
@@ -3599,7 +3599,15 @@ a.bk-cal-link:hover {
   min-height: 0;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 16px;
+  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+}
+
+.bk-sheet.is-clear-foot #bk-card-slot,
+.bk-sheet.is-clear-foot #bk-fail-card-slot,
+.bk-sheet.is-clear-foot .bk-mrow,
+.bk-sheet.is-clear-foot .bk-card-fields input {
+  scroll-margin-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
 }
 
 .bk-sheet.is-clear-foot .bk-foot {

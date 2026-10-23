@@ -5,10 +5,14 @@ import test from "node:test";
 test("a decline clears submitting before the failed screen prepares the card form", () => {
   const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   const failed = js.slice(js.indexOf("function showPaymentFailed"), js.indexOf("function buildPersonFields"));
+  const detail = js.slice(js.indexOf("function paymentFailDetail"), js.indexOf("function showPaymentFailed"));
   const submitting = failed.indexOf("state.submitting = false");
   const reset = failed.indexOf("resetPaymentAttempt()");
   const go = failed.indexOf('go("failed")');
   assert.ok(submitting >= 0 && reset > submitting && go > reset);
+  assert.match(failed, /el\.textContent = paymentFailDetail\(message\)/);
+  assert.match(detail, /const title = "Payment didn’t go through"/);
+  assert.match(detail, /text\.slice\(title\.length\)\.replace\(\/\^\[\.\\s\]\+\/, ""\)\.trim\(\)/);
   assert.match(js, /if \(state\.submitting\) return;/);
 });
 
