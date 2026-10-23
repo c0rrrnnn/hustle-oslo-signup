@@ -98,6 +98,18 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.match(logoImg[0], /max-width:\s*none/);
   assert.match(logoImg[0], /object-fit:\s*contain/);
   assert.match(css, /\.landing-nav-contact\s*\{[^}]*height:\s*var\(--landing-nav-control-h\)/);
+  const narrow = css.slice(css.indexOf("@media (max-width: 959px)"), css.indexOf("/* Desktop landing:"));
+  assert.match(narrow, /\.landing-nav\s*\{[^}]*position:\s*sticky;\s*top:\s*0;/);
+  assert.match(narrow, /\.landing-nav\s*\{[^}]*z-index:\s*30;/);
+  assert.match(narrow, /\.landing-nav\s*\{[^}]*background:\s*#121214;/);
+  assert.match(narrow, /padding-top:\s*calc\(0\.7rem \+ env\(safe-area-inset-top, 0px\)\)/);
+  assert.match(narrow, /scroll-margin-top:\s*var\(--landing-nav-sticky-h\)/);
+  assert.match(narrow, /body\.is-landing \.hero-visual\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*768\s*\/\s*576;/);
+  assert.match(narrow, /body\.is-landing \.hero-video\s*\{[^}]*width:\s*100%;\s*height:\s*auto;\s*object-fit:\s*contain;/);
+  assert.match(css, /\.bk-sheet\s*\{[^}]*z-index:\s*80;/);
+  const desk = css.slice(css.indexOf("@media (min-width: 960px)"));
+  assert.match(desk, /body\.is-landing \.hero-visual\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10;/);
+  assert.match(desk, /\.landing-nav\s*\{[^}]*background:\s*rgba\(18,\s*18,\s*20,\s*0\.92\)/);
   assert.equal(html.includes("Register for class"), false);
   assert.equal(html.includes("Book a class"), false);
   assert.match(html, /class="bk-bar-title">Register</);
