@@ -95,6 +95,16 @@ test("the return page offers Vipps again and the card form defaults to card", ()
   const app = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   assert.match(html, /id="bk-step-waiting"/);
   assert.match(html, /id="bk-vipps-again"[^>]*>Open Vipps again/);
+  assert.match(html, /<a class="bk-btn bk-btn-vipps bk-btn-block" id="bk-vipps-again"/);
+  assert.match(css, /\.bk-btn-vipps\s*\{[^}]*background:\s*#ff5b24;\s*color:\s*#fff;/);
+  assert.match(css, /\.bk-btn-vipps:hover:not\(:disabled\):not\(\[aria-busy="true"\]\),\s*\.bk-btn-vipps:active:not\(:disabled\):not\(\[aria-busy="true"\]\)\s*\{[^}]*background:\s*#e55220;/);
+  assert.match(css, /\.bk-btn-vipps:focus-visible\s*\{[^}]*outline:\s*2px solid #fff;\s*outline-offset:\s*2px;/);
+  assert.match(css, /\.bk-btn-vipps:disabled,\s*\.bk-btn-vipps\[aria-busy="true"\]\s*\{[^}]*background:\s*#ff5b24;[^}]*opacity:\s*0\.65;/);
+  assert.match(css, /\.bk-btn-primary\s*\{[^}]*background:\s*#fff;\s*color:\s*#121214;/);
+  const chrome = app.slice(app.indexOf("function updatePayChrome"), app.indexOf("function syncCardBox"));
+  assert.match(chrome, /btn\.classList\.toggle\("bk-btn-vipps", method === "vipps"\)/);
+  assert.match(chrome, /btn\.classList\.toggle\("bk-btn-primary", method !== "vipps"\)/);
+  assert.equal(chrome.includes('classList.remove("bk-btn-vipps")'), false);
   assert.match(html, /data-action="start-over"/);
   const waitingFoot = html.slice(html.indexOf('id="bk-foot-waiting"'), html.indexOf('id="bk-foot-done"'));
   assert.ok(waitingFoot.indexOf('data-action="start-over"') < waitingFoot.indexOf('id="bk-vipps-again"'));

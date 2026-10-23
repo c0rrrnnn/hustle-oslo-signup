@@ -2610,13 +2610,30 @@ a.bk-btn {
 }
 
 .bk-btn-vipps {
-  background: #d2470e;
+  background: #ff5b24;
   color: #fff;
 }
 
-.bk-btn-vipps:hover {
-  background: #b83d0c;
+.bk-btn-vipps:hover:not(:disabled):not([aria-busy="true"]),
+.bk-btn-vipps:active:not(:disabled):not([aria-busy="true"]) {
+  background: #e55220;
   color: #fff;
+}
+
+.bk-btn-vipps:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.bk-btn-vipps:disabled,
+.bk-btn-vipps[aria-busy="true"] {
+  background: #ff5b24;
+  color: #fff;
+  opacity: 0.65;
+}
+
+.bk-btn-vipps:disabled {
+  cursor: not-allowed;
 }
 
 .bk-btn-pay {

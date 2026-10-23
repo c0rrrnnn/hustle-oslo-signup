@@ -1152,17 +1152,14 @@
       if (el) el.textContent = amt + " kr";
     });
     const payBtn = $("#bk-pay");
-    if (payBtn) {
-      payBtn.classList.remove("bk-btn-vipps");
-      payBtn.classList.add("bk-btn-primary");
-    }
+    const retryBtn = $("#bk-fail-retry");
+    [payBtn, retryBtn].forEach(function (btn) {
+      if (!btn) return;
+      btn.classList.toggle("bk-btn-vipps", method === "vipps");
+      btn.classList.toggle("bk-btn-primary", method !== "vipps");
+    });
     const retry = $("#bk-fail-retry-text");
     if (retry && !state.submitting) retry.textContent = "Pay " + amt + " kr";
-    const retryBtn = $("#bk-fail-retry");
-    if (retryBtn) {
-      retryBtn.classList.toggle("bk-btn-vipps", method === "vipps");
-      retryBtn.classList.toggle("bk-btn-primary", method !== "vipps");
-    }
     const wallet = paymentsLive() && (method === "apple" || method === "google");
     if (payBtn) payBtn.hidden = wallet && !state.submitting;
     if (retryBtn) retryBtn.hidden = wallet && !state.submitting;
