@@ -29,8 +29,10 @@
   --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --touch: 44px;
   /* Space between landing blocks. Hero to title is tighter. */
-  --landing-section-gap: 24px;
-  --landing-hero-title-gap: 4px;
+  --landing-section-gap: 20px;
+  --landing-hero-title-gap: 12px;
+  /* Landing logo and Contact us share one height. */
+  --landing-nav-control-h: 44px;
 }
 
 *,
@@ -406,8 +408,10 @@ body.is-landing .site-footer a:hover {
 
 .landing-nav-logo img {
   display: block;
-  height: 4.5rem;
+  height: var(--landing-nav-control-h);
   width: auto;
+  max-width: none;
+  object-fit: contain;
 }
 
 .landing-nav-contact {
@@ -415,7 +419,8 @@ body.is-landing .site-footer a:hover {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-height: 44px;
+  height: var(--landing-nav-control-h);
+  min-height: var(--landing-nav-control-h);
   padding: 0.45rem 1.05rem;
   border-radius: var(--radius-pill);
   background: #2a2a2e;
@@ -812,7 +817,7 @@ body.is-landing .site-footer a:hover {
 
 @media (min-width: 960px) {
   :root {
-    --landing-section-gap: 34px;
+    --landing-section-gap: 24px;
     --landing-hero-title-gap: 16px;
   }
 
