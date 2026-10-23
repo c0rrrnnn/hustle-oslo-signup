@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
   <meta name="description" content="Sign up for Hustle Oslo dance classes and social nights at Sentralen, Oslo." />
   <meta name="theme-color" content="#120a28" />
   <link rel="canonical" href="https://hustleoslo.com/" />
@@ -313,13 +313,13 @@
 
             <div class="bk-field">
               <label class="bk-label" for="bk-name">Name <span class="bk-req" aria-hidden="true">*</span><span class="visually-hidden"> (required)</span></label>
-              <input class="bk-input" type="text" id="bk-name" name="fullName" autocomplete="name" maxlength="120" placeholder="Your name" aria-required="true" aria-describedby="bk-err-name" />
+              <input class="bk-input" type="text" id="bk-name" name="fullName" autocomplete="name" maxlength="120" placeholder="Your name" enterkeyhint="next" aria-required="true" aria-describedby="bk-err-name" />
               <p class="bk-err" id="bk-err-name" hidden>Please enter your full name.</p>
             </div>
 
             <div class="bk-field">
               <label class="bk-label" for="bk-email">Email <span class="bk-req" aria-hidden="true">*</span><span class="visually-hidden"> (required)</span></label>
-              <input class="bk-input" type="email" id="bk-email" name="email" autocomplete="email" maxlength="200" placeholder="you@example.com" inputmode="email" aria-required="true" aria-describedby="bk-err-email" />
+              <input class="bk-input" type="email" id="bk-email" name="email" autocomplete="email" maxlength="200" placeholder="you@example.com" inputmode="email" enterkeyhint="next" aria-required="true" aria-describedby="bk-err-email" />
               <p class="bk-err" id="bk-err-email" hidden>Enter a full email address, like name@example.com.</p>
             </div>
 
@@ -334,14 +334,14 @@
               <div class="bk-popover" id="bk-phone-help" hidden>
                 <p>We’ll add you to the Hustle WhatsApp community channel where we send updates about upcoming classes, hustle outings or class cancellations. Completely optional.</p>
               </div>
-              <input class="bk-input" type="tel" id="bk-phone" name="phone" autocomplete="tel" maxlength="40" placeholder="+47 4xx xx xxx" inputmode="tel" aria-describedby="bk-phone-help bk-err-phone" />
+              <input class="bk-input" type="tel" id="bk-phone" name="phone" autocomplete="tel" maxlength="40" placeholder="+47 4xx xx xxx" inputmode="tel" enterkeyhint="next" aria-describedby="bk-phone-help bk-err-phone" />
               <p class="bk-err" id="bk-err-phone" hidden>Please enter a valid phone number, or leave it blank.</p>
             </div>
 
             <div id="bk-first-timer">
               <div class="bk-field">
                 <label class="bk-label" for="bk-experience">What’s your experience?</label>
-                <select class="bk-select is-empty" id="bk-experience" name="experience">
+                <select class="bk-select is-empty" id="bk-experience" name="experience" enterkeyhint="next">
                   <option value="">Please choose</option>
                   <option value="new">New to dancing</option>
                   <option value="some">Some dance experience (solo or partner)</option>
@@ -353,7 +353,7 @@
 
               <div class="bk-field">
                 <label class="bk-label" for="bk-referral">How did you find out about us?</label>
-                <select class="bk-select is-empty" id="bk-referral" name="referral">
+                <select class="bk-select is-empty" id="bk-referral" name="referral" enterkeyhint="next">
                   <option value="">Please choose</option>
                   <option value="event">At an event</option>
                   <option value="poster">Poster around town</option>
@@ -368,7 +368,7 @@
 
               <div class="bk-field" id="bk-referral-other-wrap" hidden>
                 <label class="bk-label" for="bk-referral-other">Tell us where</label>
-                <input class="bk-input" type="text" id="bk-referral-other" name="referralOther" maxlength="200" placeholder="e.g. a dance festival" aria-describedby="bk-err-referral-other" />
+                <input class="bk-input" type="text" id="bk-referral-other" name="referralOther" maxlength="200" placeholder="e.g. a dance festival" enterkeyhint="go" aria-describedby="bk-err-referral-other" />
                 <p class="bk-err" id="bk-err-referral-other" hidden>Please tell us where you found us.</p>
               </div>
             </div>
@@ -455,22 +455,22 @@
         <div class="bk-card-grid" role="group" aria-describedby="bk-card-note">
           <div class="bk-field bk-field-wide">
             <label class="bk-label-plain" for="bk-card-number">Card number</label>
-            <input class="bk-input" id="bk-card-number" type="text" inputmode="numeric" autocomplete="off" placeholder="1234 5678 9012 3456" maxlength="23" spellcheck="false" aria-describedby="bk-err-card-number" />
+            <input class="bk-input" id="bk-card-number" type="text" inputmode="numeric" autocomplete="off" placeholder="1234 5678 9012 3456" maxlength="23" spellcheck="false" enterkeyhint="next" aria-describedby="bk-err-card-number" />
             <p class="bk-err" id="bk-err-card-number" hidden>Your card number is incomplete.</p>
           </div>
           <div class="bk-field">
             <label class="bk-label-plain" for="bk-card-expiry">Expiry</label>
-            <input class="bk-input" id="bk-card-expiry" type="text" inputmode="numeric" autocomplete="off" placeholder="MM / YY" maxlength="7" spellcheck="false" aria-describedby="bk-err-card-expiry" />
+            <input class="bk-input" id="bk-card-expiry" type="text" inputmode="numeric" autocomplete="off" placeholder="MM / YY" maxlength="7" spellcheck="false" enterkeyhint="next" aria-describedby="bk-err-card-expiry" />
             <p class="bk-err" id="bk-err-card-expiry" hidden>Enter the expiry date as MM / YY.</p>
           </div>
           <div class="bk-field">
             <label class="bk-label-plain" for="bk-card-cvc">CVC</label>
-            <input class="bk-input" id="bk-card-cvc" type="text" inputmode="numeric" autocomplete="off" placeholder="123" maxlength="4" spellcheck="false" aria-describedby="bk-err-card-cvc" />
+            <input class="bk-input" id="bk-card-cvc" type="text" inputmode="numeric" autocomplete="off" placeholder="123" maxlength="4" spellcheck="false" enterkeyhint="next" aria-describedby="bk-err-card-cvc" />
             <p class="bk-err" id="bk-err-card-cvc" hidden>Enter the CVC.</p>
           </div>
           <div class="bk-field bk-field-wide">
             <label class="bk-label-plain" for="bk-card-name">Name on card</label>
-            <input class="bk-input" id="bk-card-name" type="text" autocomplete="off" placeholder="As shown on card" maxlength="80" aria-describedby="bk-err-card-name" />
+            <input class="bk-input" id="bk-card-name" type="text" autocomplete="off" placeholder="As shown on card" maxlength="80" enterkeyhint="done" aria-describedby="bk-err-card-name" />
             <p class="bk-err" id="bk-err-card-name" hidden>Enter the name on the card.</p>
           </div>
         </div>

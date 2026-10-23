@@ -90,6 +90,8 @@
   const PAY_FAIL = "Payment didn’t go through. You haven’t been charged. Try again or pick another method.";
   const SERVER_FAIL = "Something went wrong on our side. You haven’t been charged. Try again in a moment.";
   const PAYMENT_SESSION_KEY = "hustleOsloPayment";
+  const sheetBox = { width: 0, height: 0 };
+
   const paymentUi = {
     idempotencyKey: "",
     fingerprint: "",
@@ -570,6 +572,7 @@
     if (body) body.scrollTop = 0;
     bookingScroller(sheet).scrollTo({ top: 0, behavior: prefersReducedMotion() || opts.instant ? "auto" : "smooth" });
     revealPayRows();
+    syncEnterKeyHints();
     if (!opts.skipFocus) {
       const heading = document.getElementById(headingId);
       if (heading) heading.focus({ preventScroll: true, focusVisible: false });
@@ -579,11 +582,22 @@
   function openSheet() {
     const sheet = $("#book-sheet");
     if (!sheet || state.sheetOpen) return;
+    if (!state.submitted && !state.selections.length) {
+      let orderId = "";
+      try {
+        orderId = new URLSearchParams(window.location.search).get("order") || "";
+      } catch (err) {
+        orderId = "";
+      }
+      restorePendingCart(orderId);
+    }
     state.sheetOpen = true;
     state.opener = document.activeElement;
+    lockBackgroundScroll();
     sheet.hidden = false;
     document.body.classList.add("bk-open");
     setInert(true);
+    captureSheetBox();
     go(state.submitted ? "student" : state.view || "student", { instant: true });
   }
 
@@ -596,6 +610,8 @@
     if (sheet) sheet.hidden = true;
     document.body.classList.remove("bk-open");
     state.sheetOpen = false;
+    releaseSheetBox();
+    unlockBackgroundScroll();
     setInert(false);
     if (submitted) resetBooking();
     const backTo = state.opener && document.contains(state.opener) ? state.opener : $("#btn-start");
@@ -631,6 +647,7 @@
     ["student", "name", "email", "phone", "referral-other", "pay", "card-number", "card-expiry", "card-cvc", "card-name"].forEach((key) => setErr(key, false));
     announce("");
     clearCardFields();
+    clearSavedCart();
     resetPaymentAttempt();
     const help = $("#bk-phone-help");
     const helpBtn = $("#bk-phone-help-btn");
@@ -890,7 +907,11 @@
     renderCalendar();
     renderOptions();
     const btn = $('#bk-calendar [data-date="' + dateKey + '"]');
-    if (btn) btn.focus();
+    if (!btn || typeof btn.focus !== "function") return;
+    const sheet = $("#book-sheet");
+    const fromTouch = sheet && sheet.classList.contains("bk-touch");
+    if (fromTouch) btn.focus({ preventScroll: true, focusVisible: false });
+    else btn.focus({ preventScroll: true });
   }
 
   function setTicket(eventId, ticketId) {
@@ -1005,6 +1026,108 @@
       if (ok) announce("");
     }
     return ok;
+  }
+
+  // Required fields block Next. An optional field that is still empty is skipped.
+  // An optional field with a bad value (a partial phone number) still needs attention.
+  function formFieldNeedsAttention(field) {
+    if (!field) return false;
+    if (!field.required && field.empty) return false;
+    return field.valid !== true;
+  }
+
+  function nextFormFieldIndex(fields, fromIndex) {
+    const list = Array.isArray(fields) ? fields : [];
+    const start = typeof fromIndex === "number" ? fromIndex : -1;
+    for (let step = 1; step < list.length; step += 1) {
+      const i = (start + step + list.length) % list.length;
+      if (formFieldNeedsAttention(list[i])) return i;
+    }
+    if (start >= 0 && start < list.length && formFieldNeedsAttention(list[start])) return start;
+    return -1;
+  }
+
+  function enterKeyHintFor(fields, index, step) {
+    const list = Array.isArray(fields) ? fields : [];
+    const others = list.some(function (field, i) { return i !== index && formFieldNeedsAttention(field); });
+    if (others) return "next";
+    return step === "checkout" || step === "failed" ? "done" : "go";
+  }
+
+  function describeEntry(el) {
+    const id = el && el.id;
+    const value = String((el && el.value) || "").trim();
+    const empty = value.length === 0;
+    if (id === "bk-name") return { required: true, empty: empty, valid: value.length >= 2 };
+    if (id === "bk-email") return { required: true, empty: empty, valid: isValidEmail(value) };
+    if (id === "bk-phone") return { required: false, empty: empty, valid: isValidPhone(value) };
+    if (id === "bk-referral-other") return { required: true, empty: empty, valid: value.length >= 2 };
+    if (id === "bk-card-number") {
+      const digits = value.replace(/\D/g, "");
+      return { required: true, empty: digits.length === 0, valid: digits.length >= 13 && digits.length <= 19 };
+    }
+    if (id === "bk-card-expiry") return { required: true, empty: empty, valid: validExpiry(value) };
+    if (id === "bk-card-cvc") {
+      const digits = value.replace(/\D/g, "");
+      return { required: true, empty: digits.length === 0, valid: digits.length >= 3 && digits.length <= 4 };
+    }
+    if (id === "bk-card-name") return { required: true, empty: empty, valid: value.length >= 2 };
+    return { required: false, empty: empty, valid: true };
+  }
+
+  function entryFields() {
+    let root = null;
+    if (state.view === "details") root = $("#bk-details-form");
+    else if (state.view === "failed") root = $("#bk-step-failed");
+    else if (state.view === "checkout") root = $("#bk-step-checkout");
+    if (!root) return [];
+    return $$("input, select, textarea", root).filter(function (el) {
+      if (!el || el.tagName === "TEXTAREA" || el.disabled) return false;
+      const type = String(el.type || "").toLowerCase();
+      if (type === "checkbox" || type === "radio" || type === "hidden" || type === "button" || type === "submit" || type === "file") return false;
+      return !(el.closest && el.closest("[hidden]"));
+    });
+  }
+
+  function syncEnterKeyHints() {
+    const fields = entryFields();
+    const described = fields.map(describeEntry);
+    fields.forEach(function (el, index) {
+      if (el && typeof el.setAttribute === "function") el.setAttribute("enterkeyhint", enterKeyHintFor(described, index, state.view));
+    });
+  }
+
+  function onFormReturn(e) {
+    const t = e.target;
+    if (!t || (t.tagName !== "INPUT" && t.tagName !== "SELECT") || t.tagName === "TEXTAREA") return false;
+    const type = String(t.type || "").toLowerCase();
+    if (type === "checkbox" || type === "radio" || type === "button" || type === "submit" || type === "file" || type === "hidden") return false;
+    if (state.view !== "details" && state.view !== "checkout" && state.view !== "failed") return false;
+    const fields = entryFields();
+    const index = fields.indexOf(t);
+    if (index < 0) return false;
+    e.preventDefault();
+    const next = nextFormFieldIndex(fields.map(describeEntry), index);
+    if (next >= 0 && fields[next] && fields[next] !== t) {
+      if (typeof fields[next].focus === "function") fields[next].focus({ preventScroll: true });
+      scrollFieldIntoView(fields[next]);
+      syncEnterKeyHints();
+      return true;
+    }
+    if (next >= 0) {
+      scrollFieldIntoView(t);
+      if (state.view === "details") validateDetails(true);
+      else if (!paymentsLive()) validateCard(true);
+      syncEnterKeyHints();
+      return true;
+    }
+    syncEnterKeyHints();
+    if (state.view === "details") {
+      onDetailsSubmit(e);
+      return true;
+    }
+    onPay();
+    return true;
   }
 
   function methodIcon(id) {
@@ -1223,22 +1346,78 @@
     }
   }
 
-  // Pin the sheet to the visible viewport so a collapsing Safari or Chrome
-  // toolbar cannot cover the fine print. dvh/svh remain the CSS fallback.
-  function syncVisualViewport() {
+  function viewportScale() {
+    const vv = window.visualViewport;
+    const scale = vv && typeof vv.scale === "number" ? vv.scale : 1;
+    return scale || 1;
+  }
+
+  // One height, taken when the sheet opens (scale === 1). Pinch-zoom and the
+  // keyboard must not resize or move the sheet, so the Next button stays at
+  // the bottom of the layout viewport instead of riding up.
+  function captureSheetBox() {
     const sheet = $("#book-sheet");
     if (!sheet || !sheet.style || typeof sheet.style.setProperty !== "function") return;
+    if (Math.abs(viewportScale() - 1) > 0.01) return;
     const vv = window.visualViewport;
-    if (!vv || !vv.height) return;
-    const height = Math.round(vv.height) + "px";
-    if (sheet.style.height !== height) sheet.style.setProperty("height", height);
-    if (sheet.style.maxHeight !== height) sheet.style.setProperty("max-height", height);
-    const top = Math.round(vv.offsetTop || 0);
-    const topValue = top ? top + "px" : "";
-    if ((sheet.style.top || "") !== topValue) {
-      if (topValue) sheet.style.setProperty("top", topValue);
-      else if (typeof sheet.style.removeProperty === "function") sheet.style.removeProperty("top");
+    const height = Math.round((vv && vv.height) || 0);
+    const width = Math.round((vv && vv.width) || window.innerWidth || 0);
+    if (!height || !width) return;
+    sheetBox.width = width;
+    sheetBox.height = height;
+    sheet.style.setProperty("height", height + "px");
+    sheet.style.setProperty("max-height", height + "px");
+  }
+
+  function releaseSheetBox() {
+    sheetBox.width = 0;
+    sheetBox.height = 0;
+    const sheet = $("#book-sheet");
+    if (!sheet || !sheet.style || typeof sheet.style.removeProperty !== "function") return;
+    sheet.style.removeProperty("height");
+    sheet.style.removeProperty("max-height");
+    sheet.style.removeProperty("top");
+  }
+
+  function onSheetViewport() {
+    if (!state.sheetOpen) return;
+    if (Math.abs(viewportScale() - 1) > 0.01) return;
+    const vv = window.visualViewport;
+    const width = Math.round((vv && vv.width) || window.innerWidth || 0);
+    if (width && sheetBox.width && width !== sheetBox.width) captureSheetBox();
+    const active = document.activeElement;
+    const tag = active && active.tagName;
+    if (active && active.closest && active.closest("#book-sheet") && (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA")) {
+      scrollFieldIntoView(active);
     }
+  }
+
+  function lockBackgroundScroll() {
+    const body = document.body;
+    if (!body || !body.style || (body.dataset && body.dataset.bkScrollLock === "1")) return;
+    const y = window.scrollY || (document.documentElement && document.documentElement.scrollTop) || 0;
+    if (body.dataset) {
+      body.dataset.bkScrollLock = "1";
+      body.dataset.bkScrollY = String(y);
+    }
+    body.style.position = "fixed";
+    body.style.top = (-y) + "px";
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+  }
+
+  function unlockBackgroundScroll() {
+    const body = document.body;
+    if (!body || !body.style || !body.dataset || body.dataset.bkScrollLock !== "1") return;
+    const y = Number(body.dataset.bkScrollY || "0") || 0;
+    body.dataset.bkScrollLock = "";
+    body.style.position = "";
+    body.style.top = "";
+    body.style.left = "";
+    body.style.right = "";
+    body.style.width = "";
+    if (typeof window.scrollTo === "function") window.scrollTo(0, y);
   }
 
   // The terms line wraps, so the reserved note and the footer are measured
@@ -1288,12 +1467,32 @@
     if (extra > 1) body.scrollTop += Math.ceil(extra) + 8;
   }
 
+  function visibleLimit() {
+    const vv = window.visualViewport;
+    let limit = window.innerHeight || 0;
+    if (vv && vv.height) limit = Math.round((vv.offsetTop || 0) + vv.height);
+    const foot = $(".bk-foot");
+    if (foot && typeof foot.getBoundingClientRect === "function" && !foot.hidden) {
+      const top = foot.getBoundingClientRect().top;
+      if (top > 0) limit = Math.min(limit, top);
+    }
+    return limit - 12;
+  }
+
+  function scrollFieldIntoView(el) {
+    const sheet = $("#book-sheet");
+    const body = sheet && $(".bk-body", sheet);
+    if (!body || !el || typeof el.getBoundingClientRect !== "function") return;
+    const rect = el.getBoundingClientRect();
+    const limit = visibleLimit();
+    const topBar = sheet && $(".bk-top", sheet);
+    const minTop = topBar && typeof topBar.getBoundingClientRect === "function" ? topBar.getBoundingClientRect().bottom + 8 : 8;
+    if (rect.bottom > limit) body.scrollTop += Math.ceil(rect.bottom - limit);
+    else if (rect.top < minTop) body.scrollTop -= Math.ceil(minTop - rect.top);
+  }
+
   function watchFootPad() {
-    const onViewport = function () {
-      syncVisualViewport();
-      syncFootPad();
-    };
-    onViewport();
+    syncFootPad();
     const foot = $(".bk-foot");
     if (foot && typeof ResizeObserver === "function") {
       const observer = new ResizeObserver(function () {
@@ -1302,15 +1501,23 @@
       observer.observe(foot);
     }
     if (typeof window.addEventListener === "function") {
-      window.addEventListener("resize", onViewport);
+      window.addEventListener("resize", function () {
+        onSheetViewport();
+        syncFootPad();
+      });
     }
     const vv = window.visualViewport;
     if (vv && typeof vv.addEventListener === "function") {
-      vv.addEventListener("resize", onViewport);
-      vv.addEventListener("scroll", onViewport);
+      vv.addEventListener("resize", onSheetViewport);
     }
     if (typeof document.addEventListener === "function") {
-      document.addEventListener("focusin", function () {
+      document.addEventListener("focusin", function (e) {
+        const t = e.target;
+        const tag = t && t.tagName;
+        if (t && t.closest && t.closest("#book-sheet") && (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA")) {
+          scrollFieldIntoView(t);
+          return;
+        }
         revealPayRows();
       });
     }
@@ -1427,6 +1634,8 @@
   }
 
   function resetPaymentAttempt() {
+    // Drop the idempotency key so Pay again creates a new order. The cart
+    // stays in sessionStorage until the payment succeeds.
     paymentUi.prepToken += 1;
     paymentUi.idempotencyKey = "";
     paymentUi.fingerprint = "";
@@ -1443,11 +1652,6 @@
     paymentUi.idempotencyKey = "";
     paymentUi.fingerprint = "";
     setPaymentNote("");
-    try {
-      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
-    } catch (err) {
-      /* private mode */
-    }
   }
 
   function unmountStripeElements() {
@@ -1842,9 +2046,72 @@
     return { ok: false, message: failureMessage(screen.kind === "failed" ? screen.reason : "pending") };
   }
 
+  function nightSnapshot(sel) {
+    const ev = (sel && sel.event) || {};
+    const ticket = (sel && sel.ticket) || {};
+    return {
+      eventId: ev.id,
+      ticketId: ticket.id,
+      priceTier: sel.priceTier || "standard",
+      event: {
+        id: ev.id,
+        date: ev.date,
+        weekday: ev.weekday,
+        type: ev.type,
+        location: ev.location,
+        venue: ev.venue,
+        start: ev.start,
+        end: ev.end,
+        label: ev.label,
+      },
+      ticket: {
+        id: ticket.id,
+        name: ticket.name,
+        prices: ticket.prices || {},
+      },
+    };
+  }
+
+  function cartSelections(snapshot, events, tickets) {
+    const nights = snapshot && Array.isArray(snapshot.nights) ? snapshot.nights : [];
+    const catalogEvents = events || window.HUSTLE_EVENTS || [];
+    const catalogTickets = tickets || window.HUSTLE_TICKETS || {};
+    return nights.map(function (night) {
+      if (!night) return null;
+      const ev = catalogEvents.find(function (item) { return item.id === night.eventId; }) || night.event || null;
+      if (!ev || !ev.id) return null;
+      const list = catalogTickets[ev.type] || [];
+      const ticket = list.find(function (item) { return item.id === night.ticketId; }) || night.ticket || null;
+      if (!ticket || !ticket.id) return null;
+      return { event: ev, ticket: ticket, priceTier: night.priceTier === "student" ? "student" : "standard" };
+    }).filter(Boolean);
+  }
+
+  function readSavedCart() {
+    try {
+      return JSON.parse(sessionStorage.getItem(PAYMENT_SESSION_KEY) || "null");
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearSavedCart() {
+    try {
+      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
+    } catch (err) {
+      /* private mode */
+    }
+  }
+
   function savePaymentSession(orderId) {
+    const repeat = $("#bk-repeat");
+    const experience = $("#bk-experience");
+    const referral = $("#bk-referral");
+    const other = $("#bk-referral-other");
+    const prior = readSavedCart();
     const snapshot = {
-      orderId: orderId,
+      orderId: orderId || paymentUi.orderId || (prior && prior.orderId) || "",
+      pendingPayment: true,
       priceTier: state.priceTier,
       paymentMethod: state.paymentMethod,
       termsAcceptedAt: state.termsAcceptedAt,
@@ -1853,17 +2120,50 @@
         email: $("#bk-email") ? $("#bk-email").value.trim() : "",
         phone: $("#bk-phone") ? $("#bk-phone").value.trim() : "",
       },
-      nights: state.selections.map((sel) => ({
-        eventId: sel.event.id,
-        ticketId: sel.ticket.id,
-        priceTier: sel.priceTier,
-      })),
+      repeat: !!(repeat && repeat.checked),
+      experience: experience ? experience.value : "",
+      referral: referral ? referral.value : "",
+      referralOther: other ? other.value.trim() : "",
+      nights: state.selections.map(nightSnapshot),
     };
     try {
       sessionStorage.setItem(PAYMENT_SESSION_KEY, JSON.stringify(snapshot));
     } catch (err) {
       /* private mode */
     }
+  }
+
+  function applySnapshot(snapshot) {
+    if (!snapshot) return false;
+    state.priceTier = snapshot.priceTier === "student" ? "student" : "standard";
+    state.paymentMethod = METHOD_LABEL[snapshot.paymentMethod] ? snapshot.paymentMethod : "card";
+    state.termsAcceptedAt = snapshot.termsAcceptedAt || "";
+    state.selections = cartSelections(snapshot);
+    setTier(state.priceTier);
+    const name = $("#bk-name");
+    const email = $("#bk-email");
+    const phone = $("#bk-phone");
+    if (name) name.value = (snapshot.customer && snapshot.customer.fullName) || "";
+    if (email) email.value = (snapshot.customer && snapshot.customer.email) || "";
+    if (phone) phone.value = (snapshot.customer && snapshot.customer.phone) || "";
+    const repeat = $("#bk-repeat");
+    if (repeat) repeat.checked = !!snapshot.repeat;
+    const experience = $("#bk-experience");
+    const referral = $("#bk-referral");
+    const other = $("#bk-referral-other");
+    if (experience && snapshot.experience) experience.value = snapshot.experience;
+    if (referral && snapshot.referral) referral.value = snapshot.referral;
+    if (other) other.value = snapshot.referralOther || "";
+    syncFirstTimer();
+    syncSelectPlaceholder(experience);
+    syncSelectPlaceholder(referral);
+    return state.selections.length > 0;
+  }
+
+  function cartMatchesOrder(snapshot, orderId) {
+    if (!snapshot || snapshot.pendingPayment !== true || !(snapshot.nights && snapshot.nights.length)) return false;
+    if (!orderId || !snapshot.orderId) return true;
+    return snapshot.orderId === orderId;
   }
 
   function selectionFromIds(eventId, ticketId, priceTier) {
@@ -1875,30 +2175,19 @@
     return { event: ev, ticket: ticket, priceTier: priceTier || "standard" };
   }
 
+  function restorePendingCart(orderId) {
+    const snapshot = readSavedCart();
+    if (!cartMatchesOrder(snapshot, orderId)) {
+      if (orderId) state.view = "checkout";
+      return false;
+    }
+    const restored = applySnapshot(snapshot);
+    state.view = restored ? (state.view === "failed" ? "failed" : "checkout") : "student";
+    return restored;
+  }
+
   function restorePaymentSession(orderId) {
-    let snapshot = null;
-    try {
-      snapshot = JSON.parse(sessionStorage.getItem(PAYMENT_SESSION_KEY) || "null");
-    } catch (err) {
-      snapshot = null;
-    }
-    if (!snapshot || snapshot.orderId !== orderId) {
-      state.view = "checkout";
-      return;
-    }
-    state.priceTier = snapshot.priceTier === "student" ? "student" : "standard";
-    state.paymentMethod = METHOD_LABEL[snapshot.paymentMethod] ? snapshot.paymentMethod : "card";
-    state.termsAcceptedAt = snapshot.termsAcceptedAt || "";
-    state.selections = (snapshot.nights || [])
-      .map((night) => selectionFromIds(night.eventId, night.ticketId, night.priceTier))
-      .filter(Boolean);
-    const name = $("#bk-name");
-    const email = $("#bk-email");
-    const phone = $("#bk-phone");
-    if (name) name.value = (snapshot.customer && snapshot.customer.fullName) || "";
-    if (email) email.value = (snapshot.customer && snapshot.customer.email) || "";
-    if (phone) phone.value = (snapshot.customer && snapshot.customer.phone) || "";
-    state.view = state.selections.length ? "checkout" : "student";
+    return restorePendingCart(orderId);
   }
 
   function stripPaymentQuery() {
@@ -2108,7 +2397,11 @@
   function showPaymentFailed(message) {
     // go() calls schedulePrepare(), which bails while a payment is in flight.
     // Clear that flag first so a decline remounts the card form.
+    // Keep the nights, tickets, and details. A retry uses a new idempotency key.
     state.submitting = false;
+    const orderId = paymentUi.orderId || "";
+    if (state.selections.length) savePaymentSession(orderId);
+    else restorePendingCart(orderId);
     resetPaymentAttempt();
     const el = $("#bk-fail-message");
     if (el) el.textContent = paymentFailDetail(message);
@@ -2672,6 +2965,7 @@
   function showConfirmation(result) {
     state.submitResult = result;
     state.submitted = true;
+    clearSavedCart();
     clearCardFields();
     go("done");
   }
@@ -2784,6 +3078,8 @@
   function onKeydown(e) {
     const sheet = $("#book-sheet");
     if (!sheet || sheet.hidden) return;
+    if (e.key === "Tab") sheet.classList.remove("bk-touch");
+    if (e.key === "Enter" && onFormReturn(e)) return;
     if (onStudentChoiceKey(e)) return;
     if (e.key === "Escape") {
       if ($("#cf-gcal-list")) {
@@ -2891,6 +3187,7 @@
       syncOther();
     }
     if (t.id === "bk-experience") syncSelectPlaceholder(t);
+    syncEnterKeyHints();
   }
 
   function onSheetInput(e) {
@@ -2899,6 +3196,7 @@
       validateDetails(false);
       schedulePrepare();
     }
+    syncEnterKeyHints();
     if (t.id === "bk-card-number") formatCardNumber(t);
     if (t.id === "bk-card-expiry") formatExpiry(t);
   }
@@ -2925,6 +3223,9 @@
     if (start) start.addEventListener("click", openSheet);
     const sheet = $("#book-sheet");
     if (sheet) {
+      sheet.addEventListener("pointerdown", function () {
+        sheet.classList.add("bk-touch");
+      });
       sheet.addEventListener("pointerdown", swallowStudentFollowup);
       sheet.addEventListener("click", onSheetClick);
       sheet.addEventListener("change", onSheetChange);
@@ -2933,6 +3234,14 @@
     const form = $("#bk-details-form");
     if (form) form.addEventListener("submit", onDetailsSubmit);
     document.addEventListener("keydown", onKeydown);
+    if (typeof window.addEventListener === "function") {
+      window.addEventListener("pagehide", function () {
+        if (state.submitted || !state.selections.length) return;
+        if (state.view === "checkout" || state.view === "failed" || state.view === "waiting" || paymentUi.orderId) {
+          savePaymentSession(paymentUi.orderId || "");
+        }
+      });
+    }
     watchFootPad();
   }
 
@@ -2944,6 +3253,11 @@
     resultFromOrder: resultFromOrder,
     publishableKeyOk: publishableKeyOk,
     config: CONFIG,
+    formFieldNeedsAttention: formFieldNeedsAttention,
+    nextFormFieldIndex: nextFormFieldIndex,
+    enterKeyHintFor: enterKeyHintFor,
+    cartSelections: cartSelections,
+    cartMatchesOrder: cartMatchesOrder,
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

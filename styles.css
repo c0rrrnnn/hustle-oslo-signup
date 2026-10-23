@@ -2390,24 +2390,29 @@ body.is-landing .site-footer a:hover {
 /* ─── Booking sheet (Claire’s approved flow) ─────────────────────────────── */
 body.bk-open {
   overflow: hidden;
+  width: 100%;
+  overscroll-behavior: none;
 }
 
 .bk-sheet {
   position: fixed;
   inset: 0;
   z-index: 80;
-  /* 100vh sits under the mobile browser toolbar. dvh tracks the visible
-     viewport; svh stays the small viewport so the toolbar cannot cover Pay. */
+  /* Stable viewport units. JS captures this height once when the sheet opens
+     and does not follow pinch-zoom or the keyboard. svh stays the small
+     viewport so the toolbar cannot cover the buttons. */
   height: 100vh;
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   background: #121214;
   color: #f4f4f5;
   font-family: var(--font);
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @supports (height: 100svh) {
@@ -2515,6 +2520,7 @@ body.bk-open {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: 20px 16px 16px;
 }
@@ -2561,9 +2567,10 @@ body.bk-open {
   margin-top: 0;
   z-index: 4;
   background: #121214;
-  /* The note slot sits above this padding. Under the buttons: 12px, or the
-     home-indicator inset when that is taller. Top padding stays 12px.
-     The desktop drawer restores the older sum in the 960px rule. */
+  /* Shared by every step, including with the keyboard closed. The note slot
+     sits above this padding. Under the buttons: 12px, or the home-indicator
+     inset when that is taller. Top padding stays 12px. The desktop drawer
+     restores the older sum in the 960px rule. */
   padding: 12px 16px max(12px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -2824,10 +2831,13 @@ a.bk-btn {
 
 .bk-day {
   width: 36px;
-  height: 38px;
+  height: 36px;
   margin: 0 auto;
+  justify-self: center;
+  align-self: center;
   border: 0;
   background: transparent;
+  background-color: transparent;
   color: #8d8d96;
   font: 600 0.88rem var(--font);
   border-radius: 50%;
@@ -2835,6 +2845,13 @@ a.bk-btn {
   display: grid;
   place-items: center;
   padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bk-day:focus {
+  outline: none;
 }
 
 .bk-day.is-event {
@@ -2843,9 +2860,30 @@ a.bk-btn {
   cursor: pointer;
 }
 
-.bk-day.is-selected {
+.bk-day.is-selected,
+.bk-day.is-selected:focus,
+.bk-day.is-selected:active {
   background: #3a3a40;
+  background-color: #3a3a40;
   color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Keyboard: a circle, not the rectangular button outline. A tap sets
+   .bk-touch and keeps only the selection circle. */
+.bk-sheet button.bk-day:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+.bk-sheet.bk-touch button.bk-day:focus,
+.bk-sheet.bk-touch button.bk-day:focus-visible {
+  outline: none;
+}
+
+.bk-sheet.bk-touch button.bk-day.is-selected:focus,
+.bk-sheet.bk-touch button.bk-day.is-selected:focus-visible {
   box-shadow: 0 0 0 2px #fff;
 }
 
@@ -3244,6 +3282,15 @@ a.bk-btn {
   background: #1c1c1f;
 }
 
+/* 16px stops iOS from zooming the page when a field is focused. */
+@media (max-width: 959px) {
+  .bk-input,
+  .bk-select,
+  .bk-sheet textarea {
+    font-size: 16px;
+  }
+}
+
 .bk-err {
   color: #ffb4b4;
   font-size: 0.82rem;
@@ -3634,10 +3681,10 @@ a.bk-cal-link:hover {
   margin: 12px 0 0;
 }
 
-/* Checkout and the failed-payment step: the terms line and Pay button stay
-   on screen. The body can scroll every payment option and card field fully
-   above that bar, including the home-indicator inset and the iOS keyboard.
-   --bk-foot-h is the measured bar; the safe-area term is the extra clearance. */
+/* Checkout and the failed-payment step: the terms line and Pay button stay at
+   the bottom of the layout viewport, behind the keyboard when it is open.
+   The body can scroll every payment option and card field fully above that
+   bar. --bk-foot-h is the measured bar; the safe-area term is the extra clearance. */
 .bk-sheet.is-clear-foot {
   overflow: hidden;
   display: flex;
