@@ -532,6 +532,7 @@
     state.view = view;
     const sheet = $("#book-sheet");
     if (!sheet) return;
+    sheet.classList.toggle("is-done", view === "done");
     const headingId = HEADINGS[view];
     if (headingId) sheet.setAttribute("aria-labelledby", headingId);
     VIEWS.forEach((name) => {
