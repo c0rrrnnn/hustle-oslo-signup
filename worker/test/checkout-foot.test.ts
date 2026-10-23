@@ -35,7 +35,11 @@ test("the payment footer is measured and the error card keeps a red fill without
   assert.match(js, /document\.addEventListener\("focusin"/);
   assert.match(css, /height:\s*100dvh/);
   assert.match(css, /height:\s*100svh/);
-  assert.match(css, /padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);
+  const mobileFoot = css.match(/\.bk-foot \{[^}]+\}/);
+  assert.ok(mobileFoot, "missing .bk-foot rule");
+  assert.match(mobileFoot[0], /padding:\s*12px 16px max\(12px, env\(safe-area-inset-bottom, 0px\)\)/);
+  const drawer = css.slice(css.indexOf("/* Desktop signup drawer"));
+  assert.match(drawer, /\.bk-foot \{[^}]*padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);
   const heading = css.match(/\.bk-banner b \{[^}]+\}/);
   assert.ok(heading, "missing banner heading rule");
   assert.match(heading[0], /color:\s*#ff8a8a/);

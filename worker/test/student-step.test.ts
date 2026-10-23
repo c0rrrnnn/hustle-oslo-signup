@@ -17,7 +17,11 @@ test("the student step has no separate Next button", () => {
   assert.match(html, /id="bk-dates-next"[^>]*>Next</);
   assert.match(html, /id="bk-dates-heading"[^>]*tabindex="-1"/);
   assert.match(html, /id="bk-student-heading"[^>]*tabindex="-1"/);
-  assert.match(css, /padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);
+  const footRule = css.match(/\.bk-foot \{[^}]+\}/);
+  assert.ok(footRule, "missing .bk-foot rule");
+  assert.match(footRule[0], /padding:\s*12px 16px max\(12px, env\(safe-area-inset-bottom, 0px\)\)/);
+  const drawer = css.slice(css.indexOf("/* Desktop signup drawer"));
+  assert.match(drawer, /\.bk-foot \{[^}]*padding:\s*12px 16px calc\(12px \+ max\(16px, env\(safe-area-inset-bottom, 0px\)\)\)/);
   assert.match(css, /#bk-foot-student \.bk-choices \{[^}]*flex-direction:\s*column;/);
 });
 
