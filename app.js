@@ -12,10 +12,10 @@
 
   const CONFIG = {
     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbx4hG1wNzoJaZglMuyZE_dPsyTt5ohRCbp5tukFhWPiQc5binIOaVcskl2GIUz4Fzf7/exec",
-    // Leave false on main. Flip locally only after worker/SETUP.md. Do not commit true.
-    PAYMENTS_ENABLED: false,
-    // Deployed test worker origin, no trailing path. Empty while payments are off.
-    PAYMENTS_WORKER_URL: "",
+    // LIVE: online payments on. Revert this commit to fall back to Vipps #48782 + transaction number.
+    PAYMENTS_ENABLED: true,
+    // Live worker origin (wrangler.toml [env.production]), no trailing path.
+    PAYMENTS_WORKER_URL: "https://hustle-oslo-payments-live.hustleinoslo-564.workers.dev",
     VIPPS_NUMBER: "48782",
     VIPPS_NAME: "Hustle Oslo",
     TIMEZONE: "Europe/Oslo",
