@@ -45,7 +45,7 @@
   const TICKET_LABELS = {
     beginners: "Beginner class",
     intermediate: "Intermediate class",
-    bundle: "2 class bundle",
+    bundle: "Two class bundle",
     social: "Social only",
   };
   const METHOD_LABEL = {

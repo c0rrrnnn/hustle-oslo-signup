@@ -86,7 +86,7 @@ window.HUSTLE_EVENTS = [
 
 /**
  * Ticket catalogue.
- * Class nights: beginners / intermediate / 2 class bundle / social-only.
+ * Class nights: beginners / intermediate / Two class bundle / social-only.
  * Social-only nights: social entry only.
  * No capacity caps. Student = honour system.
  */
@@ -106,7 +106,7 @@ window.HUSTLE_TICKETS = {
     },
     {
       id: "bundle",
-      name: "2 class bundle",
+      name: "Two class bundle",
       note: "Beginners + intermediate same evening only. Social included.",
       prices: { standard: 220, student: 150 },
     },
