@@ -69,8 +69,11 @@ test("the payment footer is measured and the error card keeps a red fill without
   assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*width:\s*40px/);
   assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*height:\s*40px/);
   assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*border-radius:\s*50%/);
-  assert.match(css, /\.bk-foot:has\(#bk-foot-student:not\(\[hidden\]\)\)/);
-  assert.match(css, /\.bk-foot:has\(#bk-foot-confirm:not\(\[hidden\]\)\)\s*\{[^}]*border-top-color:\s*transparent;/);
+  const footRule = css.match(/\.bk-foot \{[^}]+\}/);
+  assert.ok(footRule, "missing .bk-foot rule");
+  assert.equal(footRule[0].includes("border-top"), false);
+  assert.equal(css.includes(".bk-foot:has(#bk-foot-student"), false);
+  assert.equal(css.includes(".bk-foot:has(#bk-foot-confirm"), false);
   assert.match(css, /\.bk-sheet\.is-done #bk-back\s*\{[^}]*visibility:\s*hidden;/);
   assert.match(js, /classList\.toggle\("is-done", view === "done"\)/);
   assert.equal(html.includes("Secure payment by"), false);
