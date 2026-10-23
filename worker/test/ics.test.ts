@@ -196,6 +196,11 @@ test("the confirmation screen uses hosted links and does not download a blob", (
   assert.match(js, /done: "You’re registered\."/);
   assert.match(js, /step\.textContent = "You’re registered\."/);
   assert.match(js, /saved \? "You’re registered!"/);
+  assert.match(js, /sub\.textContent = "Confirmation email has been sent to " \+ email/);
+  assert.match(js, /sub\.hidden = true/);
+  assert.equal(js.includes("See you on the dance floor"), false);
+  assert.equal(js.includes('sub.innerHTML = "See you'), false);
+  assert.match(readFileSync(new URL("../../styles.css", import.meta.url), "utf8"), /\.cf-hero \.bk-sub\s*\{[^}]*overflow-wrap:\s*anywhere/);
   assert.equal(html.includes("You’re booked!"), false);
   assert.equal(js.includes("You’re booked"), false);
   assert.match(html, /id="bk-done-table"/);

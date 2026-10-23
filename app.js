@@ -2548,7 +2548,6 @@
     const mocked = !!(result && result.mocked);
     const partial = !!(result && result.partial);
     const saved = ok || mocked || partial;
-    const emailed = !!(result && result.confirmationSent);
     const pendingConfirmation = !!(result && result.pendingConfirmation);
     const step = $("#bk-step-status");
     if (step) {
@@ -2562,10 +2561,20 @@
     }
     if (mark) mark.hidden = !saved;
     if (sub) {
-      if (emailed) sub.innerHTML = "See you on the dance floor! Confirmation sent to <b>" + escapeHtml(email) + "</b>";
-      else if (pendingConfirmation) sub.textContent = "We’re confirming your payment.";
-      else if (!state.paymentPending) sub.textContent = "Paid " + amt + " kr";
-      else sub.textContent = "";
+      const registered = saved && !pendingConfirmation;
+      if (registered && email) {
+        sub.hidden = false;
+        sub.textContent = "Confirmation email has been sent to " + email;
+      } else if (registered) {
+        sub.hidden = true;
+        sub.textContent = "";
+      } else if (pendingConfirmation) {
+        sub.hidden = false;
+        sub.textContent = "We’re confirming your payment.";
+      } else if (!state.paymentPending) {
+        sub.hidden = false;
+        sub.textContent = "Paid " + amt + " kr";
+      } else sub.textContent = "";
     }
     if (banner) {
       if (partial) {

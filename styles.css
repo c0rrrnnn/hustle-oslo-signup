@@ -3703,6 +3703,7 @@ a.bk-cal-link:hover {
 
 .cf-hero .bk-sub {
   margin: 0 0 22px;
+  overflow-wrap: anywhere;
 }
 
 .cf-hero .bk-sub b {
