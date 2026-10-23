@@ -49,7 +49,7 @@ test("prices a class bundle and a social night from the catalogue", () => {
   assert.equal(bundle.amountNok, 220);
   assert.equal(bundle.amountMinor, 22000);
   assert.equal(bundle.nights[0].amount, 220);
-  assert.equal(bundle.nights[0].ticketName, "2 class bundle");
+  assert.equal(bundle.nights[0].ticketName, "Two class bundle");
 
   const student = priceOrder(
     [{ eventId: "2026-11-02-class-gymsalen", ticketId: "bundle", priceTier: "student" }],

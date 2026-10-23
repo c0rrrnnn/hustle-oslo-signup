@@ -6,7 +6,7 @@ const ADDRESS = "Sentralen, Øvre Slottsgate 3, 0157 Oslo";
 const CALENDAR_NAMES = {
   beginners: "Beginner class",
   intermediate: "Intermediate class",
-  bundle: "Beginner & Intermediate Class",
+  bundle: "Two class bundle",
   socialClass: "Social Only",
   socialNight: "Social",
 } as const;

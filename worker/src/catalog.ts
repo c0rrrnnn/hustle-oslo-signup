@@ -106,7 +106,7 @@ export const TICKETS: Record<"class" | "social", CatalogTicket[]> = {
   class: [
     { id: "beginners", sheetName: "Beginner class", prices: { standard: 150, student: 100 } },
     { id: "intermediate", sheetName: "Intermediate class", prices: { standard: 150, student: 100 } },
-    { id: "bundle", sheetName: "2 class bundle", prices: { standard: 220, student: 150 } },
+    { id: "bundle", sheetName: "Two class bundle", prices: { standard: 220, student: 150 } },
     { id: "social", sheetName: "Social only", prices: { standard: 50, student: 50 } },
   ],
   social: [{ id: "social", sheetName: "Social only", prices: { standard: 50, student: 50 } }],

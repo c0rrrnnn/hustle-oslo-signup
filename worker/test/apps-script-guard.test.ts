@@ -150,7 +150,7 @@ const NIGHT = {
   eventVenue: "Gymsalen",
   eventStart: "18:00",
   eventEnd: "19:00",
-  ticketName: "2 class bundle",
+  ticketName: "Two class bundle",
   priceTier: "standard",
   amount: 220,
 };

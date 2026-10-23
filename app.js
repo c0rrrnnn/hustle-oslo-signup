@@ -46,15 +46,15 @@
   const TICKET_LABELS = {
     beginners: "Beginner class",
     intermediate: "Intermediate class",
-    bundle: "2 class bundle",
+    bundle: "Two class bundle",
     social: "Social only",
   };
   // Booked-screen class lines. Swap these when Claire renames a ticket
-  // (for example "2 class bundle", "Social night"). Calendar titles are separate.
+  // (for example "Two class bundle", "Social night"). Calendar titles are separate.
   const CLASS_LINE_LABELS = {
     beginners: "Beginner class",
     intermediate: "Intermediate class",
-    bundle: "2 class bundle",
+    bundle: "Two class bundle",
     social: "Social only",
     socialNight: "Social night",
   };
@@ -2268,7 +2268,7 @@
   const CALENDAR_NAMES = {
     beginners: "Beginner class",
     intermediate: "Intermediate class",
-    bundle: "Beginner & Intermediate Class",
+    bundle: "Two class bundle",
     socialClass: "Social Only",
     socialNight: "Social",
   };

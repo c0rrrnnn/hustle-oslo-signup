@@ -35,7 +35,7 @@ A preview server may already be running on port **8765** on the shared box.
 
 - **Class nights:** Beginners 18:00–19:00 · Intermediate 19:00–20:00 · Social 20:00–21:00  
 - **Social-only nights:** Social 18:00–20:00  
-- Class tickets: Beginner class 150/100 · Intermediate class 150/100 · 2 class bundle 220/150 (Save 15%) · Social only 50. Class booking includes social after. Student = honour system, chosen on the first sheet step. No caps.
+- Class tickets: Beginner class 150/100 · Intermediate class 150/100 · Two class bundle 220/150 (Save 15%) · Social only 50. Class booking includes social after. Student = honour system, chosen on the first sheet step. No caps.
 - Social-only nights: 50 kr only.
 - Book anytime before **18:00** on the day (Europe/Oslo). Past nights are hidden.
 - Flow: **Intro (landing) → Are you a student? → Select a date → Confirm selection → Your details → Checkout → confirmation**. On screens wider than 600px, details and checkout are one screen (details on the left, order on the right). Payment failure stays on a Checkout screen with the error banner and another attempt.

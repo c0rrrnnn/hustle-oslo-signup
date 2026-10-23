@@ -245,12 +245,12 @@ function sampleNight(overrides: Partial<PricedNight>): PricedNight {
 }
 
 test("bundle and social-on-a-class-night use the calendar titles, literal ampersand, and 20:00 social", () => {
-  const bundle = sampleNight({ ticketId: "bundle", ticketName: "2 class bundle", amount: 220 });
+  const bundle = sampleNight({ ticketId: "bundle", ticketName: "Two class bundle", amount: 220 });
   const social = sampleNight({ ticketId: "social", ticketName: "Social only", amount: 50, eventId: "2026-11-02-class-gymsalen-social" });
-  assert.equal(calendarSummary(bundle), "Hustle Oslo: Beginner & Intermediate Class");
+  assert.equal(calendarSummary(bundle), "Hustle Oslo: Two class bundle");
   assert.equal(calendarSummary(social), "Hustle Oslo: Social Only");
   const body = unfold(buildCalendar("order-1", [bundle, social], NOW));
-  assert.match(body, /SUMMARY:Hustle Oslo: Beginner & Intermediate Class/);
+  assert.match(body, /SUMMARY:Hustle Oslo: Two class bundle/);
   assert.match(body, /SUMMARY:Hustle Oslo: Social Only/);
   assert.match(body, /DTSTART;TZID=Europe\/Oslo:20261102T180000/);
   assert.match(body, /DTEND;TZID=Europe\/Oslo:20261102T200000/);
@@ -259,9 +259,9 @@ test("bundle and social-on-a-class-night use the calendar titles, literal ampers
   assert.equal(body.match(/TRIGGER:-P1D/g)?.length, 2);
   assert.equal(body.match(/TRIGGER:-PT2H/g)?.length, 2);
   const google = googleCalendarUrl(bundle);
-  assert.match(google, /text=Hustle\+Oslo%3A\+Beginner\+%26\+Intermediate\+Class/);
+  assert.match(google, /text=Hustle\+Oslo%3A\+Two\+class\+bundle/);
   const params = new URL(google).searchParams;
-  assert.equal(params.get("text"), "Hustle Oslo: Beginner & Intermediate Class");
+  assert.equal(params.get("text"), "Hustle Oslo: Two class bundle");
   assert.equal(params.get("location"), "Sentralen, Øvre Slottsgate 3, 0157 Oslo");
   assert.equal(params.get("details"), "Room: Gymsalen");
   assert.match(google, /dates=20261102T170000Z\/20261102T190000Z/);
