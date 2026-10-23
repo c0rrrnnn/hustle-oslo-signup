@@ -1,4 +1,5 @@
 import { calendarFields } from "./calendar.ts";
+import { payMethodLabel } from "./stripe.ts";
 import type { StoredOrder } from "./types.ts";
 
 export function appsScriptBodies(order: StoredOrder, secret: string, calendarBase = ""): Record<string, unknown>[] {
@@ -23,7 +24,7 @@ export function appsScriptBodies(order: StoredOrder, secret: string, calendarBas
     isRepeat: order.meta.isRepeat,
     vippsNumber: "48782",
     currency: "NOK",
-    paymentMethod: order.method,
+    paymentMethod: payMethodLabel(order.method),
     termsAccepted: true,
     termsAcceptedAt: order.meta.termsAcceptedAt,
     termsVersion: order.meta.termsVersion || "v1.1",
@@ -265,6 +266,7 @@ export async function postPaidBooking(
         paymentProvider: order.provider,
         paymentId: order.paymentId || order.orderId,
         paymentStatus: "paid",
+        paymentMethod: payMethodLabel(order.method),
         vippsNumber: "48782",
         ...calendarFields(order, calendarBase),
       };

@@ -42,6 +42,7 @@ export interface Deps {
 }
 
 export type PayMethod = "card" | "apple" | "google" | "vipps";
+export type RecordedPayMethod = PayMethod | "Card" | "Apple Pay" | "Google Pay" | "Vipps";
 export type Provider = "stripe" | "vipps";
 export type CaptureMode = "immediate" | "reserve";
 export type OrderStatus = "pending" | "reserved" | "paid" | "failed";
@@ -84,7 +85,7 @@ export interface StoredOrder {
   amountNok: number;
   amountMinor: number;
   provider: Provider;
-  method: PayMethod;
+  method: RecordedPayMethod;
   paymentId: string | null;
   clientSecret: string | null;
   redirectUrl: string | null;

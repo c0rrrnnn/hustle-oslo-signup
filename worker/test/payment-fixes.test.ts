@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 import { handleRequest } from "../src/handler.ts";
 import { getOrder } from "../src/orders.ts";
-import { decideStripe, stripePayMethod } from "../src/stripe.ts";
+import { decideStripe, payMethodLabel, stripePayMethod } from "../src/stripe.ts";
 import { clearVippsTokenCache } from "../src/vipps.ts";
 import { backgroundDeps, checkoutBody, jsonResponse, memoryKv, NOW, ORDER_ID, recordFetch, testEnv } from "./helpers.ts";
 
@@ -88,6 +88,10 @@ test("a wallet on the PaymentIntent is what the sheet records", () => {
   assert.equal(stripePayMethod({ payment_method: { type: "card", card: { wallet: { type: "apple_pay" } } } }), "apple");
   assert.equal(stripePayMethod({ payment_method: { type: "card", card: { wallet: { type: "google_pay" } } } }), "google");
   assert.equal(stripePayMethod({ payment_method: { type: "card", card: { wallet: null } } }), "card");
+  assert.equal(payMethodLabel("apple"), "Apple Pay");
+  assert.equal(payMethodLabel("google"), "Google Pay");
+  assert.equal(payMethodLabel("card"), "Card");
+  assert.equal(payMethodLabel("vipps"), "Vipps");
   const order = { orderId: ORDER_ID, amountMinor: 22000, paymentId: "pi_test_1" };
   assert.deepEqual(
     decideStripe({ id: "pi_test_1", amount: 22000, currency: "nok", status: "requires_payment_method", metadata: { orderId: ORDER_ID } }, order),
@@ -162,14 +166,14 @@ test("GET /order marks a succeeded card paid and records Apple Pay once", async 
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.status, "paid");
-  assert.equal(body.method, "apple");
+  assert.equal(body.method, "Apple Pay");
   assert.equal(body.email, undefined);
   assert.equal(body.fullName, undefined);
   await deps.flush();
   assert.equal(scriptBodies.length, 1);
-  assert.equal(scriptBodies[0].paymentMethod, "apple");
+  assert.equal(scriptBodies[0].paymentMethod, "Apple Pay");
   assert.equal(scriptBodies[0].paymentStatus, "paid");
-  assert.equal((await getOrder(kv, ORDER_ID))?.method, "apple");
+  assert.equal((await getOrder(kv, ORDER_ID))?.method, "Apple Pay");
 
   const now = new Date("2026-10-15T10:05:00.000Z");
   const payload = JSON.stringify({
@@ -303,4 +307,127 @@ test("an aborted Vipps payment is failed and drops the redirect", async () => {
   assert.equal(body.status, "failed");
   assert.equal(body.failureReason, "aborted");
   assert.equal(body.redirectUrl, null);
+});
+
+test("Apple Pay, Google Pay, a plain card, and Vipps use one label on the order and the sheet", async () => {
+  const wallets = [
+    { wallet: { type: "apple_pay" }, label: "Apple Pay" },
+    { wallet: { type: "google_pay" }, label: "Google Pay" },
+    { wallet: null, label: "Card" },
+  ] as const;
+  for (const item of wallets) {
+    const { kv, env } = await seedCard();
+    const scriptBodies: Record<string, unknown>[] = [];
+    let retrieveUrl = "";
+    const recorded = recordFetch((call) => {
+      if (call.url.includes("/payment_intents/pi_test_1")) {
+        retrieveUrl = call.url;
+        return intent("succeeded", {
+          payment_method: { type: "card", card: { wallet: item.wallet } },
+        });
+      }
+      if (call.url === env.APPS_SCRIPT_URL) {
+        scriptBodies.push(JSON.parse(call.body) as Record<string, unknown>);
+        return jsonResponse({ ok: true, confirmationSent: true });
+      }
+      throw new Error("unexpected " + call.url);
+    });
+    const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => NOW });
+    const response = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, deps);
+    const body = await response.json();
+    assert.equal(body.method, item.label, item.label);
+    assert.ok(retrieveUrl.includes("expand[]=payment_method"), item.label);
+    await deps.flush();
+    assert.equal(scriptBodies[0].paymentMethod, item.label);
+    assert.equal((await getOrder(kv, ORDER_ID))?.method, item.label);
+  }
+
+  clearVippsTokenCache();
+  const kv = memoryKv();
+  const env = testEnv(kv);
+  const scriptBodies: Record<string, unknown>[] = [];
+  const recorded = recordFetch((call) => {
+    if (call.url.endsWith("/accesstoken/get")) return jsonResponse({ access_token: "vipps-token", expires_in: "3600" });
+    if (call.method === "POST" && call.url.endsWith("/epayment/v1/payments")) {
+      return jsonResponse({ redirectUrl: "https://apitest.vipps.no/pay/abc", reference: ORDER_ID });
+    }
+    if (call.method === "GET" && call.url.includes("/epayment/v1/payments/")) {
+      return jsonResponse({
+        reference: ORDER_ID,
+        pspReference: "psp-1",
+        state: "AUTHORIZED",
+        amount: { currency: "NOK", value: 22000 },
+        aggregate: {
+          authorizedAmount: { currency: "NOK", value: 22000 },
+          capturedAmount: { currency: "NOK", value: 22000 },
+        },
+      });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) {
+      scriptBodies.push(JSON.parse(call.body) as Record<string, unknown>);
+      return jsonResponse({ ok: true, confirmationSent: true });
+    }
+    throw new Error("unexpected " + call.url);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => NOW });
+  assert.equal((await handleRequest(checkoutRequest(checkoutBody({ method: "vipps" })), env, deps)).status, 200);
+  const paid = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, deps);
+  const body = await paid.json();
+  assert.equal(body.status, "paid");
+  assert.equal(body.method, "Vipps");
+  await deps.flush();
+  assert.equal(scriptBodies[0].paymentMethod, "Vipps");
+  assert.equal((await getOrder(kv, ORDER_ID))?.method, "Vipps");
+});
+
+test("a PaymentMethod that did not expand keeps the method the client reported", async () => {
+  const kv = memoryKv();
+  const env = testEnv(kv);
+  const created = recordFetch((call) => {
+    if (call.method === "POST" && call.url.endsWith("/payment_intents")) {
+      return jsonResponse({
+        id: "pi_test_1",
+        client_secret: "pi_test_1_secret_abc",
+        amount: 22000,
+        currency: "nok",
+        status: "requires_payment_method",
+        metadata: { orderId: ORDER_ID },
+      });
+    }
+    throw new Error("unexpected " + call.url);
+  });
+  const checkout = await handleRequest(
+    checkoutRequest(checkoutBody({ method: "apple" })),
+    env,
+    { fetch: created.fetcher, now: () => NOW },
+  );
+  assert.equal(checkout.status, 200);
+  const recorded = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return intent("succeeded", { payment_method: "pm_unexpanded" });
+    }
+    if (call.url === env.APPS_SCRIPT_URL) return jsonResponse({ ok: true, confirmationSent: true });
+    throw new Error("unexpected " + call.url);
+  });
+  const deps = backgroundDeps({ fetch: recorded.fetcher, now: () => NOW });
+  const response = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, deps);
+  const body = await response.json();
+  assert.equal(body.method, "Apple Pay");
+  await deps.flush();
+  assert.equal((await getOrder(kv, ORDER_ID))?.method, "Apple Pay");
+
+  const card = await seedCard();
+  const cardFetch = recordFetch((call) => {
+    if (call.url.includes("/payment_intents/pi_test_1")) {
+      return intent("succeeded", { payment_method: "pm_unexpanded" });
+    }
+    if (call.url === card.env.APPS_SCRIPT_URL) return jsonResponse({ ok: true, confirmationSent: true });
+    throw new Error("unexpected " + call.url);
+  });
+  const cardDeps = backgroundDeps({ fetch: cardFetch.fetcher, now: () => NOW });
+  const cardResponse = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), card.env, cardDeps);
+  const cardBody = await cardResponse.json();
+  assert.equal(cardBody.method, "Card");
+  await cardDeps.flush();
+  assert.equal((await getOrder(card.kv, ORDER_ID))?.method, "Card");
 });

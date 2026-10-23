@@ -121,6 +121,7 @@
     calendarYear: null,
     calendarMonth: null,
     paymentMethod: "card",
+    paidMethodLabel: "",
     paymentPending: true,
     transactionNumber: "",
     termsAcceptedAt: "",
@@ -609,6 +610,7 @@
     state.calendarYear = null;
     state.calendarMonth = null;
     state.paymentMethod = "card";
+    state.paidMethodLabel = "";
     state.paymentPending = true;
     state.transactionNumber = "";
     state.termsAcceptedAt = "";
@@ -1811,12 +1813,19 @@
     return last;
   }
 
+  function rememberPaidMethod(data) {
+    const raw = data && typeof data.method === "string" ? data.method : "";
+    const label = METHOD_LABEL[raw] || (raw === "Apple Pay" || raw === "Google Pay" || raw === "Card" || raw === "Vipps" ? raw : "");
+    if (label) state.paidMethodLabel = label;
+  }
+
   async function resolveConfirmed(orderId, confirmed, started) {
     const immediate = window.HustlePaymentStatus.clientPaymentResult(confirmed);
     if (immediate) {
       if (immediate.ok) {
-        // The webhook, or this read, writes the sheet. The page does not wait for it.
-        fetch(workerUrl("/order/" + encodeURIComponent(orderId))).catch(function () {});
+        // The read writes the sheet and replaces Card with the wallet Stripe recorded.
+        const recorded = await fetchOrder(orderId);
+        rememberPaidMethod(recorded);
       }
       logTiming("success-resolve", started, { orderId: orderId, ok: !!immediate.ok, immediate: true });
       return immediate.ok ? immediate : { ok: false, message: immediate.message || PAY_FAIL };
@@ -1826,7 +1835,10 @@
     logTiming("order-poll", pollStarted, { orderId: orderId, status: polled && polled.status });
     const screen = window.HustlePaymentStatus.returnScreen(polled);
     logTiming("success-resolve", started, { orderId: orderId, ok: screen.kind === "paid" });
-    if (screen.kind === "paid") return resultFromOrder(polled);
+    if (screen.kind === "paid") {
+      rememberPaidMethod(polled);
+      return resultFromOrder(polled);
+    }
     return { ok: false, message: failureMessage(screen.kind === "failed" ? screen.reason : "pending") };
   }
 
@@ -1942,6 +1954,7 @@
       const screen = window.HustlePaymentStatus.returnScreen(data);
       if (screen.kind === "paid") {
         stripPaymentQuery();
+        rememberPaidMethod(data);
         state.transactionNumber = screen.transactionNumber || "";
         state.paymentPending = false;
         showConfirmation({
@@ -2011,7 +2024,10 @@
     const created = await postCheckout(method);
     if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
     if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
-    if (created.status === "paid" || created.status === "reserved") return resultFromOrder(created);
+    if (created.status === "paid" || created.status === "reserved") {
+      rememberPaidMethod(created);
+      return resultFromOrder(created);
+    }
     if (method === "vipps") {
       if (!created.redirectUrl) return { ok: false, message: PAY_FAIL };
       savePaymentSession(created.orderId);
@@ -2636,7 +2652,7 @@
           return "<li>" + escapeHtml(classLineName(s)) + '<span class="cf-night-meta">' + escapeHtml(meta) + "</span></li>";
         })
         .join("");
-      const method = METHOD_LABEL[state.paymentMethod] || "";
+      const method = state.paidMethodLabel || METHOD_LABEL[state.paymentMethod] || "";
       table.hidden = false;
       table.innerHTML =
         '<div class="cf-row"><dt>Class(es)</dt><dd><ul class="cf-nights">' +

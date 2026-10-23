@@ -114,6 +114,11 @@ test("the return page offers Vipps again and the card form defaults to card", ()
   assert.match(app, /paymentMethod: "card"/);
   assert.match(app, /locale: "en"/);
   assert.match(app, /clientPaymentResult/);
+  assert.match(app, /state\.paidMethodLabel \|\| METHOD_LABEL\[state\.paymentMethod\]/);
+  const resolve = app.slice(app.indexOf("async function resolveConfirmed"), app.indexOf("function savePaymentSession"));
+  assert.match(resolve, /await fetchOrder\(orderId\)/);
+  assert.match(resolve, /rememberPaidMethod\(recorded\)/);
+  assert.equal(resolve.includes(".catch(function () {})"), false);
   assert.match(app, /returnScreen/);
   assert.match(app, /Open Vipps again|bk-vipps-again/);
 });

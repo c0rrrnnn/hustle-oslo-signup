@@ -296,6 +296,28 @@ test("a paid confirmation email links to the hosted calendar and does not attach
   assert.equal((pendingMail?.body || "").includes("calendar.google.com"), false);
 });
 
+test("the confirmation email and the sheet use the paymentMethod label", () => {
+  const script = loadScript();
+  const paid = script.post(
+    pendingSignup({
+      transactionNumber: "pi_test_1",
+      paymentStatus: "paid",
+      paymentProvider: "stripe",
+      paymentId: "pi_test_1",
+      paymentMethod: "Apple Pay",
+      sendAttendeeConfirmation: true,
+      SHARED_SECRET: "shared-secret-value",
+    }),
+  );
+  assert.equal(paid.ok, true);
+  const attendee = script.emails.find((mail) => mail.to === "ada@example.com");
+  assert.match(attendee?.body || "", /Payment received via Apple Pay\./);
+  const row = script.sheets.get("All signups")?.rows[1] || [];
+  assert.equal(row.includes("Apple Pay"), true);
+  const headers = script.sheets.get("All signups")?.rows[0] || [];
+  assert.equal(headers.indexOf("Payment method"), row.indexOf("Apple Pay"));
+});
+
 test("a lock failure does not append a row", () => {
   const script = loadScript();
   script.setLockFailure("busy");

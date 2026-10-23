@@ -516,7 +516,7 @@ function confirmationBody_(data, nights) {
 
   lines.push("");
   if (paidPayment_(data)) {
-    lines.push("Payment received via " + (plain_(data.paymentProvider) || "card") + ".");
+    lines.push("Payment received via " + (plain_(data.paymentMethod) || plain_(data.paymentProvider) || "card") + ".");
     lines.push("Payment id: " + (plain_(data.paymentId) || plain_(data.transactionNumber) || "—"));
   } else if (pendingPayment_(data)) {
     lines.push(

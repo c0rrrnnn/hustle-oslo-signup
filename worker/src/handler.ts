@@ -16,7 +16,7 @@ import {
 import { markProviderChecked, providerCheckedRecently } from "./provider-check.ts";
 import { deliverPaidBooking, retryUnpostedBookings } from "./sheet-sync.ts";
 import { priceOrder } from "./pricing.ts";
-import { createPaymentIntent, decideStripe, paymentsModeError, retrievePaymentIntent, stripePayMethod, stripeSecretIsLive, verifyStripeSignature } from "./stripe.ts";
+import { createPaymentIntent, decideStripe, payMethodLabel, paymentsModeError, retrievePaymentIntent, stripePayMethod, stripeSecretIsLive, verifyStripeSignature } from "./stripe.ts";
 import type { CaptureMode, CheckoutInput, Deps, Env, PayMethod, SignupMeta, StoredOrder } from "./types.ts";
 import {
   captureVippsPayment,
@@ -242,7 +242,7 @@ function publicOrder(order: StoredOrder) {
     orderId: order.orderId,
     status: order.status,
     provider: order.provider,
-    method: order.method,
+    method: payMethodLabel(order.method),
     paymentId: order.status === "paid" ? order.paymentId : null,
     appsScriptPosted: order.appsScriptPosted,
     confirmationSent: order.confirmationSent,
@@ -265,6 +265,7 @@ function checkoutResponse(order: StoredOrder, env: Env, cors: Headers, replay: b
       clientSecret: order.status === "pending" && order.provider === "stripe" ? order.clientSecret : null,
       redirectUrl: order.status === "pending" && order.provider === "vipps" ? order.redirectUrl : null,
       status: order.status,
+      method: payMethodLabel(order.method),
       paymentId: order.status === "paid" ? order.paymentId : null,
       appsScriptPosted: order.appsScriptPosted,
       confirmationSent: order.confirmationSent,
@@ -608,8 +609,10 @@ async function onStripeWebhook(request: Request, env: Env, deps: Deps, cors: Hea
 /** Wallet method stays in memory until the status write, so a pending poll does not put the order. */
 function withStripeMethod(order: StoredOrder, intent: Awaited<ReturnType<typeof retrievePaymentIntent>>): StoredOrder {
   const method = stripePayMethod(intent);
-  if (!method || order.method === method) return order;
-  return { ...order, method };
+  if (!method) return order;
+  const label = payMethodLabel(method);
+  if (payMethodLabel(order.method) === label) return order;
+  return { ...order, method: label };
 }
 
 /** Webhook fallback: a pending card order is marked from the retrieved PaymentIntent. */

@@ -79,7 +79,11 @@ export function decideStripe(
   return { action: "pending", reason: intent.status || "pending" };
 }
 
-/** Card, or the wallet Stripe recorded on that card. A bare payment-method id is not enough. */
+/**
+ * Card, or the wallet Stripe recorded on that card.
+ * A bare payment-method id means the expand failed, so the caller keeps
+ * the method the client reported.
+ */
 export function stripePayMethod(intent: StripeIntent | null): "card" | "apple" | "google" | null {
   const method = intent?.payment_method;
   if (!method || typeof method === "string") return null;
@@ -88,6 +92,14 @@ export function stripePayMethod(intent: StripeIntent | null): "card" | "apple" |
   if (wallet === "google_pay") return "google";
   if (method.type === "card") return "card";
   return null;
+}
+
+/** The label shown on the success screen, the order, the sheet, and the confirmation email. */
+export function payMethodLabel(method: string | null | undefined): "Apple Pay" | "Google Pay" | "Card" | "Vipps" {
+  if (method === "apple" || method === "apple_pay" || method === "Apple Pay") return "Apple Pay";
+  if (method === "google" || method === "google_pay" || method === "Google Pay") return "Google Pay";
+  if (method === "vipps" || method === "Vipps") return "Vipps";
+  return "Card";
 }
 
 /** Secret keys (sk_) and restricted keys (rk_) are the same kind of server credential. */

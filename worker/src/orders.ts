@@ -1,4 +1,5 @@
-import type { CheckoutInput, OrderKv, OrderStatus, StoredOrder } from "./types.ts";
+import { payMethodLabel } from "./stripe.ts";
+import type { CheckoutInput, OrderKv, OrderStatus, PayMethod, StoredOrder } from "./types.ts";
 
 export function orderKey(orderId: string): string {
   return `order:${orderId}`;
@@ -24,10 +25,18 @@ export const PENDING_VIPPS_TTL_SEC = 25 * 60 * 60;
 /** Backstop if the sheet post never deletes the index. */
 export const UNPOSTED_TTL_SEC = 7 * 24 * 60 * 60;
 
+function canonicalPayMethod(method: string): PayMethod {
+  if (method === "apple" || method === "apple_pay" || method === "Apple Pay") return "apple";
+  if (method === "google" || method === "google_pay" || method === "Google Pay") return "google";
+  if (method === "vipps" || method === "Vipps") return "vipps";
+  return "card";
+}
+
 function mergeMethod(current: StoredOrder["method"], incoming: StoredOrder["method"]): StoredOrder["method"] {
-  if (incoming === "apple" || incoming === "google") return incoming;
-  if (current === "apple" || current === "google") return current;
-  return incoming;
+  const next = canonicalPayMethod(incoming);
+  const prev = canonicalPayMethod(current);
+  const chosen = next === "apple" || next === "google" ? next : prev === "apple" || prev === "google" ? prev : next;
+  return payMethodLabel(chosen);
 }
 
 export async function listPrefixedIds(kv: OrderKv, prefix: string): Promise<string[]> {

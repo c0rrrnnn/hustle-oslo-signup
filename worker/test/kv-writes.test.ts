@@ -322,11 +322,11 @@ test("Apple Pay is stored on the paid order write", async () => {
     assert.equal((await handleRequest(checkoutRequest(checkoutBody()), env, deps)).status, 200);
     const response = await handleRequest(new Request(`https://payments.test/order/${ORDER_ID}`), env, deps);
     const body = await response.json();
-    assert.equal(body.method, "apple");
+    assert.equal(body.method, "Apple Pay");
     await deps.flush();
     assert.equal(counter.puts.length, 7);
     const stored = await counter.kv.get(`order:${ORDER_ID}`);
-    assert.equal(stored && JSON.parse(stored).method, "apple");
+    assert.equal(stored && JSON.parse(stored).method, "Apple Pay");
   } finally {
     restore();
   }
