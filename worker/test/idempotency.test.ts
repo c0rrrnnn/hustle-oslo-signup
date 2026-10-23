@@ -18,6 +18,8 @@ function stripeFetch() {
       assert.equal(params.get("automatic_payment_methods[enabled]"), "true");
       assert.equal(params.get("payment_method_types[0]"), null);
       assert.equal(params.get("metadata[orderId]"), ORDER_ID);
+      assert.equal(params.get("receipt_email"), null);
+      assert.equal(call.body.includes("receipt_email"), false);
       assert.equal(call.headers["idempotency-key"], ORDER_ID);
       assert.equal(call.headers.authorization, "Bearer sk_test_123");
       return jsonResponse({
@@ -78,6 +80,30 @@ test("checkout prices on the server and replays the same order id", async () => 
   const stored = await getOrder(kv, ORDER_ID);
   assert.equal(stored?.amountMinor, 22000);
   assert.equal(stored?.nights[0].amount, 220);
+});
+
+test("Stripe PaymentIntent is created without receipt_email", async () => {
+  const kv = memoryKv();
+  const env = testEnv(kv);
+  const recorded = stripeFetch();
+  const response = await handleRequest(checkoutRequest(checkoutBody()), env, {
+    fetch: recorded.fetcher,
+    now: () => NOW,
+  });
+  assert.equal(response.status, 200);
+  const posts = recorded.calls.filter((call) => call.method === "POST" && call.url.endsWith("/payment_intents"));
+  assert.equal(posts.length, 1);
+  const params = new URLSearchParams(posts[0].body);
+  assert.equal(params.get("receipt_email"), null);
+  assert.equal(posts[0].body.includes("receipt_email"), false);
+  assert.equal(params.get("amount"), "22000");
+  const stored = await getOrder(kv, ORDER_ID);
+  assert.equal(stored?.customer.email, checkoutBody().customer.email);
+  const stripe = readFileSync(new URL("../src/stripe.ts", import.meta.url), "utf8");
+  const handler = readFileSync(new URL("../src/handler.ts", import.meta.url), "utf8");
+  assert.equal(stripe.includes("receipt_email"), false);
+  assert.equal(stripe.includes("receiptEmail"), false);
+  assert.equal(handler.includes("receiptEmail"), false);
 });
 
 test("checkout create-intent does not call Apps Script", async () => {

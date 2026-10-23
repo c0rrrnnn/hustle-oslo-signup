@@ -26,7 +26,7 @@ export function appsScriptBodies(order: StoredOrder, secret: string, calendarBas
     paymentMethod: order.method,
     termsAccepted: true,
     termsAcceptedAt: order.meta.termsAcceptedAt,
-    termsVersion: order.meta.termsVersion || "v1.0",
+    termsVersion: order.meta.termsVersion || "v1.1",
   };
   return order.nights.map((night, index) => {
     const body: Record<string, unknown> = {

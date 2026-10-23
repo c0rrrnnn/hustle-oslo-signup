@@ -23,7 +23,7 @@
     CLASS_START_MINUTE: 0,
     INSTAGRAM: "https://www.instagram.com/hustleoslo/",
     LOCAL_QUEUE_KEY: "hustleOsloSignups",
-    TERMS_VERSION: "v1.0",
+    TERMS_VERSION: "v1.1",
   };
 
   const EXPERIENCE_LABELS = {

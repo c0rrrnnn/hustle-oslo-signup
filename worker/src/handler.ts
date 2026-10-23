@@ -285,7 +285,7 @@ function readMeta(body: Record<string, unknown>, nowIso: string): SignupMeta {
     howFoundOther: clip(body.howFoundOther, 200),
     isRepeat: body.isRepeat === true,
     termsAcceptedAt: clip(body.termsAcceptedAt, 40) || nowIso,
-    termsVersion: clip(body.termsVersion, 20) || "v1.0",
+    termsVersion: clip(body.termsVersion, 20) || "v1.1",
   };
 }
 
@@ -453,7 +453,6 @@ async function beginCheckout(request: Request, env: Env, deps: Deps, cors: Heade
       const intent = await createPaymentIntent(fetcher, env.STRIPE_SECRET_KEY, {
         amountMinor: current.amountMinor,
         orderId: current.orderId,
-        receiptEmail: current.customer.email,
         description: paymentDescription(current),
         method: current.method,
       });

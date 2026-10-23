@@ -41,7 +41,7 @@ A preview server may already be running on port **8765** on the shared box.
 - Flow: **Intro (landing) → Are you a student? → Select a date → Confirm selection → Your details → Checkout → confirmation**. On screens wider than 600px, details and checkout are one screen (details on the left, order on the right). Payment failure stays on a Checkout screen with the error banner and another attempt.
 - First-timers: experience and “how did you find us?” are optional, and hidden when “I’ve danced with Hustle Oslo before” is checked. “Other” reveals a short text field.
 - Optional phone, with a ? disclosure about the WhatsApp group.
-- Checkout has no terms checkbox. Paying accepts the Terms of Sale and refund policy (`/termsofsale`, version `v1.0`).
+- Checkout has no terms checkbox. Paying accepts the Terms of Sale and refund policy (`/termsofsale`, version `v1.1`).
 - While `PAYMENTS_ENABLED` is false, Pay does not charge a card. It posts the booking with `transactionNumber: "payment-pending"` and does not call the worker. Card fields are placeholders and are never submitted.
 - `startPayment(method, order)` is the only function that talks to the payment worker, and only when `PAYMENTS_ENABLED` is true and `PAYMENTS_WORKER_URL` is set. The worker prices the order. The browser never sends a price it expects to be charged. Do not put API keys in the repo.
 
@@ -55,7 +55,7 @@ const CONFIG = {
   PAYMENTS_ENABLED: false,
   PAYMENTS_WORKER_URL: "",
   VIPPS_NUMBER: "48782",
-  TERMS_VERSION: "v1.0",
+  TERMS_VERSION: "v1.1",
 };
 ```
 

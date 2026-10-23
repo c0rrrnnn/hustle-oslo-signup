@@ -132,7 +132,7 @@ function formEncode(fields: Record<string, string>): string {
 export async function createPaymentIntent(
   fetcher: typeof fetch,
   secretKey: string,
-  input: { amountMinor: number; orderId: string; receiptEmail: string; description: string; method: string },
+  input: { amountMinor: number; orderId: string; description: string; method: string },
 ): Promise<StripeIntent> {
   const response = await fetcher(`${STRIPE_API}/payment_intents`, {
     method: "POST",
@@ -149,7 +149,6 @@ export async function createPaymentIntent(
       "automatic_payment_methods[enabled]": "true",
       capture_method: "automatic",
       description: input.description.slice(0, 200),
-      receipt_email: input.receiptEmail,
       "metadata[orderId]": input.orderId,
       "metadata[method]": input.method,
     }),
