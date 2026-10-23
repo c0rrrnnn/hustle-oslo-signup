@@ -28,8 +28,9 @@
   --focus: 0 0 0 3px rgba(223, 128, 38, 0.65);
   --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --touch: 44px;
-  /* Space between landing blocks. Desktop is 2x the old 1.2rem section margin. */
-  --landing-section-gap: 1.75rem;
+  /* Space between landing blocks. Hero to title is tighter. */
+  --landing-section-gap: 24px;
+  --landing-hero-title-gap: 4px;
 }
 
 *,
@@ -447,6 +448,7 @@ body.is-landing .site-footer a:hover {
 
 .landing-title {
   margin: 0;
+  margin-top: calc(var(--landing-hero-title-gap) - var(--landing-section-gap));
   font-size: 1.7rem;
   font-weight: 700;
   line-height: 1.15;
@@ -810,7 +812,8 @@ body.is-landing .site-footer a:hover {
 
 @media (min-width: 960px) {
   :root {
-    --landing-section-gap: 2.4rem;
+    --landing-section-gap: 34px;
+    --landing-hero-title-gap: 16px;
   }
 
   body.is-landing main {
@@ -851,7 +854,6 @@ body.is-landing .site-footer a:hover {
   }
 
   .landing-title {
-    margin: 0;
     font-size: 1.85rem;
   }
 

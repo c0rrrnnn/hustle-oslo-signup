@@ -82,8 +82,10 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.equal(/\border\s*:/.test(css), false);
   assert.equal(/\.landing-actions\s*\{[^}]*position:\s*fixed/.test(css), false);
   assert.equal(css.includes("--sticky-pad"), false);
-  assert.match(css, /--landing-section-gap:\s*1\.75rem/);
-  assert.match(css, /--landing-section-gap:\s*2\.4rem/);
+  assert.match(css, /--landing-section-gap:\s*24px/);
+  assert.match(css, /--landing-section-gap:\s*34px/);
+  assert.match(css, /--landing-hero-title-gap:\s*4px/);
+  assert.match(css, /--landing-hero-title-gap:\s*16px/);
   assert.equal(html.includes("Register for class"), false);
   assert.equal(html.includes("Book a class"), false);
   assert.match(html, /class="bk-bar-title">Register</);
