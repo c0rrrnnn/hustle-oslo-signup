@@ -157,8 +157,9 @@ export async function createPaymentIntent(
     body: formEncode({
       amount: String(input.amountMinor),
       currency: "nok",
-      // Card plus Apple Pay and Google Pay. Stripe rejects this together with payment_method_types.
-      "automatic_payment_methods[enabled]": "true",
+      // Card only. Apple Pay and Google Pay are card wallets, so they still show; Klarna, Link,
+      // Amazon Pay and the rest of the dashboard methods do not.
+      "payment_method_types[0]": "card",
       capture_method: "automatic",
       description: input.description.slice(0, 200),
       "metadata[orderId]": input.orderId,

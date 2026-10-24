@@ -235,7 +235,7 @@ function returnUrlFor(env: Env, requested: string, orderId: string): string {
   return `${origin}${path}?order=${orderId}`;
 }
 
-/** Fields the return page reads. Name, email, and the night list stay in KV. */
+/** Fields the return page reads. Name, email and phone stay in KV. */
 function publicOrder(order: StoredOrder) {
   return {
     ok: true,
@@ -248,6 +248,19 @@ function publicOrder(order: StoredOrder) {
     confirmationSent: order.confirmationSent,
     failureReason: order.status === "failed" ? order.failureReason : null,
     redirectUrl: order.status === "pending" && order.provider === "vipps" ? order.redirectUrl : null,
+    // Lets a return in another browser rebuild the cart. Class ids and price tier only, never
+    // name, email or phone, and only while the order is unpaid.
+    cart:
+      order.status === "paid"
+        ? null
+        : {
+            method: order.method,
+            nights: order.nights.map((night) => ({
+              eventId: night.eventId,
+              ticketId: night.ticketId,
+              priceTier: night.priceTier,
+            })),
+          },
   };
 }
 

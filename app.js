@@ -90,6 +90,11 @@
   const PAY_FAIL = "Payment didn’t go through. You haven’t been charged. Try again or pick another method.";
   const SERVER_FAIL = "Something went wrong on our side. You haven’t been charged. Try again in a moment.";
   const PAYMENT_SESSION_KEY = "hustleOsloPayment";
+  // Details typed into the form, kept so a return from Vipps/Stripe (often a new tab) or a
+  // trip back to the calendar never empties them. Never holds card data.
+  const DETAILS_DRAFT_KEY = "hustleOsloDetails";
+  // Saved carts and details live in localStorage (shared by every tab) for this long.
+  const SAVED_CART_TTL_MS = 2 * 60 * 60 * 1000;
   const sheetBox = { width: 0, height: 0 };
 
   const paymentUi = {
@@ -591,6 +596,7 @@
       }
       restorePendingCart(orderId);
     }
+    if (!state.submitted) restoreDetailsDraft();
     state.sheetOpen = true;
     state.opener = document.activeElement;
     lockBackgroundScroll();
@@ -667,7 +673,7 @@
       return;
     }
     if (state.view === "dates") return go("student");
-    if (state.view === "confirm") return go("dates");
+    if (state.view === "confirm") return go(state.priceTier ? "dates" : "student");
     if (state.view === "details") return go("confirm");
     if (state.view === "checkout") return go("details");
     if (state.view === "failed") return go("checkout");
@@ -1667,7 +1673,7 @@
 
   function resetPaymentAttempt() {
     // Drop the idempotency key so Pay again creates a new order. The cart
-    // stays in sessionStorage until the payment succeeds.
+    // stays in localStorage (2 h) until the payment succeeds.
     paymentUi.prepToken += 1;
     paymentUi.idempotencyKey = "";
     paymentUi.fingerprint = "";
@@ -1925,6 +1931,7 @@
         link: "never",
         paypal: "never",
         amazonPay: "never",
+        klarna: "never",
       },
       buttonHeight: 48,
       buttonTheme: { applePay: "white", googlePay: "white" },
@@ -2120,34 +2127,81 @@
     }).filter(Boolean);
   }
 
-  function readSavedCart() {
+  function storeGet(key) {
+    let raw = null;
     try {
-      return JSON.parse(sessionStorage.getItem(PAYMENT_SESSION_KEY) || "null");
+      raw = window.localStorage.getItem(key);
     } catch (err) {
+      raw = null;
+    }
+    if (raw == null) {
+      try {
+        raw = window.sessionStorage.getItem(key);
+      } catch (err) {
+        raw = null;
+      }
+    }
+    let data = null;
+    try {
+      data = JSON.parse(raw || "null");
+    } catch (err) {
+      data = null;
+    }
+    if (!data || typeof data !== "object") return null;
+    if (typeof data.savedAt === "number" && Date.now() - data.savedAt > SAVED_CART_TTL_MS) {
+      storeRemove(key);
       return null;
     }
+    return data;
   }
 
-  function clearSavedCart() {
+  function storeSet(key, data) {
+    const json = JSON.stringify(Object.assign({}, data, { savedAt: Date.now() }));
     try {
-      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
+      window.localStorage.setItem(key, json);
+      return;
+    } catch (err) {
+      /* private mode or full: fall back to this tab */
+    }
+    try {
+      window.sessionStorage.setItem(key, json);
     } catch (err) {
       /* private mode */
     }
   }
 
-  function savePaymentSession(orderId) {
+  function storeRemove(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (err) {
+      /* private mode */
+    }
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch (err) {
+      /* private mode */
+    }
+  }
+
+  function readSavedCart() {
+    return storeGet(PAYMENT_SESSION_KEY);
+  }
+
+  function clearSavedCart() {
+    storeRemove(PAYMENT_SESSION_KEY);
+  }
+
+  function clearSavedDetails() {
+    storeRemove(DETAILS_DRAFT_KEY);
+  }
+
+  function readDetailsForm() {
     const repeat = $("#bk-repeat");
     const experience = $("#bk-experience");
     const referral = $("#bk-referral");
     const other = $("#bk-referral-other");
-    const prior = readSavedCart();
-    const snapshot = {
-      orderId: orderId || paymentUi.orderId || (prior && prior.orderId) || "",
-      pendingPayment: true,
-      priceTier: state.priceTier,
-      paymentMethod: state.paymentMethod,
-      termsAcceptedAt: state.termsAcceptedAt,
+    return {
+      priceTier: state.priceTier || "",
       customer: {
         fullName: $("#bk-name") ? $("#bk-name").value.trim() : "",
         email: $("#bk-email") ? $("#bk-email").value.trim() : "",
@@ -2157,13 +2211,59 @@
       experience: experience ? experience.value : "",
       referral: referral ? referral.value : "",
       referralOther: other ? other.value.trim() : "",
-      nights: state.selections.map(nightSnapshot),
     };
-    try {
-      sessionStorage.setItem(PAYMENT_SESSION_KEY, JSON.stringify(snapshot));
-    } catch (err) {
-      /* private mode */
+  }
+
+  // Name, email, phone, the student answer and the other answers. Card fields are never read here.
+  function saveDetailsDraft() {
+    storeSet(DETAILS_DRAFT_KEY, readDetailsForm());
+  }
+
+  function fillDetails(saved, onlyEmpty) {
+    if (!saved) return;
+    const customer = saved.customer || {};
+    const fill = (el, value) => {
+      if (!el || typeof value !== "string" || !value) return;
+      if (onlyEmpty && el.value) return;
+      el.value = value;
+    };
+    fill($("#bk-name"), customer.fullName);
+    fill($("#bk-email"), customer.email);
+    fill($("#bk-phone"), customer.phone);
+    const repeat = $("#bk-repeat");
+    if (repeat && saved.repeat && !(onlyEmpty && repeat.checked)) repeat.checked = true;
+    fill($("#bk-experience"), saved.experience);
+    fill($("#bk-referral"), saved.referral);
+    fill($("#bk-referral-other"), saved.referralOther);
+    syncFirstTimer();
+    syncSelectPlaceholder($("#bk-experience"));
+    syncSelectPlaceholder($("#bk-referral"));
+    syncOther();
+  }
+
+  function restoreDetailsDraft() {
+    const saved = storeGet(DETAILS_DRAFT_KEY);
+    if (!saved) return false;
+    fillDetails(saved, true);
+    if (!state.priceTier && (saved.priceTier === "student" || saved.priceTier === "standard")) {
+      setTier(saved.priceTier);
     }
+    return true;
+  }
+
+  function savePaymentSession(orderId) {
+    const prior = readSavedCart();
+    const details = readDetailsForm();
+    const snapshot = Object.assign(details, {
+      orderId: orderId || paymentUi.orderId || (prior && prior.orderId) || "",
+      pendingPayment: true,
+      priceTier: state.priceTier,
+      paymentMethod: state.paymentMethod,
+      termsAcceptedAt: state.termsAcceptedAt,
+      nights: state.selections.map(nightSnapshot),
+    });
+    storeSet(PAYMENT_SESSION_KEY, snapshot);
+    saveDetailsDraft();
   }
 
   function applySnapshot(snapshot) {
@@ -2173,24 +2273,24 @@
     state.termsAcceptedAt = snapshot.termsAcceptedAt || "";
     state.selections = cartSelections(snapshot);
     setTier(state.priceTier);
-    const name = $("#bk-name");
-    const email = $("#bk-email");
-    const phone = $("#bk-phone");
-    if (name) name.value = (snapshot.customer && snapshot.customer.fullName) || "";
-    if (email) email.value = (snapshot.customer && snapshot.customer.email) || "";
-    if (phone) phone.value = (snapshot.customer && snapshot.customer.phone) || "";
-    const repeat = $("#bk-repeat");
-    if (repeat) repeat.checked = !!snapshot.repeat;
-    const experience = $("#bk-experience");
-    const referral = $("#bk-referral");
-    const other = $("#bk-referral-other");
-    if (experience && snapshot.experience) experience.value = snapshot.experience;
-    if (referral && snapshot.referral) referral.value = snapshot.referral;
-    if (other) other.value = snapshot.referralOther || "";
-    syncFirstTimer();
-    syncSelectPlaceholder(experience);
-    syncSelectPlaceholder(referral);
+    fillDetails(snapshot, false);
+    restoreDetailsDraft();
     return state.selections.length > 0;
+  }
+
+  // Last resort for a return in another browser (no local copy): the Worker hands back the
+  // order's classes (ids and price tier only, no personal data) while it is unpaid.
+  function applyServerCart(cart) {
+    if (!cart || !Array.isArray(cart.nights) || !cart.nights.length || state.selections.length) return false;
+    const selections = cartSelections({ nights: cart.nights });
+    if (!selections.length) return false;
+    state.selections = selections;
+    // The Worker only records "student" where it changed the price, so only that is a sure answer.
+    if (!state.priceTier && selections.some((sel) => sel.priceTier === "student")) setTier("student");
+    const method = Object.keys(METHOD_LABEL).find((key) => key === cart.method || METHOD_LABEL[key] === cart.method);
+    if (method) state.paymentMethod = method;
+    restoreDetailsDraft();
+    return true;
   }
 
   function cartMatchesOrder(snapshot, orderId) {
@@ -2253,11 +2353,7 @@
 
   function startOver() {
     paymentUi.resumeGen += 1;
-    try {
-      sessionStorage.removeItem(PAYMENT_SESSION_KEY);
-    } catch (err) {
-      /* private mode */
-    }
+    clearSavedCart();
     stripPaymentQuery();
     resetBooking();
     go("student");
@@ -2273,6 +2369,7 @@
     while (gen === paymentUi.resumeGen && Date.now() < deadline) {
       const data = await fetchOrder(orderId);
       if (gen !== paymentUi.resumeGen) return;
+      if (data && data.cart && applyServerCart(data.cart)) savePaymentSession(orderId);
       const screen = window.HustlePaymentStatus.returnScreen(data);
       if (screen.kind === "paid") {
         stripPaymentQuery();
@@ -2302,6 +2399,13 @@
     if (gen === paymentUi.resumeGen) showVippsWaiting(provider, redirectUrl);
   }
 
+  async function recoverServerCart(orderId) {
+    const data = await fetchOrder(orderId);
+    if (!data || !data.cart || !applyServerCart(data.cart)) return;
+    savePaymentSession(orderId);
+    if (state.view === "failed") showPaymentFailed(PAY_FAIL);
+  }
+
   function maybeResumePayment() {
     if (!paymentsLive()) return;
     const params = new URLSearchParams(window.location.search);
@@ -2312,7 +2416,9 @@
       state.view = "failed";
       openSheet();
       stripPaymentQuery();
+      paymentUi.orderId = orderId;
       showPaymentFailed(PAY_FAIL);
+      if (!state.selections.length) recoverServerCart(orderId);
       return;
     }
     state.view = "waiting";
@@ -3004,6 +3110,7 @@
     state.submitResult = result;
     state.submitted = true;
     clearSavedCart();
+    clearSavedDetails();
     clearCardFields();
     go("done");
   }
@@ -3043,6 +3150,12 @@
       return;
     }
     setErr("pay", false);
+    if (!validateDetails(false)) {
+      // A return in another browser can bring the classes back without the details.
+      go("details");
+      validateDetails(true);
+      return;
+    }
     if (!paymentsLive() && state.paymentMethod === "card" && (CONFIG.PAYMENTS_ENABLED || cardTouched())) {
       if (!validateCard(true)) {
         const first = $("#bk-card-fields [aria-invalid='true']");
@@ -3236,7 +3349,12 @@
       syncOther();
     }
     if (t.id === "bk-experience") syncSelectPlaceholder(t);
+    if (isDraftField(t)) saveDetailsDraft();
     syncEnterKeyHints();
+  }
+
+  function isDraftField(t) {
+    return !!(t && t.id && /^bk-(name|email|phone|repeat|experience|referral|referral-other)$/.test(t.id));
   }
 
   function onSheetInput(e) {
@@ -3245,6 +3363,7 @@
       validateDetails(false);
       schedulePrepare();
     }
+    if (isDraftField(t)) saveDetailsDraft();
     syncEnterKeyHints();
     if (t.id === "bk-card-number") formatCardNumber(t);
     if (t.id === "bk-card-expiry") formatExpiry(t);

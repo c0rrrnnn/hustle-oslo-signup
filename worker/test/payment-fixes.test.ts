@@ -278,6 +278,16 @@ test("a Vipps return before payment stays pending and keeps the redirect", async
   assert.equal(body.email, undefined);
   assert.equal(body.fullName, undefined);
   assert.equal(body.nights, undefined);
+  // The cart comes back for a return in another browser: ids and tier only, no personal data.
+  const stored = await getOrder(kv, ORDER_ID);
+  assert.ok(body.cart && Array.isArray(body.cart.nights) && body.cart.nights.length > 0);
+  assert.equal(body.cart.nights.length, stored?.nights.length);
+  for (const night of body.cart.nights) assert.deepEqual(Object.keys(night).sort(), ["eventId", "priceTier", "ticketId"]);
+  assert.equal(body.cart.nights[0].eventId, stored?.nights[0].eventId);
+  const text = JSON.stringify(body);
+  assert.equal(text.includes(stored?.customer.email || "@"), false);
+  assert.equal(text.includes(stored?.customer.phone || "+47"), false);
+  assert.equal(text.includes(stored?.customer.fullName || "name"), false);
   assert.equal((await getOrder(kv, ORDER_ID))?.status, "pending");
 });
 

@@ -15,8 +15,10 @@ function stripeFetch() {
       const params = new URLSearchParams(call.body);
       assert.equal(params.get("amount"), "22000");
       assert.equal(params.get("currency"), "nok");
-      assert.equal(params.get("automatic_payment_methods[enabled]"), "true");
-      assert.equal(params.get("payment_method_types[0]"), null);
+      // Card only (Apple Pay and Google Pay ride on card). No Klarna, Link or other dashboard methods.
+      assert.equal(params.get("automatic_payment_methods[enabled]"), null);
+      assert.equal(params.get("payment_method_types[0]"), "card");
+      assert.equal(params.get("payment_method_types[1]"), null);
       assert.equal(params.get("metadata[orderId]"), ORDER_ID);
       assert.equal(params.get("receipt_email"), null);
       assert.equal(call.body.includes("receipt_email"), false);
