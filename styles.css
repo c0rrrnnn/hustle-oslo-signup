@@ -3531,14 +3531,17 @@ a.bk-btn {
   box-shadow: 0 0 0 2px #fff;
 }
 
+/* Joined Card row + form: offset shadows that never extend across the join, so
+   no sub-pixel sliver of the ring shows between the row and the form. */
 .bk-pay-list:has(+ .is-open) .bk-mrow.is-on[data-method="card"]:has(input:focus-visible) {
-  clip-path: inset(-3px -3px 0 -3px);
+  box-shadow: 0 -2px 0 0 #fff, -2px 0 0 0 #fff, 2px 0 0 0 #fff,
+    -1.5px -1.5px 0 0 #fff, 1.5px -1.5px 0 0 #fff;
 }
 
 .bk-pay-list:has(.bk-mrow[data-method="card"] input:focus-visible) + #bk-card-slot.is-open,
 .bk-pay-list:has(.bk-mrow[data-method="card"] input:focus-visible) + #bk-fail-card-slot.is-open {
-  box-shadow: 0 0 0 2px #fff;
-  clip-path: inset(0 -3px -3px -3px);
+  box-shadow: 0 2px 0 0 #fff, -2px 0 0 0 #fff, 2px 0 0 0 #fff,
+    -1.5px 1.5px 0 0 #fff, 1.5px 1.5px 0 0 #fff;
 }
 
 .bk-mrow input {
