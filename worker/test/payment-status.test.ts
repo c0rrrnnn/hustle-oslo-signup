@@ -106,7 +106,7 @@ test("the return page offers Vipps again and the card form defaults to card", ()
   assert.match(chrome, /btn\.classList\.toggle\("bk-btn-primary", method !== "vipps"\)/);
   assert.equal(chrome.includes('classList.remove("bk-btn-vipps")'), false);
   assert.match(html, /data-action="start-over"/);
-  const waitingFoot = html.slice(html.indexOf('id="bk-foot-waiting"'), html.indexOf('id="bk-foot-done"'));
+  const waitingFoot = html.slice(html.indexOf('id="bk-foot-waiting"'), html.indexOf("</footer>", html.indexOf('id="bk-foot-waiting"')));
   assert.ok(waitingFoot.indexOf('data-action="start-over"') < waitingFoot.indexOf('id="bk-vipps-again"'));
   assert.equal(waitingFoot.includes("bk-foot-note"), false);
   assert.match(css, /a\.bk-btn \{[^}]*text-decoration: none;/);

@@ -116,6 +116,15 @@
     resumeGen: 0,
     timer: null,
     mountChain: null,
+    // Deferred-intent Elements: mounted from GET /config before any order exists.
+    config: null,
+    cfg: null,
+    stripeShared: null,
+    stripeKey: "",
+    walletElements: null,
+    deferred: false,
+    mountedKey: "",
+    walletsSettled: false,
   };
 
   const state = {
@@ -630,10 +639,12 @@
     document.body.classList.add("bk-open");
     setInert(true);
     captureSheetBox();
+    warmPayments();
     go(state.submitted ? "student" : state.view || "student", { instant: true });
   }
 
   function closeSheet() {
+    clearStudentFeedback();
     closeGcalList(false);
     paymentUi.resumeGen += 1;
     if (state.submitting) return;
@@ -734,12 +745,33 @@
     return studentAdvancedAt !== 0 && Date.now() - studentAdvancedAt < 500;
   }
 
+  // The tapped answer shows white for this long before the date step opens, so the tap is seen.
+  const STUDENT_FEEDBACK_MS = 250;
+  let studentFeedbackTimer = 0;
+
+  function clearStudentFeedback() {
+    if (studentFeedbackTimer) clearTimeout(studentFeedbackTimer);
+    studentFeedbackTimer = 0;
+    ["bk-student-yes", "bk-student-no"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.remove("is-tapped");
+    });
+  }
+
   function chooseStudent(tier) {
-    if (studentAdvanceLocked()) return;
+    // One answer per visit: taps (or Enter/Space) during the white moment or right after the advance are ignored.
+    if (studentFeedbackTimer || studentAdvanceLocked()) return;
     setTier(tier);
     if (state.view !== "student") return;
-    studentAdvancedAt = Date.now();
-    go("dates");
+    const btn = document.getElementById(state.priceTier === "student" ? "bk-student-yes" : "bk-student-no");
+    if (btn) btn.classList.add("is-tapped");
+    studentFeedbackTimer = setTimeout(() => {
+      studentFeedbackTimer = 0;
+      clearStudentFeedback();
+      if (state.view !== "student" || !state.sheetOpen) return;
+      studentAdvancedAt = Date.now();
+      go("dates");
+    }, STUDENT_FEEDBACK_MS);
   }
 
   function swallowStudentFollowup(e) {
@@ -1335,7 +1367,28 @@
       }
     }
     const nightsMatch = paymentUi.nightsKey === nightsKey();
-    host.hidden = !(onStep && paymentUi.walletsReady && nightsMatch);
+    // While Stripe checks the wallet, a 42px placeholder of the button's shape holds the space on
+    // devices that will very likely show one, so nothing jumps when the real button fades in.
+    const loading = !paymentUi.walletsReady && !paymentUi.walletsSettled && walletLikely();
+    host.classList.toggle("is-loading", loading);
+    host.hidden = !(onStep && (paymentUi.walletsReady ? nightsMatch : loading));
+  }
+
+  function walletLikely(env) {
+    // Synchronous guess only (no wallet query): Apple Pay-capable Safari, or a Chromium browser that
+    // Google Pay "always" covers. Samsung Internet, Firefox, Edge and Opera are left out.
+    const w = env || window;
+    const ua = (w.navigator && w.navigator.userAgent) || "";
+    try {
+      if (w.ApplePaySession && typeof w.ApplePaySession.canMakePayments === "function") {
+        return !!w.ApplePaySession.canMakePayments();
+      }
+    } catch (err) {
+      return false;
+    }
+    if (/iPhone|iPad|iPod/.test(ua)) return false;
+    if (/SamsungBrowser|Firefox|FxiOS|Edg|OPR|CriOS/.test(ua)) return false;
+    return !!w.PaymentRequest && /Chrome\//.test(ua);
   }
 
   function placePaymentHost() {
@@ -1787,9 +1840,13 @@
     });
     paymentUi.wallets = null;
     paymentUi.walletsReady = false;
+    paymentUi.walletsSettled = false;
     paymentUi.element = null;
     paymentUi.elements = null;
+    paymentUi.walletElements = null;
     paymentUi.stripe = null;
+    paymentUi.deferred = false;
+    paymentUi.mountedKey = "";
   }
 
   function nightsKey() {
@@ -1828,17 +1885,30 @@
   function schedulePrepare() {
     if (!paymentsLive()) return;
     if (state.submitting) return;
-    if (state.view !== "checkout" && state.view !== "failed") return;
+    const early = state.view === "confirm" || state.view === "details";
+    if (!early && state.view !== "checkout" && state.view !== "failed") return;
     if (paymentUi.timer) window.clearTimeout(paymentUi.timer);
+    // Deferred mode creates no order, so there's nothing to debounce.
+    const wait = paymentUi.cfg ? 0 : 250;
     paymentUi.timer = window.setTimeout(function () {
       paymentUi.timer = null;
       prepareStripeElement();
-    }, 250);
+    }, wait);
   }
 
   async function prepareStripeElement() {
     if (state.submitting) return;
     if (!paymentsLive()) return;
+    const cfg = await loadPaymentConfig();
+    if (state.submitting) return;
+    if (cfg) {
+      // Deferred intent: Elements and the wallet button mount from the cart total alone (already on
+      // the confirm/details step), and the PaymentIntent is created only when the person pays.
+      if (!state.selections.length) return;
+      const mounted = await mountDeferred();
+      if (!mounted.ok && (state.view === "checkout" || state.view === "failed")) setPaymentNote(PAY_FAIL, true);
+      return;
+    }
     if (state.view !== "checkout" && state.view !== "failed") return;
     if (!validateDetails(false)) return;
     const token = ++paymentUi.prepToken;
@@ -1904,6 +1974,142 @@
     }
   }
 
+  // GET /config gives the publishable key without creating an order. An older Worker without it
+  // answers 404, and the site falls back to creating the PaymentIntent first (the previous flow).
+  function loadPaymentConfig() {
+    if (!paymentsLive()) return Promise.resolve(null);
+    if (paymentUi.config) return paymentUi.config;
+    paymentUi.config = fetch(workerUrl("/config"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const cfg = data && data.ok && publishableKeyOk(data.publishableKey) ? { publishableKey: data.publishableKey } : null;
+        paymentUi.cfg = cfg;
+        return cfg;
+      })
+      .catch(() => {
+        paymentUi.config = null; // a network blip retries on the next prepare
+        return null;
+      });
+    return paymentUi.config;
+  }
+
+  function preconnectWorker() {
+    // index.html preconnects to Stripe; the Worker origin is only known here.
+    if (!paymentsLive() || !document.head) return;
+    let origin = "";
+    try {
+      origin = new URL(CONFIG.PAYMENTS_WORKER_URL).origin;
+    } catch (err) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = origin;
+    link.crossOrigin = "anonymous";
+    document.head.appendChild(link);
+  }
+
+  function warmPayments() {
+    if (!paymentsLive()) return;
+    loadPaymentConfig();
+    loadStripeJs()
+      .then(() => loadPaymentConfig())
+      .then((cfg) => {
+        if (cfg) sharedStripe(cfg.publishableKey);
+      })
+      .catch(() => {});
+  }
+
+  function sharedStripe(publishableKey) {
+    if (!window.Stripe) return null;
+    if (!paymentUi.stripeShared || paymentUi.stripeKey !== publishableKey) {
+      paymentUi.stripeShared = window.Stripe(publishableKey, { locale: "en" });
+      paymentUi.stripeKey = publishableKey;
+    }
+    return paymentUi.stripeShared;
+  }
+
+  function deferredElementsOptions(amountKr) {
+    // Must match the PaymentIntent POST /checkout creates: NOK, card only (Apple Pay and Google Pay
+    // are card wallets), automatic capture, no setup_future_usage.
+    return {
+      mode: "payment",
+      amount: Math.round(Number(amountKr) * 100),
+      currency: "nok",
+      paymentMethodTypes: ["card"],
+      captureMethod: "automatic",
+      locale: "en",
+      appearance: STRIPE_APPEARANCE,
+    };
+  }
+
+  function deferredKey() {
+    return nightsKey() + "|" + currentAmount();
+  }
+
+  function premountHosts() {
+    // Mount straight into the checkout slots (even while that step is still hidden), so arriving on
+    // checkout doesn't move the hosts and restart Stripe's iframes.
+    if (state.view === "failed") return;
+    const wallet = $("#bk-wallet-host");
+    const walletSlot = $("#bk-wallet-slot");
+    if (wallet && walletSlot && wallet.parentElement !== walletSlot) walletSlot.appendChild(wallet);
+    const card = $("#bk-payment-host");
+    const cardSlot = $("#bk-card-slot");
+    if (card && cardSlot && card.parentElement !== cardSlot) cardSlot.appendChild(card);
+  }
+
+  function mountDeferred() {
+    const run = () => mountDeferredNow();
+    paymentUi.mountChain = (paymentUi.mountChain || Promise.resolve()).then(run, run);
+    return paymentUi.mountChain;
+  }
+
+  async function mountDeferredNow() {
+    const cfg = paymentUi.cfg;
+    if (!cfg) return { ok: false, message: PAY_FAIL };
+    const generation = paymentUi.prepToken;
+    try {
+      await loadStripeJs();
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    if (generation !== paymentUi.prepToken || state.submitting) return { ok: true };
+    const amountKr = currentAmount();
+    if (!(amountKr > 0)) return { ok: false, message: PAY_FAIL };
+    const key = deferredKey();
+    if (paymentUi.deferred && paymentUi.mountedKey === key && paymentUi.wallets && paymentUi.element) {
+      placeWalletHost();
+      placePaymentHost();
+      return { ok: true };
+    }
+    premountHosts();
+    const cardHost = $("#bk-payment-element");
+    const walletHost = $("#bk-express-checkout");
+    const stripe = sharedStripe(cfg.publishableKey);
+    if (!cardHost || !walletHost || !stripe) return { ok: false, message: PAY_FAIL };
+    unmountStripeElements();
+    // Separate groups, so a wallet's elements.submit() never validates the empty card form.
+    const walletElements = stripe.elements(deferredElementsOptions(amountKr));
+    const cardElements = stripe.elements(deferredElementsOptions(amountKr));
+    const wallets = createWalletElement(walletElements);
+    const element = createCardElement(cardElements);
+    paymentUi.stripe = stripe;
+    paymentUi.elements = cardElements;
+    paymentUi.walletElements = walletElements;
+    paymentUi.wallets = wallets;
+    paymentUi.element = element;
+    paymentUi.deferred = true;
+    paymentUi.mountedKey = key;
+    paymentUi.nightsKey = nightsKey();
+    paymentUi.surface = "stripe";
+    wallets.mount("#bk-express-checkout");
+    element.mount("#bk-payment-element");
+    placeWalletHost();
+    placePaymentHost();
+    return { ok: true };
+  }
+
   function loadStripeJs() {
     if (window.Stripe) return Promise.resolve();
     if (paymentUi.js) return paymentUi.js;
@@ -1917,6 +2123,17 @@
     });
     return paymentUi.js;
   }
+
+  const STRIPE_APPEARANCE = {
+    theme: "night",
+    variables: {
+      colorPrimary: "#ffffff",
+      colorBackground: "#1c1c1f",
+      colorText: "#f4f4f5",
+      borderRadius: "12px",
+      fontFamily: "DM Sans, sans-serif",
+    },
+  };
 
   function publishableKeyOk(key) {
     const value = String(key || "");
@@ -1964,16 +2181,7 @@
     const elements = stripe.elements({
       locale: "en",
       clientSecret: created.clientSecret,
-      appearance: {
-        theme: "night",
-        variables: {
-          colorPrimary: "#ffffff",
-          colorBackground: "#1c1c1f",
-          colorText: "#f4f4f5",
-          borderRadius: "12px",
-          fontFamily: "DM Sans, sans-serif",
-        },
-      },
+      appearance: STRIPE_APPEARANCE,
     });
     const wallets = createWalletElement(elements);
     const element = createCardElement(elements);
@@ -1997,13 +2205,18 @@
       layout: { type: "tabs", defaultCollapsed: false },
       wallets: { applePay: "never", googlePay: "never", link: "never" },
       defaultValues: {
-        billingDetails: {
-          name: $("#bk-name").value.trim(),
-          email: $("#bk-email").value.trim(),
-          address: { country: "NO" },
-        },
+        billingDetails: cardBillingDefaults(),
       },
     });
+  }
+
+  function cardBillingDefaults() {
+    const billing = { address: { country: "NO" } };
+    const name = $("#bk-name") ? $("#bk-name").value.trim() : "";
+    const email = $("#bk-email") ? $("#bk-email").value.trim() : "";
+    if (name) billing.name = name;
+    if (email) billing.email = email;
+    return billing;
   }
 
   function googlePayMode() {
@@ -2027,7 +2240,9 @@
         amazonPay: "never",
         klarna: "never",
       },
-      buttonHeight: 48,
+      // Brand-guideline plain buttons (no "Buy with"), white, 42px tall: the logo renders ~16px.
+      buttonHeight: 42,
+      buttonType: { applePay: "plain", googlePay: "plain" },
       buttonTheme: { applePay: "white", googlePay: "white" },
       layout: { maxColumns: 1, maxRows: 0, overflow: "never" },
     });
@@ -2035,10 +2250,18 @@
       if (paymentUi.wallets !== element) return;
       const methods = (event && event.availablePaymentMethods) || {};
       paymentUi.walletsReady = !!(methods.applePay || methods.googlePay);
+      paymentUi.walletsSettled = true;
+      placeWalletHost();
+    });
+    element.on("loaderror", () => {
+      if (paymentUi.wallets !== element) return;
+      paymentUi.walletsReady = false;
+      paymentUi.walletsSettled = true;
       placeWalletHost();
     });
     element.on("click", (event) => {
-      // Synchronous. The PaymentIntent was created before this button existed.
+      // Synchronous: Apple Pay needs the sheet opened inside the tap. The PaymentIntent is created
+      // later, in "confirm" (deferred mode), or existed before this button (fallback mode).
       if (event && typeof event.resolve === "function") event.resolve();
     });
     element.on("confirm", (event) => {
@@ -2054,6 +2277,7 @@
   }
 
   async function confirmWalletPayment(walletEvent) {
+    if (paymentUi.deferred) return confirmWalletDeferred(walletEvent);
     if (state.submitting || !paymentUi.stripe || !paymentUi.elements) {
       walletPaymentFailed(walletEvent, PAY_FAIL);
       return;
@@ -2096,6 +2320,139 @@
       $("#book-sheet").setAttribute("aria-busy", "false");
       updatePayChrome();
     }
+  }
+
+  // Stripe's deferred-intent Express Checkout pattern: in "confirm" (the wallet sheet is already
+  // authorized) submit the wallet group, create the PaymentIntent, then confirm with its clientSecret.
+  async function confirmWalletDeferred(walletEvent) {
+    const stripe = paymentUi.stripe;
+    const elements = paymentUi.walletElements;
+    if (state.submitting || !stripe || !elements) {
+      walletPaymentFailed(walletEvent, PAY_FAIL);
+      return;
+    }
+    state.submitting = true;
+    const pay = $("#bk-pay");
+    const retry = $("#bk-fail-retry");
+    if (pay) pay.disabled = true;
+    if (retry) retry.disabled = true;
+    $("#book-sheet").setAttribute("aria-busy", "true");
+    updatePayChrome();
+    const started = typeof performance !== "undefined" ? performance.now() : Date.now();
+    try {
+      const submitted = await elements.submit();
+      if (submitted && submitted.error) {
+        walletPaymentFailed(walletEvent, submitted.error.message);
+        return;
+      }
+      state.termsAcceptedAt = new Date().toISOString();
+      const created = await postCheckout("card");
+      if (!created.ok || created.status === "failed" || created.status === "cancelled") {
+        const message = (created && created.message) || PAY_FAIL;
+        walletPaymentFailed(walletEvent, message);
+        showPaymentFailed(message);
+        return;
+      }
+      if (created.status === "paid" || created.status === "reserved") {
+        walletPaymentFailed(walletEvent, "You’re already booked.");
+        rememberPaidMethod(created);
+        const done = resultFromOrder(created);
+        if (done.ok) {
+          paymentUi.orderId = created.orderId;
+          showConfirmation(done.booking || { ok: true, confirmationSent: false, paidByWorker: true });
+        }
+        return;
+      }
+      if (!created.clientSecret) {
+        walletPaymentFailed(walletEvent, PAY_FAIL);
+        showPaymentFailed(PAY_FAIL);
+        return;
+      }
+      paymentUi.orderId = created.orderId;
+      savePaymentSession(created.orderId);
+      const confirmed = await stripe.confirmPayment({
+        elements: elements,
+        clientSecret: created.clientSecret,
+        confirmParams: {
+          return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(created.orderId),
+        },
+        redirect: "if_required",
+      });
+      logTiming("stripe-confirm", started, { surface: "wallet-deferred" });
+      const result = await resolveConfirmed(created.orderId, confirmed, started);
+      if (result && result.redirecting) return;
+      if (!result || result.ok !== true) {
+        walletPaymentFailed(walletEvent, result && result.message);
+        showPaymentFailed(result && result.message);
+        return;
+      }
+      state.transactionNumber = result.transactionNumber || "";
+      state.paymentPending = false;
+      showConfirmation(result.booking || { ok: true, confirmationSent: false, paidByWorker: true });
+    } catch (err) {
+      console.error(err);
+      walletPaymentFailed(walletEvent, PAY_FAIL);
+      showPaymentFailed(PAY_FAIL);
+    } finally {
+      state.submitting = false;
+      if (pay) pay.disabled = false;
+      if (retry) retry.disabled = false;
+      $("#book-sheet").setAttribute("aria-busy", "false");
+      updatePayChrome();
+    }
+  }
+
+  // Card in deferred mode: validate the card form first, then create the PaymentIntent, then confirm.
+  async function payCardDeferred(method) {
+    const stripe = paymentUi.stripe;
+    const elements = paymentUi.elements;
+    if (!stripe || !elements || !paymentUi.element) {
+      schedulePrepare();
+      return { ok: false, reason: "needs-details", message: "Enter your payment details, then press Pay again." };
+    }
+    let submitted;
+    const submitStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
+    try {
+      submitted = await elements.submit();
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    logTiming("elements-submit", submitStarted, { deferred: true });
+    if (submitted && submitted.error) {
+      const message = submitted.error.message || "Enter your payment details, then press Pay again.";
+      setPaymentNote(message, true);
+      return { ok: false, reason: "needs-details", message: message };
+    }
+    const created = await postCheckout(method);
+    if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
+    if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
+    if (created.status === "paid" || created.status === "reserved") {
+      rememberPaidMethod(created);
+      paymentUi.orderId = created.orderId;
+      return resultFromOrder(created);
+    }
+    if (!created.clientSecret) return { ok: false, message: PAY_FAIL };
+    paymentUi.orderId = created.orderId;
+    setPaymentNote("");
+    savePaymentSession(created.orderId);
+    const person = buildPersonFields();
+    let confirmed;
+    const confirmStarted = typeof performance !== "undefined" ? performance.now() : Date.now();
+    try {
+      confirmed = await stripe.confirmPayment({
+        elements: elements,
+        clientSecret: created.clientSecret,
+        confirmParams: {
+          return_url: window.location.origin + window.location.pathname + "?order=" + encodeURIComponent(created.orderId),
+          payment_method_data: { billing_details: { name: person.fullName, email: person.email } },
+        },
+        redirect: "if_required",
+      });
+    } catch (err) {
+      return { ok: false, message: PAY_FAIL };
+    }
+    logTiming("stripe-confirm", confirmStarted, { surface: "card-deferred" });
+    return resolveConfirmed(created.orderId, confirmed, confirmStarted);
   }
 
   function resultFromOrder(data) {
@@ -2545,6 +2902,7 @@
     }
     cancelPrepare();
     paymentUi.redirectOrderId = "";
+    if (method !== "vipps" && paymentUi.cfg) return payCardDeferred(method);
     const created = await postCheckout(method);
     if (!created.ok) return { ok: false, message: created.message || PAY_FAIL };
     if (created.status === "failed" || created.status === "cancelled") return { ok: false, message: PAY_FAIL };
@@ -3484,6 +3842,7 @@
     initCalendarMonth();
     syncFirstTimer();
     placeCardFields();
+    preconnectWorker();
     maybeResumePayment();
     const start = $("#btn-start");
     if (start) start.addEventListener("click", openSheet);
@@ -3536,12 +3895,15 @@
     buildOrder: buildOrder,
     resultFromOrder: resultFromOrder,
     publishableKeyOk: publishableKeyOk,
+    walletLikely: walletLikely,
+    deferredElementsOptions: deferredElementsOptions,
     config: CONFIG,
     formFieldNeedsAttention: formFieldNeedsAttention,
     nextFormFieldIndex: nextFormFieldIndex,
     enterKeyHintFor: enterKeyHintFor,
     cartSelections: cartSelections,
     cartMatchesOrder: cartMatchesOrder,
+    STUDENT_FEEDBACK_MS: STUDENT_FEEDBACK_MS,
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

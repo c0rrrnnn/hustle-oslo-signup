@@ -217,6 +217,28 @@ function el(tag: string, attrs: Record<string, string> = {}) {
 
 let active: El | null = null;
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function bootApp(ui: ReturnType<typeof mountSheet>, reducedMotion = false) {
+  const sandbox = {
+    window: {
+      HUSTLE_EVENTS: [] as unknown[],
+      location: { search: "", pathname: "/", origin: "http://127.0.0.1" },
+      matchMedia(query: string) {
+        return { matches: reducedMotion && /reduce/.test(query), addEventListener() {} };
+      },
+    } as Record<string, unknown>,
+    document: ui.document,
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  sandbox.window.document = ui.document;
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync(new URL("../../app.js", import.meta.url), "utf8"), sandbox, { filename: "app.js" });
+  return sandbox.window as { HustleOslo: { STUDENT_FEEDBACK_MS: number } };
+}
+
 function mountSheet() {
   const body = el("body");
   const start = el("button", { id: "btn-start" });
@@ -291,20 +313,7 @@ function mountSheet() {
 
 test("choosing Yes or No opens the date step and keeps that answer", async () => {
   const ui = mountSheet();
-  const sandbox = {
-    window: {
-      HUSTLE_EVENTS: [] as unknown[],
-      location: { search: "", pathname: "/", origin: "http://127.0.0.1" },
-      matchMedia() {
-        return { matches: false, addEventListener() {} };
-      },
-    } as Record<string, unknown>,
-    document: ui.document,
-    console,
-  };
-  sandbox.window.document = ui.document;
-  vm.createContext(sandbox);
-  vm.runInContext(readFileSync(new URL("../../app.js", import.meta.url), "utf8"), sandbox, { filename: "app.js" });
+  bootApp(ui);
 
   ui.start.click();
   assert.equal(ui.student.hidden, false);
@@ -320,6 +329,10 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.no.getAttribute("aria-pressed"), "false");
 
   ui.document.emit("keydown", { target: ui.no, key: " ", preventDefault() {}, stopPropagation() {}, stopped: false });
+  assert.equal(ui.no.classList.contains("is-tapped"), true);
+  assert.equal(ui.student.hidden, false);
+  await wait(270);
+  assert.equal(ui.no.classList.contains("is-tapped"), false);
   assert.equal(ui.student.hidden, true);
   assert.equal(ui.dates.hidden, false);
   assert.equal(ui.document.activeElement, ui.datesHeading);
@@ -347,6 +360,7 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.studentFoot.hidden, false);
 
   ui.yes.click();
+  await wait(270);
   assert.equal(ui.dates.hidden, false);
   assert.equal(ui.yes.getAttribute("aria-pressed"), "true");
   assert.equal(ui.no.getAttribute("aria-pressed"), "false");
@@ -354,4 +368,80 @@ test("choosing Yes or No opens the date step and keeps that answer", async () =>
   assert.equal(ui.dates.hidden, false);
   assert.equal(ui.student.hidden, true);
   assert.equal(ui.document.getElementById("bk-step-confirm"), null);
+});
+
+test("a student answer shows white for ~250 ms before the date step, once per tap", async () => {
+  const ui = mountSheet();
+  const win = bootApp(ui);
+  assert.equal(win.HustleOslo.STUDENT_FEEDBACK_MS, 250);
+
+  ui.start.click();
+  ui.yes.click();
+  // White moment: the tapped answer is on, the step has not moved yet.
+  assert.equal(ui.yes.classList.contains("is-tapped"), true);
+  assert.equal(ui.yes.classList.contains("is-on"), true);
+  assert.equal(ui.yes.getAttribute("aria-pressed"), "true");
+  assert.equal(ui.no.classList.contains("is-tapped"), false);
+  assert.equal(ui.student.hidden, false);
+  assert.equal(ui.dates.hidden, true);
+
+  // Double tap / tap on the other answer during the white moment is ignored.
+  ui.yes.click();
+  ui.no.click();
+  assert.equal(ui.no.classList.contains("is-on"), false);
+  assert.equal(ui.yes.getAttribute("aria-pressed"), "true");
+
+  await wait(150);
+  assert.equal(ui.dates.hidden, true, "still waiting at 150 ms");
+  await wait(130);
+  assert.equal(ui.dates.hidden, false, "advanced by 280 ms");
+  assert.equal(ui.student.hidden, true);
+  assert.equal(ui.yes.classList.contains("is-tapped"), false);
+
+  // Back shows the earlier answer (is-on), never a leftover tap state.
+  await wait(520);
+  ui.back.click();
+  assert.equal(ui.student.hidden, false);
+  assert.equal(ui.yes.classList.contains("is-on"), true);
+  assert.equal(ui.yes.classList.contains("is-tapped"), false);
+  assert.equal(ui.no.classList.contains("is-tapped"), false);
+
+  // Changing the answer moves the white to the new choice right away.
+  ui.no.focus();
+  ui.document.emit("keydown", { target: ui.no, key: "Enter", preventDefault() {}, stopPropagation() {}, stopped: false });
+  assert.equal(ui.no.classList.contains("is-tapped"), true);
+  assert.equal(ui.no.classList.contains("is-on"), true);
+  assert.equal(ui.yes.classList.contains("is-on"), false);
+  assert.equal(ui.student.hidden, false);
+  await wait(280);
+  assert.equal(ui.dates.hidden, false);
+});
+
+test("closing the sheet during the white moment cancels the advance and clears it", async () => {
+  const ui = mountSheet();
+  bootApp(ui, true);
+  ui.start.click();
+  ui.no.click();
+  assert.equal(ui.no.classList.contains("is-tapped"), true);
+  ui.back.click();
+  assert.equal(ui.sheet.hidden, true);
+  assert.equal(ui.no.classList.contains("is-tapped"), false);
+  await wait(300);
+  assert.equal(ui.dates.hidden, true);
+  ui.start.click();
+  assert.equal(ui.student.hidden, false);
+  ui.yes.click();
+  await wait(280);
+  assert.equal(ui.dates.hidden, false);
+});
+
+test("tap feedback is a class (no :hover), and reduced motion has no transition", () => {
+  const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.bk-choice\.is-on,\s*\.bk-choice\.is-tapped \{[^}]*background:\s*#fff;[^}]*color:\s*#121214;/);
+  assert.equal(/\.bk-choice[^{]*:hover/.test(css), false);
+  assert.equal(/\.bk-choice[^{]*:active/.test(css), false);
+  const plain = css.match(/\n\.bk-choice \{[^}]+\}/);
+  assert.ok(plain);
+  assert.equal(/transition/.test(plain[0]), false, "transition only inside prefers-reduced-motion: no-preference");
+  assert.match(css, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bk-choice \{\s*transition:/);
 });

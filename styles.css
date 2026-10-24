@@ -2610,8 +2610,7 @@ body.bk-open {
   flex-direction: column;
 }
 
-/* The Pay terms, directly above the Pay button. On the booked screen it is
-   the only line in the bar. */
+/* The Pay terms, directly above the Pay button. */
 .bk-foot-note {
   flex: 0 0 auto;
   margin: 0 0 10px;
@@ -2621,8 +2620,7 @@ body.bk-open {
   margin-bottom: 0;
 }
 
-.bk-foot-note > .bk-tos,
-.bk-foot-note > .bk-mini {
+.bk-foot-note > .bk-tos {
   margin: 0;
 }
 
@@ -2803,10 +2801,19 @@ a.bk-btn {
   margin: 0;
 }
 
-.bk-choice.is-on {
+/* .is-on = the chosen answer; .is-tapped = the 250 ms white moment after a tap before the date step
+   (a class, not :hover/:active, so iOS Safari never leaves a sticky state). */
+.bk-choice.is-on,
+.bk-choice.is-tapped {
   background: #fff;
   color: #121214;
   border-color: #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bk-choice {
+    transition: background-color 90ms ease-out, color 90ms ease-out, border-color 90ms ease-out;
+  }
 }
 
 .bk-cal {
@@ -3439,7 +3446,10 @@ a.bk-btn {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
+  /* 42px tall, same as the Apple Pay / Google Pay buttons (buttonHeight 42), so wallets are never smaller. */
+  padding: 7px 14px;
+  min-height: 42px;
+  box-sizing: border-box;
   border: 1px solid #2a2a2e;
   border-radius: 12px;
   margin-top: 8px;
@@ -3520,7 +3530,44 @@ a.bk-btn {
 }
 
 .bk-wallet-host {
+  position: relative;
   margin: 8px 0 4px;
+}
+
+/* Same 42px shape and position as the plain wallet button; shown only while Stripe checks the wallet. */
+.bk-wallet-ph {
+  display: none;
+  height: 42px;
+  margin: 4px 0; /* Stripe's iframe is 50px: the 42px button plus 4px focus-ring room above and below */
+  border-radius: 12px;
+  background: linear-gradient(90deg, #2a2a2e 0%, #34343a 50%, #2a2a2e 100%);
+  background-size: 200% 100%;
+  animation: bk-wallet-ph 1.2s ease-in-out infinite;
+}
+
+.bk-wallet-host.is-loading .bk-wallet-ph {
+  display: block;
+}
+
+#bk-express-checkout {
+  transition: opacity 0.18s ease;
+}
+
+.bk-wallet-host.is-loading #bk-express-checkout {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes bk-wallet-ph {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-wallet-ph { animation: none; }
+  #bk-express-checkout { transition: none; }
 }
 
 .bk-payment-host {
@@ -3957,6 +4004,17 @@ a.bk-cal-link:hover {
 
 .cf-cal-sec .bk-cal-actions {
   margin-top: 0;
+}
+
+/* The booked screen has no bottom bar. The Instagram line is page content
+   under the calendar buttons and scrolls with them; the body keeps its normal
+   bottom padding plus the home-indicator inset. */
+.bk-done-help {
+  margin: 24px 0 0;
+}
+
+.bk-sheet.is-done .bk-body {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .cf-cal-pair {
