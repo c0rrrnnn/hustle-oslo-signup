@@ -45,7 +45,7 @@ test("checkout stays in the 480px drawer and the selected card closes its box", 
   assert.equal(js.includes("paySeg"), false);
   assert.equal(css.includes("is-wide"), false);
   assert.equal(css.includes("bk-pay-seg"), false);
-  assert.match(js, /if \(state\.view === "checkout"\) return go\("details"\)/);
+  assert.match(js, /if \(state\.view === "checkout"\) return go\(state\.checkoutFrom === "confirm" \? "confirm" : "details"\)/);
   assert.match(js, /return go\("details"\)/);
   assert.equal(js.includes("brandMarks"), false);
   assert.equal(css.includes("1100px"), false);

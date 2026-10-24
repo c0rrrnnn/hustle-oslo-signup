@@ -29,7 +29,7 @@
   const EXPERIENCE_LABELS = {
     new: "New to dancing",
     some: "Some dance experience (solo or partner)",
-    "other-styles": "I dance other styles now (salsa, swing, etc.)",
+    "other-styles": "I dance other styles (salsa, swing, etc.)",
     hustle: "I’ve danced hustle before",
     teach: "I teach dance",
   };
@@ -133,6 +133,10 @@
     transactionNumber: "",
     termsAcceptedAt: "",
     submitting: false,
+    // Set once the buyer has seen checkout in this booking; while it is set and the
+    // details are still valid, Confirm selection goes straight back to checkout.
+    reachedCheckout: false,
+    checkoutFrom: "details",
     submitted: false,
     submitResult: null,
     opener: null,
@@ -582,6 +586,7 @@
     }
     if (view === "confirm") renderConfirm();
     if (view === "checkout") {
+      state.reachedCheckout = true;
       renderCheckout();
       renderPayMethods();
     }
@@ -659,6 +664,8 @@
     state.submitting = false;
     state.submitted = false;
     state.submitResult = null;
+    state.reachedCheckout = false;
+    state.checkoutFrom = "details";
     const form = $("#bk-details-form");
     if (form) form.reset();
     ["bk-student-yes", "bk-student-no"].forEach((id) => {
@@ -695,7 +702,7 @@
     if (state.view === "dates") return go("student");
     if (state.view === "confirm") return go(state.priceTier ? "dates" : "student");
     if (state.view === "details") return go("confirm");
-    if (state.view === "checkout") return go("details");
+    if (state.view === "checkout") return go(state.checkoutFrom === "confirm" ? "confirm" : "details");
     if (state.view === "failed") return go("checkout");
     if (state.view === "waiting") {
       paymentUi.resumeGen += 1;
@@ -957,7 +964,7 @@
       sel.ticket = ticket;
       sel.priceTier = tierForTicket(ticket);
     }
-    sortSelections(state.selections);
+    cartChanged();
     const activeId = document.activeElement && document.activeElement.id;
     renderCalendar();
     renderOptions();
@@ -973,6 +980,7 @@
     const before = state.selections.length;
     state.selections = state.selections.filter((s) => s.event.id !== eventId);
     if (state.selections.length === before) return;
+    cartChanged();
     const activeId = document.activeElement && document.activeElement.id;
     renderCalendar();
     renderOptions();
@@ -998,7 +1006,43 @@
 
   function removeNight(eventId) {
     state.selections = state.selections.filter((s) => s.event.id !== eventId);
-    renderConfirm();
+    cartChanged();
+  }
+
+  // One place that runs after any add, change or remove: every total and label is
+  // re-read from state.selections, a prepared Stripe/Vipps order for the old cart is
+  // dropped (the next checkout gets a new idempotency key and the Worker prices it
+  // from the items), and a saved cart is rewritten so a reload can't bring an item back.
+  function cartChanged() {
+    sortSelections(state.selections);
+    resetPaymentAttempt();
+    if (state.view === "confirm") renderConfirm();
+    if (state.view === "checkout") renderCheckout();
+    if (state.view === "failed") renderFailed();
+    updatePayChrome();
+    if (readSavedCart()) {
+      if (state.selections.length) savePaymentSession("", true);
+      else clearSavedCart();
+    }
+  }
+
+  function detailsComplete() {
+    const name = $("#bk-name");
+    return !!name && validateDetails(false);
+  }
+
+  // Where Confirm selection's button leads. Only stops at a step that is still needed.
+  function nextAfterConfirm() {
+    if (!state.priceTier) return "student";
+    if (state.reachedCheckout && detailsComplete()) return "checkout";
+    return "details";
+  }
+
+  function syncConfirmNext() {
+    const next = $("#bk-confirm-next");
+    if (!next) return;
+    next.disabled = state.selections.length < 1;
+    next.textContent = nextAfterConfirm() === "checkout" ? "Continue to Payment" : "Continue";
   }
 
   function renderConfirm() {
@@ -1026,8 +1070,7 @@
     }
     const sub = $("#bk-subtotal");
     if (sub) sub.textContent = currentAmount() + " kr";
-    const next = $("#bk-confirm-next");
-    if (next) next.disabled = state.selections.length < 1;
+    syncConfirmNext();
   }
 
   function syncSelectPlaceholder(sel) {
@@ -2290,8 +2333,9 @@
     return true;
   }
 
-  function savePaymentSession(orderId) {
-    const prior = readSavedCart();
+  function savePaymentSession(orderId, cartEdited) {
+    // After an edit the old order no longer matches the cart, so don't carry its id over.
+    const prior = cartEdited ? null : readSavedCart();
     const details = readDetailsForm();
     const snapshot = Object.assign(details, {
       orderId: orderId || paymentUi.orderId || (prior && prior.orderId) || "",
@@ -3253,6 +3297,7 @@
       if (first) first.focus();
       return;
     }
+    state.checkoutFrom = "details";
     if (state.view !== "checkout") go("checkout");
   }
 
@@ -3356,7 +3401,9 @@
     if (action === "remove-night") return removeNight(actionEl.dataset.eventId);
     if (action === "confirm-next") {
       if (!state.selections.length) return;
-      return go("details");
+      const target = nextAfterConfirm();
+      if (target === "checkout") state.checkoutFrom = "confirm";
+      return go(target);
     }
     if (action === "edit-order") return go("confirm");
     if (action === "edit-details") return go("details");
@@ -3446,6 +3493,19 @@
       if ((e.key === " " || e.key === "Spacebar") && isTicketInput(document.activeElement)) e.preventDefault();
     });
     if (typeof window.addEventListener === "function") {
+      // iOS keeps the page in the back/forward cache while Vipps or 3-D Secure is open.
+      // Coming back that way must not leave the drawer stuck in "Paying…" with an old total.
+      window.addEventListener("pageshow", function (e) {
+        if (!e || !e.persisted || state.submitted) return;
+        if (state.submitting) {
+          state.submitting = false;
+          $$("#bk-pay, #bk-fail-retry").forEach((btn) => { btn.disabled = false; });
+          const sheet = $("#book-sheet");
+          if (sheet) sheet.setAttribute("aria-busy", "false");
+        }
+        updatePayChrome();
+        if (state.view === "confirm") renderConfirm();
+      });
       window.addEventListener("pagehide", function () {
         if (state.submitted || !state.selections.length) return;
         if (state.view === "checkout" || state.view === "failed" || state.view === "waiting" || paymentUi.orderId) {

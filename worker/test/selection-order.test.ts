@@ -37,7 +37,8 @@ test("on the same night Beginners comes before Intermediate before Social", () =
 });
 
 test("every list and payload reads the sorted selection", () => {
-  assert.match(body("function setTicket(", "function clearTicket("), /sortSelections\(state\.selections\)/);
+  assert.match(body("function setTicket(", "function clearTicket("), /cartChanged\(\)/);
+  assert.match(body("function cartChanged(", "function detailsComplete("), /sortSelections\(state\.selections\)/);
   assert.match(body("function cartSelections(", "function storeGet("), /\.sort\(compareSelections\)/);
   assert.match(body("function renderConfirm(", "function "), /sortSelections\(state\.selections\)/);
   assert.match(body("function renderCheckout(", "function renderFailed("), /sortSelections\(state\.selections\)\.map\(orderLine\)/);
@@ -45,4 +46,34 @@ test("every list and payload reads the sorted selection", () => {
   assert.match(body("async function submitAllSignups(", "function "), /sortSelections\(state\.selections\)/);
   assert.equal((app.match(/nights: sortSelections\(state\.selections\)\.map/g) || []).length, 3);
   assert.equal(/nights: state\.selections\.map/.test(app), false);
+});
+
+test("removing or changing a class refreshes every total, drops the old payment and rewrites the saved cart", () => {
+  const removeFn = body("function removeNight(", "function cartChanged(");
+  assert.match(removeFn, /cartChanged\(\)/);
+  assert.match(body("function clearTicket(", "function isTicketInput("), /cartChanged\(\)/);
+  const changed = body("function cartChanged(", "function detailsComplete(");
+  assert.match(changed, /resetPaymentAttempt\(\)/);
+  assert.match(changed, /updatePayChrome\(\)/);
+  assert.match(changed, /renderConfirm\(\)/);
+  assert.match(changed, /savePaymentSession\("", true\)/);
+  assert.match(changed, /clearSavedCart\(\)/);
+});
+
+test("Confirm selection goes straight back to checkout after an edit when details are valid, with a truthful label", () => {
+  const next = body("function nextAfterConfirm(", "function syncConfirmNext(");
+  assert.match(next, /if \(!state\.priceTier\) return "student"/);
+  assert.match(next, /state\.reachedCheckout && detailsComplete\(\)\) return "checkout"/);
+  assert.match(next, /return "details"/);
+  const label = body("function syncConfirmNext(", "function ");
+  assert.match(label, /=== "checkout" \? "Continue to Payment" : "Continue"/);
+  assert.match(app, /if \(target === "checkout"\) state\.checkoutFrom = "confirm";/);
+  assert.match(app, /return go\(state\.checkoutFrom === "confirm" \? "confirm" : "details"\)/);
+});
+
+test("experience copy: other styles without 'now'", () => {
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  assert.match(html, /<option value="other-styles">I dance other styles \(salsa, swing, etc\.\)<\/option>/);
+  assert.match(app, /"other-styles": "I dance other styles \(salsa, swing, etc\.\)"/);
+  assert.equal(/other styles now/.test(app + html), false);
 });
