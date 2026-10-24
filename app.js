@@ -453,7 +453,7 @@
   }
 
   function upcomingKind(ev) {
-    if (ev.type === "class") return "Class + social";
+    if (ev.type === "class") return "Class & social";
     if (ev.type === "social") return "Social only";
     return ev.label || "Event";
   }
