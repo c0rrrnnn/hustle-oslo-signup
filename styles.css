@@ -955,7 +955,6 @@ body.is-landing .site-footer a:hover {
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
     column-gap: 2rem;
-    row-gap: var(--landing-section-gap);
     align-items: start;
   }
 
@@ -965,13 +964,6 @@ body.is-landing .site-footer a:hover {
     gap: var(--landing-section-gap);
     min-width: 0;
   }
-
-  /* Row 1: hero column | schedule, prices and map. Row 2: About hustle | More
-     Details, so both headings start on the same line. */
-  .landing-col-main { grid-column: 1; grid-row: 1; }
-  .landing-col-side { grid-column: 2; grid-row: 1; }
-  .landing-about-section { grid-column: 1; grid-row: 2; min-width: 0; }
-  .landing-details-section { grid-column: 2; grid-row: 2; min-width: 0; }
 
   body.is-landing .hero-visual {
     width: 100%;
