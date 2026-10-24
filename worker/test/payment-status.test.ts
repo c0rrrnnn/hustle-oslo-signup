@@ -108,7 +108,7 @@ test("the return page offers Vipps again and the card form defaults to card", ()
   assert.match(html, /data-action="start-over"/);
   const waitingFoot = html.slice(html.indexOf('id="bk-foot-waiting"'), html.indexOf('id="bk-foot-done"'));
   assert.ok(waitingFoot.indexOf('data-action="start-over"') < waitingFoot.indexOf('id="bk-vipps-again"'));
-  assert.ok(waitingFoot.indexOf('id="bk-vipps-again"') < waitingFoot.indexOf("bk-foot-note"));
+  assert.equal(waitingFoot.includes("bk-foot-note"), false);
   assert.match(css, /a\.bk-btn \{[^}]*text-decoration: none;/);
   assert.equal(app.includes('paymentMethod: "apple"'), false);
   assert.match(app, /paymentMethod: "card"/);

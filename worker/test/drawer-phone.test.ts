@@ -37,7 +37,7 @@ test("the drawer ignores zoom and keeps Next at the layout bottom", () => {
   assert.match(app, /window\.scrollTo\(0, y\)/);
   const foot = css.match(/\.bk-foot \{[^}]+\}/);
   assert.ok(foot);
-  assert.match(foot[0], /padding:\s*12px 16px max\(12px, env\(safe-area-inset-bottom, 0px\)\)/);
+  assert.match(foot[0], /padding:\s*12px 16px calc\(16px \+ var\(--bk-safe-bottom, 0px\)\)/);
 });
 
 test("Return moves to the next required field, then continues", () => {

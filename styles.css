@@ -2567,11 +2567,21 @@ body.bk-open {
   margin-top: 0;
   z-index: 4;
   background: #121214;
-  /* Shared by every step, including with the keyboard closed. The note slot
-     sits above this padding. Under the buttons: 12px, or the home-indicator
-     inset when that is taller. Top padding stays 12px. The desktop drawer
-     restores the older sum in the 960px rule. */
-  padding: 12px 16px max(12px, env(safe-area-inset-bottom, 0px));
+  /* Shared by every step. The bottom button ends 16px above the bottom of the
+     visible viewport. --bk-safe-bottom adds the home-indicator inset only when
+     no browser toolbar already covers it (set in app.js, 0 otherwise). The Pay
+     terms sit above the button, so nothing is reserved under it. The desktop
+     drawer keeps its own padding in the 960px rule. */
+  padding: 12px 16px calc(16px + var(--bk-safe-bottom, 0px));
+}
+
+/* Reads env(safe-area-inset-bottom) for app.js. */
+.bk-safe-probe {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  height: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .bk-foot-panel {
@@ -2579,12 +2589,15 @@ body.bk-open {
   flex-direction: column;
 }
 
-/* Same block under every primary button, tall enough for the Pay terms.
-   Empty on steps with no line, so Next, No, and Pay share one position. */
+/* The Pay terms, directly above the Pay button. On the booked screen it is
+   the only line in the bar. */
 .bk-foot-note {
   flex: 0 0 auto;
-  margin-top: 8px;
-  min-height: var(--bk-foot-note, 2.1rem);
+  margin: 0 0 10px;
+}
+
+.bk-foot-note:last-child {
+  margin-bottom: 0;
 }
 
 .bk-foot-note > .bk-tos,
@@ -2736,6 +2749,9 @@ a.bk-btn {
 
 .bk-sheet .bk-tos a {
   font-size: 0.75rem;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .bk-choice {

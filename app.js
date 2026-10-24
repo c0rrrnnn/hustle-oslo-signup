@@ -1349,39 +1349,51 @@
     });
   }
 
-  // The Pay terms set the reserved line under every button. Measure a clone
-  // so a hidden step still reports the wrapped height at the footer's width.
-  function noteBlockHeight(source, foot) {
-    if (!source || !foot || typeof source.cloneNode !== "function" || typeof document.createElement !== "function") return 0;
-    const probe = source.cloneNode(true);
-    probe.removeAttribute("id");
-    probe.hidden = false;
-    const slot = document.createElement("div");
-    slot.className = "bk-foot-note";
-    slot.setAttribute("aria-hidden", "true");
-    slot.style.position = "absolute";
-    slot.style.visibility = "hidden";
-    slot.style.pointerEvents = "none";
-    slot.style.left = "0";
-    slot.style.right = "0";
-    slot.style.minHeight = "0";
-    slot.style.marginTop = "0";
-    slot.appendChild(probe);
-    foot.appendChild(slot);
-    const rect = typeof probe.getBoundingClientRect === "function" ? probe.getBoundingClientRect() : null;
-    const height = rect && Number.isFinite(rect.height) ? Math.ceil(rect.height) : 0;
-    slot.remove();
-    return height;
+  // Clearance under the bottom buttons: 16px from the bottom of the visible
+  // viewport, plus the home-indicator inset only when nothing else covers it.
+  // With viewport-fit=cover, env(safe-area-inset-bottom) can report the home
+  // indicator even while the browser's own bottom toolbar (Chrome on iPhone,
+  // Safari with the toolbar showing) already sits between the page and it,
+  // which added that inset again on top of the padding. A standalone web app,
+  // or a browser whose toolbars are collapsed, leaves less than ~140 CSS px of
+  // browser UI on the screen; only then is the inset added.
+  function safeAreaInsetBottom(sheet) {
+    if (!sheet || typeof document.createElement !== "function" || typeof window.getComputedStyle !== "function") return 0;
+    const probe = document.createElement("div");
+    probe.className = "bk-safe-probe";
+    probe.setAttribute("aria-hidden", "true");
+    sheet.appendChild(probe);
+    const value = parseFloat(window.getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    return value;
   }
 
-  function syncFootNote() {
+  function bottomUiCoversInset(viewport) {
+    if (viewport.standalone) return false;
+    const portrait = viewport.innerHeight >= viewport.innerWidth;
+    const screenH = portrait ? Math.max(viewport.screenWidth, viewport.screenHeight) : Math.min(viewport.screenWidth, viewport.screenHeight);
+    if (!screenH || !viewport.innerHeight) return false;
+    return screenH - viewport.innerHeight >= 140;
+  }
+
+  function safeBottomExtra(inset, viewport) {
+    if (!(inset > 0)) return 0;
+    return bottomUiCoversInset(viewport) ? 0 : Math.round(inset);
+  }
+
+  function syncSafeBottom() {
     const sheet = $("#book-sheet");
-    const foot = sheet && $(".bk-foot", sheet);
-    if (!sheet || !foot || !foot.clientWidth) return;
-    const height = Math.max(noteBlockHeight($("#bk-checkout-tos"), foot), noteBlockHeight($(".bk-mini"), foot));
-    if (height > 0 && sheet.style && typeof sheet.style.setProperty === "function") {
-      sheet.style.setProperty("--bk-foot-note", height + "px");
-    }
+    if (!sheet || !sheet.style || typeof sheet.style.setProperty !== "function") return;
+    const screenInfo = window.screen || {};
+    const standalone = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches) || (window.navigator && window.navigator.standalone === true);
+    const extra = safeBottomExtra(safeAreaInsetBottom(sheet), {
+      standalone: !!standalone,
+      innerHeight: window.innerHeight || 0,
+      innerWidth: window.innerWidth || 0,
+      screenHeight: screenInfo.height || 0,
+      screenWidth: screenInfo.width || 0,
+    });
+    sheet.style.setProperty("--bk-safe-bottom", extra + "px");
   }
 
   function viewportScale() {
@@ -1422,12 +1434,18 @@
     if (Math.abs(viewportScale() - 1) > 0.01) return;
     const vv = window.visualViewport;
     const width = Math.round((vv && vv.width) || window.innerWidth || 0);
-    if (width && sheetBox.width && width !== sheetBox.width) captureSheetBox();
     const active = document.activeElement;
     const tag = active && active.tagName;
-    if (active && active.closest && active.closest("#book-sheet") && (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA")) {
-      scrollFieldIntoView(active);
-    }
+    const field = !!(active && active.closest && active.closest("#book-sheet") && (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA"));
+    const typing = field && !/^(radio|checkbox|button|submit)$/i.test(active.type || "");
+    // A browser toolbar showing or hiding changes the layout height too, so the
+    // sheet follows it. The keyboard only shrinks the visual viewport
+    // (interactive-widget=resizes-visual), so Next stays behind it.
+    const height = Math.round(window.innerHeight || 0);
+    const keyboardOpen = !!(vv && vv.height && height - vv.height > 1);
+    if (width && sheetBox.width && width !== sheetBox.width) captureSheetBox();
+    else if (height && sheetBox.height && Math.abs(height - sheetBox.height) > 1 && !keyboardOpen && !typing) captureSheetBox();
+    if (field) scrollFieldIntoView(active);
   }
 
   function lockBackgroundScroll() {
@@ -1466,7 +1484,7 @@
     const sheet = $("#book-sheet");
     const foot = sheet && $(".bk-foot", sheet);
     if (!sheet || !foot) return;
-    syncFootNote();
+    syncSafeBottom();
     let height = 0;
     if (typeof foot.getBoundingClientRect === "function") {
       const rect = foot.getBoundingClientRect();
@@ -3419,6 +3437,7 @@
 
   window.HustleOsloLookup = lookupByEmail;
   window.HustleOslo = {
+    safeBottomExtra: safeBottomExtra,
     startPayment: startPayment,
     showPaymentFailed: showPaymentFailed,
     buildOrder: buildOrder,

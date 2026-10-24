@@ -491,45 +491,41 @@
             <button type="button" class="bk-choice bk-btn-block" id="bk-student-yes" data-action="student" data-value="student" aria-pressed="false">Yes</button>
             <button type="button" class="bk-choice bk-btn-block" id="bk-student-no" data-action="student" data-value="standard" aria-pressed="false">No</button>
           </div>
-          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-dates" hidden>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-dates-next" data-action="dates-next" disabled>Next</button>
-          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-confirm" hidden>
           <div class="bk-subtotal"><span>Subtotal</span><strong id="bk-subtotal">0 kr</strong></div>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block" id="bk-confirm-next" data-action="confirm-next">Continue to Payment</button>
-          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-details" hidden>
           <button type="submit" class="bk-btn bk-btn-primary bk-btn-block" id="bk-details-continue" form="bk-details-form">Continue</button>
-          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-checkout" hidden>
+          <div class="bk-foot-note">
+            <p class="bk-tos" id="bk-checkout-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Refund Policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          </div>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block bk-btn-pay" id="bk-pay" data-action="pay" aria-busy="false">
             <svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg>
             <span class="bk-pay-spinner" hidden aria-hidden="true"></span>
             <span id="bk-pay-text">Pay 0 kr</span>
           </button>
-          <div class="bk-foot-note">
-            <p class="bk-tos" id="bk-checkout-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
-          </div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-failed" hidden>
+          <div class="bk-foot-note">
+            <p class="bk-tos" id="bk-fail-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Refund Policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
+          </div>
           <button type="button" class="bk-btn bk-btn-primary bk-btn-block bk-btn-pay" id="bk-fail-retry" data-action="pay" aria-busy="false">
             <svg class="bk-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="11" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2.4"></path></svg>
             <span class="bk-pay-spinner" hidden aria-hidden="true"></span>
             <span id="bk-fail-retry-text">Pay 0 kr</span>
           </button>
-          <div class="bk-foot-note">
-            <p class="bk-tos" id="bk-fail-tos">By paying you accept the <a href="/termsofsale" target="_blank" rel="noopener noreferrer">Terms of Sale<span class="visually-hidden"> (opens in a new tab)</span></a> and <a href="/termsofsale" target="_blank" rel="noopener noreferrer">refund policy<span class="visually-hidden"> (opens in a new tab)</span></a>.</p>
-          </div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-waiting" hidden>
@@ -537,7 +533,6 @@
             <button type="button" class="bk-btn bk-btn-secondary bk-btn-block" data-action="start-over">Start over</button>
             <a class="bk-btn bk-btn-vipps bk-btn-block" id="bk-vipps-again" href="" hidden>Open Vipps again</a>
           </div>
-          <div class="bk-foot-note" aria-hidden="true"></div>
         </div>
 
         <div class="bk-foot-panel" id="bk-foot-done" hidden>
