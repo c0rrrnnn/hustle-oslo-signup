@@ -28,7 +28,13 @@
   --focus: 0 0 0 3px rgba(223, 128, 38, 0.65);
   --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --touch: 44px;
-  --sticky-pad: 5.5rem;
+  /* Space between landing blocks. Hero to title is tighter. */
+  --landing-section-gap: 20px;
+  --landing-hero-title-gap: 12px;
+  /* Landing logo and Contact us share one height. */
+  --landing-nav-control-h: 44px;
+  /* Mobile sticky bar: existing vertical padding, the control row, and the notch. */
+  --landing-nav-sticky-h: calc(0.7rem + env(safe-area-inset-top, 0px) + var(--landing-nav-control-h) + 0.45rem);
 }
 
 *,
@@ -58,6 +64,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
   font-size: 1rem;
   line-height: 1.55;
@@ -83,6 +90,10 @@ a {
 
 a:hover {
   color: var(--orange);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 a:focus-visible,
@@ -195,7 +206,7 @@ textarea:focus-visible,
 main {
   max-width: 480px;
   margin: 0 auto;
-  padding: 0.75rem 1.1rem calc(var(--sticky-pad) + 2rem);
+  padding: 0.75rem 1.1rem 2rem;
 }
 
 /* Steps — subtle progress dots / pills */
@@ -343,6 +354,27 @@ main {
   }
 }
 
+/* Scalloped frame (hero-scallop.js adds .is-scalloped only where CSS masks work; elsewhere the
+   rounded tile above stays). The script snaps the height to whole bumps and sets the mask image. */
+.hero-visual.is-scalloped,
+body.is-landing .hero-visual.is-scalloped {
+  border: 0;
+  border-radius: 0;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.hero-visual.is-scalloped .hero-video,
+body.is-landing .hero-visual.is-scalloped .hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ─── Landing intro (panel 1) ────────────────────────────────────────────── */
 body.is-landing {
   background: #121214;
@@ -356,15 +388,15 @@ body.is-landing #step-nav {
 
 body.is-landing main {
   padding-top: 0.35rem;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0;
 }
 
 body.is-landing .site-footer {
   border-top: 1px solid #2a2a2e;
-  margin-top: 0.35rem;
+  margin-top: var(--landing-section-gap);
   background: #161618;
   color: #b4b4bc;
-  padding-bottom: calc(1.25rem + var(--sticky-pad) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 body.is-landing .site-footer a {
@@ -399,8 +431,10 @@ body.is-landing .site-footer a:hover {
 
 .landing-nav-logo img {
   display: block;
-  height: 4.5rem;
+  height: var(--landing-nav-control-h);
   width: auto;
+  max-width: none;
+  object-fit: contain;
 }
 
 .landing-nav-contact {
@@ -408,7 +442,8 @@ body.is-landing .site-footer a:hover {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-height: 44px;
+  height: var(--landing-nav-control-h);
+  min-height: var(--landing-nav-control-h);
   padding: 0.45rem 1.05rem;
   border-radius: var(--radius-pill);
   background: #2a2a2e;
@@ -429,7 +464,7 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-panel {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0;
 }
 
 .landing-kicker {
@@ -440,7 +475,8 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-title {
-  margin: 0 0 1.2rem;
+  margin: 0;
+  margin-top: calc(var(--landing-hero-title-gap) - var(--landing-section-gap));
   font-size: 1.7rem;
   font-weight: 700;
   line-height: 1.15;
@@ -453,7 +489,7 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-section {
-  margin: 0 0 1.2rem;
+  margin: 0;
 }
 
 .landing-label {
@@ -733,35 +769,36 @@ body.is-landing .site-footer a:hover {
 }
 
 .landing-actions {
-  position: fixed;
-  z-index: 40;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: min(480px, 100%);
-  display: grid;
-  gap: 0.7rem;
+  position: static;
+  width: 100%;
+  display: block;
   margin: 0;
-  padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  background: #121214;
-  border-top: 1px solid #2a2a2e;
+  padding: 0;
+  background: none;
+  border: 0;
   box-sizing: border-box;
-}
-
-body.bk-open .landing-actions {
-  visibility: hidden;
 }
 
 .landing-actions .btn {
   width: 100%;
-  min-height: 52px;
-  font-size: 1.02rem;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 22px;
+  border-radius: 9999px;
+  font-size: 1rem;
   font-weight: 600;
+  line-height: 1;
 }
 
 .landing-actions .btn-primary {
   background: #ffffff;
   color: #111114;
+  box-shadow: none;
+}
+
+.landing-actions .btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -788,31 +825,66 @@ body.bk-open .landing-actions {
   }
 }
 
+/* Narrow landing: solid sticky nav, and a hero that fills the content column. */
+@media (max-width: 959px) {
+  .landing-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: #121214;
+    padding-top: calc(0.7rem + env(safe-area-inset-top, 0px));
+  }
+
+  body.is-landing main {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  body.is-landing main,
+  body.is-landing main [id] {
+    scroll-margin-top: var(--landing-nav-sticky-h);
+  }
+
+  body.is-landing .hero-visual {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    margin-inline: 0;
+  }
+
+  body.is-landing .hero-video {
+    position: static;
+    inset: auto;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+}
+
 /* Desktop landing: two columns inside the same 820px shell as the nav and footer.
-   Below 960px the column wrappers disappear (display: contents) and flex order
-   restores the existing single-column sequence. */
+   Below 960px the column wrappers disappear (display: contents), so the DOM
+   order is the single-column sequence. */
 .landing-cols {
   display: flex;
   flex-direction: column;
+  gap: var(--landing-section-gap);
 }
 
 .landing-col {
   display: contents;
 }
 
-.hero-visual { order: 1; }
-.landing-title { order: 2; }
-#landing-about { order: 3; }
-#landing-upcoming { order: 4; }
-#landing-schedule { order: 5; }
-#landing-prices { order: 6; }
-#landing-location { order: 7; }
-#landing-details { order: 8; }
-
 @media (min-width: 960px) {
+  :root {
+    --landing-section-gap: 24px;
+    --landing-hero-title-gap: 16px;
+  }
+
   body.is-landing main {
     max-width: calc(820px + 2.5rem);
-    padding: 1.15rem 1.25rem calc(var(--sticky-pad) + 1.5rem);
+    padding: 1.15rem 1.25rem 0;
   }
 
   .landing-nav {
@@ -835,18 +907,8 @@ body.bk-open .landing-actions {
   .landing-col {
     display: flex;
     flex-direction: column;
+    gap: var(--landing-section-gap);
     min-width: 0;
-  }
-
-  .landing-col > .hero-visual,
-  .landing-col > .landing-title,
-  .landing-col > #landing-about,
-  .landing-col > #landing-upcoming,
-  .landing-col > #landing-schedule,
-  .landing-col > #landing-prices,
-  .landing-col > #landing-location,
-  .landing-col > #landing-details {
-    order: 0;
   }
 
   body.is-landing .hero-visual {
@@ -858,7 +920,6 @@ body.bk-open .landing-actions {
   }
 
   .landing-title {
-    margin: 1rem 0 1.15rem;
     font-size: 1.85rem;
   }
 
@@ -880,27 +941,6 @@ body.bk-open .landing-actions {
 
   .map-frame {
     height: 180px;
-  }
-
-  .landing-actions {
-    left: 0;
-    right: 0;
-    width: 100%;
-    transform: none;
-    display: block;
-    padding: 1.1rem 1.25rem 1.15rem;
-    background: linear-gradient(to top, #121214 62%, rgba(18, 18, 20, 0));
-    border-top: 0;
-  }
-
-  .landing-actions .btn-primary {
-    display: flex;
-    width: min(820px, 100%);
-    margin-inline: auto;
-    border-radius: 14px;
-    min-height: 52px;
-    background: #f4f4f5;
-    color: #121214;
   }
 
   body.is-landing .foot-inner {
@@ -2371,21 +2411,41 @@ body.bk-open .landing-actions {
 /* ─── Booking sheet (Claire’s approved flow) ─────────────────────────────── */
 body.bk-open {
   overflow: hidden;
+  width: 100%;
+  overscroll-behavior: none;
 }
 
 .bk-sheet {
   position: fixed;
   inset: 0;
   z-index: 80;
-  overflow: auto;
+  /* Stable viewport units. JS captures this height once when the sheet opens
+     and does not follow pinch-zoom or the keyboard. svh stays the small
+     viewport so the toolbar cannot cover the buttons. */
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
   background: #121214;
   color: #f4f4f5;
   font-family: var(--font);
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (height: 100svh) {
+  .bk-sheet {
+    height: 100svh;
+    max-height: 100svh;
+  }
 }
 
 .bk-sheet[hidden],
 .bk-step[hidden],
+.bk-foot[hidden],
 .bk-foot-panel[hidden],
 .bk-card-fields[hidden],
 .bk-field[hidden],
@@ -2394,21 +2454,24 @@ body.bk-open {
 .bk-note[hidden],
 .bk-err[hidden],
 #bk-first-timer[hidden],
-#bk-desk-details[hidden],
-#bk-inline-pay[hidden] {
+#bk-payment-host[hidden],
+#bk-payment-note[hidden],
+#bk-wallet-host[hidden],
+#bk-done-table[hidden],
+.cf-cal-sec[hidden],
+#bk-vipps-again[hidden] {
   display: none !important;
 }
 
 .bk-frame {
-  min-height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   width: min(480px, 100%);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-}
-
-.bk-sheet.is-wide .bk-frame {
-  width: min(1100px, 100%);
+  overflow: hidden;
 }
 
 .bk-top {
@@ -2475,7 +2538,11 @@ body.bk-open {
 }
 
 .bk-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 20px 16px 16px;
 }
 
@@ -2488,8 +2555,23 @@ body.bk-open {
   line-height: 1.2;
 }
 
-.bk-h:focus {
+.bk-h:focus,
+.bk-h:focus-visible {
   outline: none;
+  box-shadow: none;
+}
+
+/* Selected and focused controls in the signup flow use a white stroke.
+   Headings stay unringed when focus is moved there by script. */
+.bk-sheet button:focus-visible,
+.bk-sheet a:focus-visible,
+.bk-sheet input:focus-visible,
+.bk-sheet select:focus-visible,
+.bk-sheet textarea:focus-visible,
+.bk-sheet [tabindex]:focus-visible:not(.bk-h) {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 .bk-sub {
@@ -2500,12 +2582,48 @@ body.bk-open {
 }
 
 .bk-foot {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
+  position: relative;
+  bottom: auto;
+  flex-shrink: 0;
+  margin-top: 0;
+  z-index: 4;
   background: #121214;
-  border-top: 1px solid #2a2a2e;
-  padding: 12px 16px 14px;
+  /* Shared by every step. The bottom button ends 16px above the bottom of the
+     visible viewport. --bk-safe-bottom adds the home-indicator inset only when
+     no browser toolbar already covers it (set in app.js, 0 otherwise). The Pay
+     terms sit above the button, so nothing is reserved under it. The desktop
+     drawer keeps its own padding in the 960px rule. */
+  padding: 12px 16px calc(16px + var(--bk-safe-bottom, 0px));
+}
+
+/* Reads env(safe-area-inset-bottom) for app.js. */
+.bk-safe-probe {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  height: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bk-foot-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The Pay terms, directly above the Pay button. On the booked screen it is
+   the only line in the bar. */
+.bk-foot-note {
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+}
+
+.bk-foot-note:last-child {
+  margin-bottom: 0;
+}
+
+.bk-foot-note > .bk-tos,
+.bk-foot-note > .bk-mini {
+  margin: 0;
 }
 
 .bk-row {
@@ -2553,19 +2671,50 @@ body.bk-open {
   width: 100%;
 }
 
+.bk-wait-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+a.bk-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .bk-row .bk-btn-primary,
 .bk-row .bk-btn-vipps {
   flex: 1;
 }
 
 .bk-btn-vipps {
-  background: #d2470e;
+  background: #ff5b24;
   color: #fff;
 }
 
-.bk-btn-vipps:hover {
-  background: #b83d0c;
+.bk-btn-vipps:hover:not(:disabled):not([aria-busy="true"]),
+.bk-btn-vipps:active:not(:disabled):not([aria-busy="true"]) {
+  background: #e55220;
   color: #fff;
+}
+
+.bk-btn-vipps:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.bk-btn-vipps:disabled,
+.bk-btn-vipps[aria-busy="true"] {
+  background: #ff5b24;
+  color: #fff;
+  opacity: 0.65;
+}
+
+.bk-btn-vipps:disabled {
+  cursor: not-allowed;
 }
 
 .bk-btn-pay {
@@ -2580,6 +2729,29 @@ body.bk-open {
   height: 14px;
   flex-shrink: 0;
   display: inline-block;
+}
+
+.bk-pay-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: bk-pay-spin 0.7s linear infinite;
+}
+
+@keyframes bk-pay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-pay-spinner {
+    animation: none !important;
+  }
 }
 
 .bk-mini {
@@ -2598,6 +2770,9 @@ body.bk-open {
 
 .bk-sheet .bk-tos a {
   font-size: 0.75rem;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .bk-choice {
@@ -2615,6 +2790,17 @@ body.bk-open {
 
 .bk-choices {
   margin-top: 18px;
+}
+
+#bk-foot-student .bk-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+#bk-foot-student .bk-choice {
+  margin: 0;
 }
 
 .bk-choice.is-on {
@@ -2682,10 +2868,13 @@ body.bk-open {
 
 .bk-day {
   width: 36px;
-  height: 38px;
+  height: 36px;
   margin: 0 auto;
+  justify-self: center;
+  align-self: center;
   border: 0;
   background: transparent;
+  background-color: transparent;
   color: #8d8d96;
   font: 600 0.88rem var(--font);
   border-radius: 50%;
@@ -2693,6 +2882,13 @@ body.bk-open {
   display: grid;
   place-items: center;
   padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bk-day:focus {
+  outline: none;
 }
 
 .bk-day.is-event {
@@ -2701,9 +2897,41 @@ body.bk-open {
   cursor: pointer;
 }
 
-.bk-day.is-selected {
+.bk-day.is-selected,
+.bk-day.is-selected:focus,
+.bk-day.is-selected:active {
   background: #3a3a40;
+  background-color: #3a3a40;
   color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* A date with a pick that is not being viewed: grey fill only, no ring. */
+.bk-day.has-pick,
+.bk-day.has-pick:focus,
+.bk-day.has-pick:active {
+  background: #3a3a40;
+  background-color: #3a3a40;
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Keyboard: a circle, not the rectangular button outline. A tap sets
+   .bk-touch and keeps only the selection circle. */
+.bk-sheet button.bk-day:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+.bk-sheet.bk-touch button.bk-day:focus,
+.bk-sheet.bk-touch button.bk-day:focus-visible {
+  outline: none;
+}
+
+.bk-sheet.bk-touch button.bk-day.is-selected:focus,
+.bk-sheet.bk-touch button.bk-day.is-selected:focus-visible {
+  box-shadow: 0 0 0 2px #fff;
 }
 
 .bk-day-num {
@@ -2772,7 +3000,7 @@ body.bk-open {
 }
 
 .bk-opt.is-on {
-  border-color: #f4f4f5;
+  border-color: #fff;
 }
 
 .bk-opt input {
@@ -2790,8 +3018,17 @@ body.bk-open {
 .bk-opt:focus-within,
 .bk-return:focus-within,
 .bk-mrow:focus-within,
-.bk-seg-btn:focus-within {
-  box-shadow: var(--focus);
+.bk-choice:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* A tap leaves focus on the card's hidden input. Without this the focus
+   outline would keep an unselected card looking chosen. Keyboard (Tab)
+   clears .bk-touch, so the outline still shows there. */
+.bk-sheet.bk-touch .bk-opt:focus-within {
+  outline: none;
 }
 
 .bk-rd {
@@ -3095,8 +3332,17 @@ body.bk-open {
 
 .bk-input[aria-invalid="true"],
 .bk-select[aria-invalid="true"] {
-  border-color: #ff8a8a;
-  box-shadow: 0 0 0 1px #ff8a8a;
+  border-color: #2a2a2e;
+  background: #1c1c1f;
+}
+
+/* 16px stops iOS from zooming the page when a field is focused. */
+@media (max-width: 959px) {
+  .bk-input,
+  .bk-select,
+  .bk-sheet textarea {
+    font-size: 16px;
+  }
 }
 
 .bk-err {
@@ -3188,10 +3434,6 @@ body.bk-open {
   margin-top: 8px;
 }
 
-.bk-pay-seg {
-  display: none;
-}
-
 .bk-mrow {
   position: relative;
   display: flex;
@@ -3208,11 +3450,10 @@ body.bk-open {
 }
 
 .bk-mrow.is-on {
-  border-color: #f4f4f5;
+  border-color: #fff;
 }
 
-.bk-mrow input,
-.bk-seg-btn input {
+.bk-mrow input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -3239,55 +3480,6 @@ body.bk-open {
 
 .bk-pay-name {
   flex: 1;
-}
-
-.bk-brands {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.bk-brand-visa {
-  background: #fff;
-  color: #1a1f71;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  border-radius: 4px;
-  height: 22px;
-  min-width: 34px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 5px;
-}
-
-.bk-brand-mc {
-  width: 34px;
-  height: 22px;
-  display: inline-block;
-  position: relative;
-}
-
-.bk-brand-mc i {
-  position: absolute;
-  top: 1px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-}
-
-.bk-brand-mc i:first-child {
-  left: 0;
-  background: #eb001b;
-}
-
-.bk-brand-mc i:last-child {
-  right: 0;
-  background: #f79e1b;
-}
-
-.bk-brand-mc i:last-child {
-  mix-blend-mode: normal;
 }
 
 .bk-it {
@@ -3327,29 +3519,52 @@ body.bk-open {
   color: #f4f4f5;
 }
 
-.bk-seg-btn.is-on .bk-it-cd {
-  background: #e4e4e7;
-  color: #121214;
+.bk-wallet-host {
+  margin: 8px 0 4px;
+}
+
+.bk-payment-host {
+  margin-top: 12px;
+}
+
+.bk-pay-note {
+  margin: 0 0 8px;
+  color: #a1a1aa;
+  font-size: 0.9rem;
+}
+
+.bk-pay-note.is-error {
+  color: #ffb4b4;
 }
 
 .bk-card-fields.is-attached {
-  border: 1px solid #f4f4f5;
-  border-top: 0;
-  border-radius: 0 0 12px 12px;
-  background: #1c1c1f;
-  padding: 0 14px 14px;
   margin-top: 0;
 }
 
-.bk-mrow.is-on[data-method="card"] {
+.bk-pay-list:has(+ .is-open) .bk-mrow.is-on[data-method="card"] {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  border-bottom-color: transparent;
+  border-bottom-width: 0;
 }
 
-.bk-sheet.is-wide .bk-mrow.is-on[data-method="card"] {
-  border-radius: 12px;
-  border-bottom-color: #f4f4f5;
+#bk-card-slot.is-open,
+#bk-fail-card-slot.is-open {
+  border: 1px solid #fff;
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: #1c1c1f;
+  padding: 2px 14px 14px;
+  margin-top: 0;
+}
+
+#bk-card-slot.is-open .bk-card-fields,
+#bk-fail-card-slot.is-open .bk-card-fields,
+#bk-card-slot.is-open .bk-payment-host,
+#bk-fail-card-slot.is-open .bk-payment-host {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .bk-card-grid {
@@ -3362,42 +3577,12 @@ body.bk-open {
   grid-column: 1 / -1;
 }
 
-.bk-trust {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #a1a1aa;
-  font-size: 0.78rem;
-  margin: 0 0 8px;
-  flex-wrap: wrap;
-}
-
-.bk-trust .bk-brand-visa,
-.bk-trust .bk-brand-mc {
-  height: 18px;
-}
-
-.bk-trust .bk-brand-mc i {
-  width: 16px;
-  height: 16px;
-  top: 1px;
-}
-
-.bk-trust .bk-brand-mc {
-  width: 28px;
-}
-
 .bk-tos {
   text-align: center;
   color: #a1a1aa;
   font-size: 0.75rem;
   margin: 8px 0 0;
   line-height: 1.4;
-}
-
-#bk-foot-failed .bk-tos {
-  margin: 0 0 10px;
 }
 
 .bk-checkout-layout {
@@ -3407,17 +3592,17 @@ body.bk-open {
 
 .bk-banner {
   background: rgba(255, 138, 138, 0.08);
-  border: 1px solid #ff8a8a;
+  border: 0;
   border-radius: 12px;
   padding: 12px 14px;
-  color: #fecaca;
+  color: #a1a1aa;
   font-size: 0.88rem;
   margin: 0 0 14px;
   line-height: 1.4;
 }
 
 .bk-banner b {
-  color: #fff;
+  color: #ff8a8a;
   display: block;
   margin-bottom: 2px;
 }
@@ -3479,7 +3664,59 @@ body.bk-open {
 }
 
 .bk-ics-all {
+  margin-top: 0;
+}
+
+.bk-cal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 14px;
+}
+
+.bk-cal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+a.bk-cal-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 50px;
+  padding: 12px 18px;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+a.bk-cal-link:hover {
+  color: #f4f4f5;
+}
+
+.bk-cal-other {
+  align-self: center;
+  color: #f4f4f5;
+  font: 500 0.95rem var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 10px 8px;
+  min-height: 44px;
+}
+
+.bk-cal-other.is-only {
+  align-self: stretch;
+  text-align: center;
+}
+
+.bk-cal-other:hover {
+  color: #fff;
 }
 
 .bk-note {
@@ -3498,185 +3735,48 @@ body.bk-open {
   margin: 12px 0 0;
 }
 
-.bk-deskbar,
-.bk-desk-details {
-  display: none;
-}
-
-.bk-desk-back {
-  background: none;
-  border: 0;
-  color: #f4f4f5;
-  font: 500 0.95rem var(--font);
-  cursor: pointer;
-  padding: 8px 0;
-}
-
-.bk-secure {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #a1a1aa;
-  font-size: 0.9rem;
-}
-
-@media (min-width: 601px) {
-  .bk-top,
-  .bk-body,
-  .bk-foot {
-    padding-left: 32px;
-    padding-right: 32px;
-  }
-
-  .bk-sheet.is-wide .bk-top,
-  .bk-sheet.is-wide .bk-foot {
-    display: none;
-  }
-
-  .bk-sheet.is-wide .bk-body {
-    padding: 28px 40px 48px;
-  }
-
-  .bk-sheet.is-wide .bk-deskbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 18px;
-  }
-
-  .bk-sheet.is-wide #bk-checkout-heading {
-    font-size: 2rem;
-    margin: 0 0 20px;
-  }
-
-  .bk-sheet.is-wide .bk-checkout-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
-    column-gap: 40px;
-    align-items: start;
-  }
-
-  .bk-sheet.is-wide .bk-summary-col {
-    grid-column: 2;
-    grid-row: 1;
-    position: sticky;
-    top: 24px;
-  }
-
-  .bk-sheet.is-wide .bk-pay-col {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .bk-sheet.is-wide .bk-who-card {
-    display: none;
-  }
-
-  .bk-sheet.is-wide .bk-desk-details {
-    display: block;
-  }
-
-  .bk-sheet.is-wide .bk-desk-details-title,
-  .bk-sheet.is-wide #bk-pay-heading {
-    font-size: 1.1rem;
-    margin: 0 0 12px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-heading {
-    margin-top: 28px;
-  }
-
-  .bk-sheet.is-wide .bk-card-fields {
-    margin-top: 16px;
-  }
-
-  .bk-sheet.is-wide .bk-order-card {
-    padding: 20px;
-  }
-
-  .bk-sheet.is-wide .bk-order-title {
-    font-size: 1.1rem;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #fff;
-  }
-
-  .bk-sheet.is-wide .bk-sub2 {
-    display: flex;
-    justify-content: space-between;
-    color: #a1a1aa;
-    font-size: 0.9rem;
-    border-top: 1px solid #2a2a2e;
-    margin-top: 10px;
-    padding-top: 12px;
-  }
-
-  .bk-sheet.is-wide .bk-order-card .bk-tot {
-    align-items: baseline;
-    margin-top: 12px;
-    padding-top: 14px;
-    font-weight: 500;
-  }
-
-  .bk-sheet.is-wide .bk-order-card .bk-tot strong {
-    font-size: 1.6rem;
-    font-weight: 700;
-  }
-
-  .bk-sheet.is-wide #bk-inline-pay .bk-tos {
-    text-align: center;
-    margin: 16px 0 10px;
-  }
-
-  .bk-sheet.is-wide .bk-btn-pay {
-    height: 52px;
-    margin-top: 6px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-seg {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    background: #121214;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 4px;
-    margin-top: 12px;
-  }
-
-  .bk-sheet.is-wide #bk-pay-list {
-    display: none;
-  }
-}
-
-.bk-seg-btn {
-  position: relative;
+/* Checkout and the failed-payment step: the terms line and Pay button stay at
+   the bottom of the layout viewport, behind the keyboard when it is open.
+   The body can scroll every payment option and card field fully above that
+   bar. --bk-foot-h is the measured bar; the safe-area term is the extra clearance. */
+.bk-sheet.is-clear-foot {
+  overflow: hidden;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  border-radius: 9px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #a1a1aa;
-  cursor: pointer;
+  flex-direction: column;
 }
 
-.bk-seg-btn.is-on {
-  background: #fff;
-  color: #121214;
+.bk-sheet.is-clear-foot .bk-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
-.bk-seg-btn .bk-it {
-  width: 24px;
-  height: 24px;
+.bk-sheet.is-clear-foot .bk-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
 }
 
-@media (max-width: 600px) {
-  .bk-sheet.is-wide #bk-pay-seg {
-    display: none;
-  }
+.bk-sheet.is-clear-foot #bk-card-slot,
+.bk-sheet.is-clear-foot #bk-fail-card-slot,
+.bk-sheet.is-clear-foot .bk-mrow,
+.bk-sheet.is-clear-foot .bk-card-fields input {
+  scroll-margin-bottom: calc(var(--bk-foot-h, 0px) + env(safe-area-inset-bottom, 0px));
+}
+
+.bk-sheet.is-clear-foot .bk-foot {
+  position: relative;
+  bottom: auto;
+  flex-shrink: 0;
+  margin-top: 0;
+  background: transparent;
+  background-image: none;
+  border-top: 0;
+  box-shadow: none;
 }
 
 /* Desktop signup drawer. The same #book-sheet is a right-hand panel at the
@@ -3721,12 +3821,8 @@ body.bk-open {
     border-left: 1px solid #2a2a2e;
     border-radius: 18px 0 0 18px;
     box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
-    overflow: auto;
+    overflow: hidden;
     animation: bk-drawer-in 0.28s ease-out;
-  }
-
-  .bk-sheet.is-wide .bk-frame {
-    width: min(1100px, calc(100% - 1.5rem));
   }
 
   .bk-grab {
@@ -3740,46 +3836,315 @@ body.bk-open {
     -webkit-backdrop-filter: blur(16px);
   }
 
+  .bk-foot {
+    padding: 12px 16px calc(12px + max(16px, env(safe-area-inset-bottom, 0px)));
+  }
+
+  #bk-back,
   #bk-close {
     width: 40px;
     height: 40px;
-    border-radius: 10px;
+    border-radius: 50%;
     background: #2a2a2e;
   }
+}
 
-  .bk-sheet.is-wide .bk-top {
-    display: block;
-    position: sticky;
-    top: 0;
-    height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-    background: transparent;
-    backdrop-filter: none;
-    z-index: 6;
-  }
+/* Booked screen. Green scalloped seal, summary table, two calendar buttons. */
+.cf-hero {
+  text-align: center;
+  padding: 12px 0 0;
+}
 
-  .bk-sheet.is-wide .bk-grab,
-  .bk-sheet.is-wide .bk-bar-title,
-  .bk-sheet.is-wide .bk-prog,
-  .bk-sheet.is-wide #bk-back {
-    display: none;
-  }
+.cf-badge {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 14px;
+}
 
-  .bk-sheet.is-wide .bk-bar {
-    position: relative;
-    height: 0;
-    justify-content: flex-end;
-  }
+.cf-badge svg {
+  display: block;
+}
 
-  .bk-sheet.is-wide #bk-close {
-    position: absolute;
-    top: 12px;
-    right: 16px;
-  }
+.cf-hero .bk-h {
+  font-size: 1.85rem;
+  line-height: 1.15;
+  margin: 0 0 14px;
+}
 
-  .bk-sheet.is-wide .bk-deskbar {
-    padding-right: 52px;
+.cf-hero .bk-sub {
+  margin: 0 0 22px;
+  overflow-wrap: anywhere;
+}
+
+.cf-hero .bk-sub b {
+  color: #f4f4f5;
+  font-weight: 600;
+}
+
+.cf-table {
+  background: #1c1c1f;
+  border: 1px solid #2a2a2e;
+  border-radius: 16px;
+  padding: 0 16px;
+  margin: 0;
+}
+
+.cf-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #2a2a2e;
+}
+
+.cf-row:last-child {
+  border-bottom: 0;
+}
+
+.cf-row dt {
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.cf-row dd {
+  margin: 0;
+  text-align: right;
+  color: #f4f4f5;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-nights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.cf-night-meta {
+  display: block;
+  color: #a1a1aa;
+  font-weight: 400;
+  font-size: 0.82rem;
+}
+
+.cf-row--total {
+  align-items: center;
+}
+
+.cf-row--total dt {
+  color: #f4f4f5;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.cf-row--total dd {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cf-cal-sec {
+  position: relative;
+  margin: 20px 0 0;
+}
+
+.cf-cal-sec .bk-cal-actions {
+  margin-top: 0;
+}
+
+.cf-cal-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cf-cal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 14px;
+  font-size: 0.95rem;
+  text-decoration: none;
+  white-space: nowrap;
+  color: #f4f4f5;
+}
+
+a.cf-cal-btn:hover,
+.cf-cal-btn:hover {
+  color: #f4f4f5;
+}
+
+.cf-cal-btn:focus-visible,
+.cf-gl button:focus-visible,
+.cf-gl a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+@media (max-width: 420px) {
+  .cf-cal-pair {
+    grid-template-columns: 1fr;
   }
+}
+
+.cf-gl {
+  background: #1c1c1f;
+  border: 1px solid #3a3a40;
+  border-radius: 16px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  color: #f4f4f5;
+}
+
+.cf-cal-sec > .cf-gl {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
+}
+
+.cf-gl-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.cf-gl-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.cf-gl-x {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  background: #2a2a2e;
+  color: #f4f4f5;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+}
+
+.cf-gl-sub {
+  margin: 2px 0 10px;
+  color: #a1a1aa;
+  font-size: 0.85rem;
+}
+
+.cf-gl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cf-gl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #2a2a2e;
+}
+
+.cf-gl-main {
+  min-width: 0;
+  text-align: left;
+}
+
+.cf-gl-name {
+  display: block;
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.cf-gl-meta {
+  display: block;
+  color: #a1a1aa;
+  font-size: 0.85rem;
+}
+
+.cf-gl-add {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 18px;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  border: 1px solid #3a3a40;
+  flex-shrink: 0;
+  color: #f4f4f5;
+}
+
+.cf-gl-add:hover {
+  color: #f4f4f5;
+}
+
+.cf-gl-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 90;
+}
+
+.cf-gl--sheet {
+  position: fixed;
+  z-index: 91;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 20px 20px 0 0;
+  border-bottom: 0;
+  padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.cf-gl--sheet .bk-grab {
+  display: block;
+  margin-bottom: 12px;
+}
+
+#bk-back,
+#bk-close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: #2a2a2e;
+  color: #f4f4f5;
+  line-height: 0;
+}
+
+#bk-back svg,
+#bk-close svg {
+  display: block;
+}
+
+#bk-back:hover,
+#bk-close:hover {
+  background: #35353a;
+}
+
+/* Booked screen keeps the round X only. The chevron stays in the bar so the
+   title and close button do not shift. */
+.bk-sheet.is-done #bk-back {
+  visibility: hidden;
+  pointer-events: none;
 }

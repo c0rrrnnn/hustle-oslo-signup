@@ -7,6 +7,8 @@
  * 3. Project Settings → Script properties → add:
  *      SHEET_ID = <your spreadsheet ID from the URL>
  *      NOTIFY_EMAIL = hustleinoslo@gmail.com   (optional; defaults below)
+ *      APPS_SCRIPT_SHARED_SECRET = <same value as the worker secret>
+ *      REQUIRE_SHARED_SECRET = true   (ONLY after payments launch — see below)
  * 4. Deploy → New deployment → Web app
  *      Execute as: Me
  *      Who has access: Anyone
@@ -23,8 +25,21 @@
  * Payload includes optional experience / howFound, optional phone,
  * and transactionNumber. While online card/Vipps checkout is not live,
  * the site sends transactionNumber "payment-pending" and asks the
- * attendee to Vipps the amount to #48782. Extra fields (referral,
- * paymentMethod, terms acceptance) are appended after the original columns.
+ * attendee to Vipps the amount to #48782. That path does not send
+ * SHARED_SECRET. It stays accepted only while script property
+ * REQUIRE_SHARED_SECRET is not "true". A request that claims a completed
+ * online payment (paymentStatus "paid", or any paymentProvider / paymentId)
+ * is always rejected unless SHARED_SECRET matches. Once payments are the
+ * path, set REQUIRE_SHARED_SECRET to true so every write and every
+ * confirmationOnly also needs the secret. Do that only after the live
+ * site stops posting straight from the browser (PAYMENTS_ENABLED true),
+ * or unpaid signups on hustleoslo.com will be rejected. The worker sends
+ * the secret only after payment is confirmed. Paid rows record payment
+ * provider, payment id, and status paid. The sheet append and the paid
+ * dedupe run inside a script lock. A paid confirmation email is sent at
+ * most once per payment id.
+ * Extra fields (referral, paymentMethod, terms acceptance) are appended
+ * after the original columns.
  * Multi-night bookings: the website POSTs one signup object per night
  * (same person + same transactionNumber; per-night amount). The organizer
  * notify stays one email per night. The attendee confirmation is one email
@@ -36,6 +51,9 @@
  * The follow-up omits top-level transactionNumber so an older deployed
  * script rejects it before appending a blank row; this script reads
  * confirmationTransactionNumber.
+ * Paid confirmation mail includes calendar links when the worker sends
+ * calendarIcs and calendarNights. Those are plain URLs, not attachments.
+ * Unpaid payment-pending mail has neither field, so it stays unchanged.
  *
  * Sender is the account the web app runs as (hustleinoslo@gmail.com,
  * Execute as Me). MailApp uses display name "Hustle Oslo" and replyTo
@@ -73,6 +91,9 @@ var HEADERS = [
   "Terms accepted",
   "Terms accepted at",
   "Terms version",
+  "Payment provider",
+  "Payment id",
+  "Payment status",
 ];
 
 function doGet(e) {
@@ -97,48 +118,120 @@ function doPost(e) {
   try {
     var raw = (e && e.postData && e.postData.contents) || "{}";
     var data = JSON.parse(raw);
-    if (data.confirmationOnly === true) {
-      return sendAttendeeConfirmationOnly_(data);
+    if (!writeAuthorized_(data)) {
+      return json_({ ok: false, error: "Unauthorized" });
     }
-    if (!data.email || !data.fullName) {
-      return json_({ ok: false, error: "Missing required fields" });
+    if (!claimsPaid_(data)) {
+      data.paymentProvider = "";
+      data.paymentId = "";
+      data.paymentStatus = isPendingSignup_(data) ? "pending" : "";
     }
-    if (!data.transactionNumber) {
-      return json_({ ok: false, error: "Missing Vipps transaction number" });
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+    } catch (lockErr) {
+      return json_({ ok: false, error: "Busy" });
     }
-
-    var ss = openSpreadsheet_();
-    var master = getOrCreateSheet_(ss, MASTER_TAB);
-    ensureHeaders_(master);
-
-    var tabName = data.sheetTabHint || buildTabName_(data);
-    var eventSheet = getOrCreateSheet_(ss, tabName);
-    ensureHeaders_(eventSheet);
-
-    var row = buildRow_(data);
-    master.appendRow(row);
-    eventSheet.appendRow(row);
-
-    sendNotifyEmail_(data);
-
-    var response = {
-      ok: true,
-      transactionNumber: data.transactionNumber,
-      tab: tabName,
-    };
-    if (data.sendAttendeeConfirmation === true) {
-      try {
-        response.confirmationSent = sendConfirmationEmail_(data) === true;
-      } catch (mailErr) {
-        response.confirmationSent = false;
-        response.confirmationError = String(mailErr);
+    try {
+      if (data.confirmationOnly === true) {
+        return sendAttendeeConfirmationOnly_(data);
       }
+      return appendSignup_(data);
+    } finally {
+      lock.releaseLock();
     }
-
-    return json_(response);
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+function appendSignup_(data) {
+  if (!data.email || !data.fullName) {
+    return json_({ ok: false, error: "Missing required fields" });
+  }
+  if (!data.transactionNumber) {
+    return json_({ ok: false, error: "Missing Vipps transaction number" });
+  }
+
+  var ss = openSpreadsheet_();
+  var master = getOrCreateSheet_(ss, MASTER_TAB);
+  ensureHeaders_(master);
+
+  var tabName = data.sheetTabHint || buildTabName_(data);
+  var eventSheet = getOrCreateSheet_(ss, tabName);
+  ensureHeaders_(eventSheet);
+
+  if (claimsPaid_(data) && alreadyRecorded_(master, data.paymentId, data.eventId)) {
+    return json_({
+      ok: true,
+      duplicate: true,
+      transactionNumber: data.transactionNumber,
+      tab: tabName,
+      confirmationSent: ensurePaidConfirmation_(data),
+    });
+  }
+
+  var row = buildRow_(data);
+  master.appendRow(row);
+  eventSheet.appendRow(row);
+
+  sendNotifyEmail_(data);
+
+  var response = {
+    ok: true,
+    transactionNumber: data.transactionNumber,
+    tab: tabName,
+  };
+  if (data.sendAttendeeConfirmation === true) {
+    try {
+      response.confirmationSent = sendConfirmationEmail_(data) === true;
+      if (response.confirmationSent) rememberPaidConfirmation_(data);
+    } catch (mailErr) {
+      response.confirmationSent = false;
+      response.confirmationError = String(mailErr);
+    }
+  }
+
+  return json_(response);
+}
+
+/** Paid claims always need the secret. Every write needs it once REQUIRE_SHARED_SECRET=true. */
+function writeAuthorized_(data) {
+  if (paymentsPathLocked_() || claimsPaid_(data)) return secretOk_(data.SHARED_SECRET);
+  return true;
+}
+
+function paymentsPathLocked_() {
+  var flag = PropertiesService.getScriptProperties().getProperty("REQUIRE_SHARED_SECRET") || "";
+  return String(flag).toLowerCase() === "true";
+}
+
+function confirmationMarkerKey_(paymentId) {
+  return "confirm:" + String(paymentId || "").slice(0, 120);
+}
+
+function paidConfirmationSent_(data) {
+  if (!claimsPaid_(data) || !data.paymentId) return false;
+  return PropertiesService.getScriptProperties().getProperty(confirmationMarkerKey_(data.paymentId)) === "1";
+}
+
+function rememberPaidConfirmation_(data) {
+  if (!claimsPaid_(data) || !data.paymentId) return;
+  PropertiesService.getScriptProperties().setProperty(confirmationMarkerKey_(data.paymentId), "1");
+}
+
+function ensurePaidConfirmation_(data) {
+  if (paidConfirmationSent_(data)) return true;
+  if (data.sendAttendeeConfirmation !== true) return false;
+  try {
+    if (sendConfirmationEmail_(data) === true) {
+      rememberPaidConfirmation_(data);
+      return true;
+    }
+  } catch (mailErr) {
+    return false;
+  }
+  return false;
 }
 
 function openSpreadsheet_() {
@@ -229,22 +322,76 @@ function buildRow_(data) {
     data.termsAccepted ? "yes" : "no",
     data.termsAcceptedAt || "",
     data.termsVersion || "",
+    data.paymentProvider || "",
+    data.paymentId || "",
+    data.paymentStatus || "",
   ];
 }
 
+function claimsPaid_(data) {
+  var status = String(data.paymentStatus || "").toLowerCase();
+  if (status === "paid") return true;
+  if (String(data.paymentProvider || "") !== "") return true;
+  if (String(data.paymentId || "") !== "") return true;
+  return false;
+}
+
+function isPendingSignup_(data) {
+  var txn = String(data.transactionNumber || data.confirmationTransactionNumber || "");
+  return txn === "payment-pending";
+}
+
+function secretOk_(provided) {
+  var expected =
+    PropertiesService.getScriptProperties().getProperty("APPS_SCRIPT_SHARED_SECRET") || "";
+  var got = String(provided || "");
+  if (!expected || !got) return false;
+  var length = Math.max(expected.length, got.length);
+  var diff = expected.length === got.length ? 0 : 1;
+  for (var i = 0; i < length; i++) {
+    var left = i < expected.length ? expected.charCodeAt(i) : 0;
+    var right = i < got.length ? got.charCodeAt(i) : 0;
+    diff |= left ^ right;
+  }
+  return diff === 0;
+}
+
+function alreadyRecorded_(sheet, paymentId, eventId) {
+  if (!paymentId || !eventId) return false;
+  var last = sheet.getLastRow();
+  if (last < 2) return false;
+  var width = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, width).getValues()[0];
+  var payCol = headers.indexOf("Payment id");
+  var eventCol = headers.indexOf("Event ID");
+  if (payCol < 0 || eventCol < 0) return false;
+  var values = sheet.getRange(2, 1, last - 1, width).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][payCol] || "") === String(paymentId) && String(values[i][eventCol] || "") === String(eventId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function pendingPayment_(data) {
-  return String(data.transactionNumber || "") === "payment-pending";
+  if (String(data.paymentStatus || "").toLowerCase() === "paid") return false;
+  return isPendingSignup_(data) || String(data.paymentStatus || "") === "pending";
+}
+
+function paidPayment_(data) {
+  return String(data.paymentStatus || "").toLowerCase() === "paid";
 }
 
 function sendNotifyEmail_(data) {
   var props = PropertiesService.getScriptProperties();
   var to = props.getProperty("NOTIFY_EMAIL") || DEFAULT_NOTIFY;
   var subject =
-    "[Hustle Oslo] Signup — " +
+    "[Hustle Oslo] Signup - " +
     (data.eventDate || "") +
     " " +
     (data.ticketName || "") +
-    " · txn " +
+    " - txn " +
     (data.transactionNumber || "");
   var body = [
     "New Hustle Oslo signup",
@@ -264,9 +411,14 @@ function sendNotifyEmail_(data) {
       (data.priceTier || "") +
       ")",
     "Amount: " + (data.amount != null ? data.amount + " NOK" : ""),
-    pendingPayment_(data)
-      ? "Payment: pending — attendee was asked to Vipps Hustle Oslo #48782"
-      : "Vipps transaction #: " + (data.transactionNumber || "—"),
+    paidPayment_(data)
+      ? "Payment: paid via " + (data.paymentProvider || "—") + " · " + (data.paymentId || "—")
+      : pendingPayment_(data)
+        ? "Payment: pending — attendee was asked to Vipps Hustle Oslo #48782"
+        : "Vipps transaction #: " + (data.transactionNumber || "—"),
+    "Payment provider: " + (data.paymentProvider || "—"),
+    "Payment id: " + (data.paymentId || "—"),
+    "Payment status: " + (data.paymentStatus || (pendingPayment_(data) ? "pending" : "—")),
     "Payment method: " + (data.paymentMethod || "—"),
     "Terms: " +
       (data.termsAccepted ? "accepted " + (data.termsVersion || "") : "no") +
@@ -305,9 +457,13 @@ function sendAttendeeConfirmationOnly_(data) {
   }
   data.transactionNumber = txn;
   if (!data.vippsNumber) data.vippsNumber = "48782";
+  if (paidConfirmationSent_(data)) {
+    return json_({ ok: true, confirmationOnly: true, confirmationSent: true, duplicate: true });
+  }
   if (sendConfirmationEmail_(data) !== true) {
     return json_({ ok: false, error: "Nothing to confirm" });
   }
+  rememberPaidConfirmation_(data);
   return json_({ ok: true, confirmationOnly: true, confirmationSent: true });
 }
 
@@ -329,7 +485,8 @@ function sendConfirmationEmail_(data) {
 }
 
 function confirmationSubject_() {
-  return "Hustle Oslo — signup received";
+  // MailApp does not RFC-2047-encode subjects. A non-ASCII dash is shown in Gmail as Latin-1 mojibake.
+  return "Hustle Oslo - signup received";
 }
 
 function confirmationBody_(data, nights) {
@@ -358,7 +515,10 @@ function confirmationBody_(data, nights) {
   }
 
   lines.push("");
-  if (pendingPayment_(data)) {
+  if (paidPayment_(data)) {
+    lines.push("Payment received via " + (plain_(data.paymentMethod) || plain_(data.paymentProvider) || "card") + ".");
+    lines.push("Payment id: " + (plain_(data.paymentId) || plain_(data.transactionNumber) || "—"));
+  } else if (pendingPayment_(data)) {
     lines.push(
       "Payment is still pending. Please Vipps the total to Hustle Oslo #" +
         (plain_(data.vippsNumber) || "48782") +
@@ -372,9 +532,33 @@ function confirmationBody_(data, nights) {
   lines.push(
     "Questions? Reply to this email or contact " + DEFAULT_NOTIFY + "."
   );
+  appendCalendarLinks_(lines, data);
   lines.push("");
   lines.push("Hustle Oslo");
   return lines.join("\n");
+}
+
+function appendCalendarLinks_(lines, data) {
+  var ics = plain_(data.calendarIcs);
+  var nights = data.calendarNights;
+  var list = [];
+  if (Array.isArray(nights)) {
+    for (var i = 0; i < nights.length; i++) {
+      if (nights[i] && typeof nights[i] === "object") list.push(nights[i]);
+    }
+  }
+  if (!ics && !list.length) return;
+  lines.push("");
+  lines.push("Add to calendar");
+  if (ics) lines.push("All nights (.ics): " + ics);
+  for (var n = 0; n < list.length; n++) {
+    var night = list[n];
+    var label = plain_(night.summary) || plain_(night.eventDate) || "Night";
+    var google = plain_(night.googleUrl);
+    var one = plain_(night.icsUrl);
+    if (google) lines.push(label + " (Google Calendar): " + google);
+    if (one) lines.push(label + " (.ics): " + one);
+  }
 }
 
 function nightsForConfirmation_(data) {
