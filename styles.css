@@ -3532,7 +3532,43 @@ a.bk-btn {
 }
 
 .bk-wallet-host {
+  position: relative;
   margin: 8px 0 4px;
+}
+
+/* Same 42px shape as the plain wallet button; shown only while Stripe checks the wallet. */
+.bk-wallet-ph {
+  display: none;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #2a2a2e 0%, #34343a 50%, #2a2a2e 100%);
+  background-size: 200% 100%;
+  animation: bk-wallet-ph 1.2s ease-in-out infinite;
+}
+
+.bk-wallet-host.is-loading .bk-wallet-ph {
+  display: block;
+}
+
+#bk-express-checkout {
+  transition: opacity 0.18s ease;
+}
+
+.bk-wallet-host.is-loading #bk-express-checkout {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes bk-wallet-ph {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-wallet-ph { animation: none; }
+  #bk-express-checkout { transition: none; }
 }
 
 .bk-payment-host {

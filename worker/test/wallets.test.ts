@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("wallet buttons are Stripe's and exist only after the PaymentIntent", () => {
+test("wallet buttons are Stripe's; the click stays synchronous in both intent modes", () => {
   const js = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   assert.match(html, /id="bk-express-checkout"/);
@@ -22,7 +22,8 @@ test("wallet buttons are Stripe's and exist only after the PaymentIntent", () =>
   assert.equal(click.includes("postCheckout"), false);
   assert.equal(click.includes("fetch"), false);
 
-  const confirm = js.slice(js.indexOf("function walletPaymentFailed"), js.indexOf("function resultFromOrder"));
+  // Fallback (older Worker without /config): the PaymentIntent exists before the button.
+  const confirm = js.slice(js.indexOf("function walletPaymentFailed"), js.indexOf("async function confirmWalletDeferred"));
   assert.equal(confirm.includes("postCheckout"), false);
   assert.match(confirm, /confirmPayment/);
   assert.match(confirm, /paymentFailed/);

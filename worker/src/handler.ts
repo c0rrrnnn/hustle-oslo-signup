@@ -863,6 +863,16 @@ export async function handleRequest(request: Request, env: Env, deps: Deps = {})
         vippsApi,
       }, cors);
     }
+    if (request.method === "GET" && path === "/config") {
+      // Publishable key only (public by design), so the site can mount Stripe Elements in deferred-intent
+      // mode before an order exists. The PaymentIntent is still created by POST /checkout at Pay time.
+      if (testModeError(env) || !/^pk_(test|live)_/.test(env.STRIPE_PUBLISHABLE_KEY || "")) {
+        return json(403, { ok: false, error: "test-mode" }, cors);
+      }
+      const res = json(200, { ok: true, publishableKey: env.STRIPE_PUBLISHABLE_KEY, currency: "nok", paymentMethodTypes: ["card"] }, cors);
+      res.headers.set("cache-control", "public, max-age=300");
+      return res;
+    }
     if (request.method === "GET" && path === "/ics") return await onIcs(request, env, deps, cors);
     if (request.method === "POST" && path === "/checkout") return await beginCheckout(request, env, deps, cors);
     if (request.method === "POST" && path === "/webhooks/stripe") return await onStripeWebhook(request, env, deps, cors);
