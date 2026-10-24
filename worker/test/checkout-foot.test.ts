@@ -68,10 +68,16 @@ test("the payment footer is measured and the error card keeps a red fill without
   }
   assert.ok(checkoutFoot.indexOf("bk-foot-note") < checkoutFoot.indexOf('id="bk-checkout-tos"'));
   assert.ok(checkoutFoot.indexOf('id="bk-checkout-tos"') < checkoutFoot.indexOf('id="bk-pay"'));
-  const doneFoot = html.slice(html.indexOf('id="bk-foot-done"'), html.indexOf("</footer>", html.indexOf('id="bk-foot-done"')));
-  assert.equal(doneFoot.includes('data-action="done"'), false);
-  assert.equal(doneFoot.includes(">Done<"), false);
-  assert.ok(doneFoot.indexOf("bk-foot-note") < doneFoot.indexOf("bk-mini"));
+  // The booked screen has no sticky bar: go() hides .bk-foot when a view has
+  // no panel, and the Instagram line scrolls under the calendar buttons.
+  assert.equal(html.includes('id="bk-foot-done"'), false);
+  assert.match(js, /footer\.hidden = !document\.getElementById\("bk-foot-" \+ view\)/);
+  const doneStep = html.slice(html.indexOf('id="bk-step-done"'), html.indexOf("</section>", html.indexOf('id="bk-step-done"')));
+  assert.equal(doneStep.includes('data-action="done"'), false);
+  assert.ok(doneStep.indexOf('id="bk-cal-actions"') < doneStep.indexOf('id="bk-done-help"'));
+  assert.match(doneStep, /class="bk-mini bk-done-help"[^>]*>Questions\? DM <a href="https:\/\/instagram\.com\/hustleoslo" target="_blank" rel="noopener noreferrer">@hustleoslo<span class="visually-hidden"> \(opens in a new tab\)<\/span><\/a> on Instagram/);
+  assert.match(css, /\.bk-done-help\s*\{[^}]*margin:\s*24px 0 0;/);
+  assert.equal(html.slice(html.indexOf('<footer class="bk-foot">'), html.indexOf("</footer>", html.indexOf('<footer class="bk-foot">'))).includes("bk-mini"), false);
   assert.match(html, /id="bk-back"[^>]*aria-label="Back"/);
   assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*width:\s*40px/);
   assert.match(css, /#bk-back,\s*\n\s*#bk-close\s*\{[^}]*height:\s*40px/);

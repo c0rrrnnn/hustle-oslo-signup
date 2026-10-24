@@ -2610,8 +2610,7 @@ body.bk-open {
   flex-direction: column;
 }
 
-/* The Pay terms, directly above the Pay button. On the booked screen it is
-   the only line in the bar. */
+/* The Pay terms, directly above the Pay button. */
 .bk-foot-note {
   flex: 0 0 auto;
   margin: 0 0 10px;
@@ -2621,8 +2620,7 @@ body.bk-open {
   margin-bottom: 0;
 }
 
-.bk-foot-note > .bk-tos,
-.bk-foot-note > .bk-mini {
+.bk-foot-note > .bk-tos {
   margin: 0;
 }
 
@@ -4006,6 +4004,17 @@ a.bk-cal-link:hover {
 
 .cf-cal-sec .bk-cal-actions {
   margin-top: 0;
+}
+
+/* The booked screen has no bottom bar. The Instagram line is page content
+   under the calendar buttons and scrolls with them; the body keeps its normal
+   bottom padding plus the home-indicator inset. */
+.bk-done-help {
+  margin: 24px 0 0;
+}
+
+.bk-sheet.is-done .bk-body {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .cf-cal-pair {
