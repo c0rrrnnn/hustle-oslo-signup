@@ -1,0 +1,4 @@
+# Optional. A domain registered in Stripe Payment method domains does not need this file.
+# Stripe verifies Apple Pay itself for the Payment Element and Express Checkout Element.
+/.well-known/apple-developer-merchantid-domain-association
+  Content-Type: text/plain
