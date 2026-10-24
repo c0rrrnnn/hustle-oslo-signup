@@ -354,6 +354,27 @@ main {
   }
 }
 
+/* Scalloped frame (hero-scallop.js adds .is-scalloped only where CSS masks work; elsewhere the
+   rounded tile above stays). The script snaps the height to whole bumps and sets the mask image. */
+.hero-visual.is-scalloped,
+body.is-landing .hero-visual.is-scalloped {
+  border: 0;
+  border-radius: 0;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.hero-visual.is-scalloped .hero-video,
+body.is-landing .hero-visual.is-scalloped .hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ─── Landing intro (panel 1) ────────────────────────────────────────────── */
 body.is-landing {
   background: #121214;

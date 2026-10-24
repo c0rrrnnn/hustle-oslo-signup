@@ -26,6 +26,7 @@ A preview server may already be running on port **8765** on the shared box.
 | `assets/hero.mp4` | Desktop hero loop (muted, no audio track). 7.6 MB, 1920×1080, 25 fps, 31.2 s, H.264 High, ~2 Mbps, faststart. |
 | `assets/hero-720.mp4` | Mobile hero loop, picked by `<source media="(max-width: 700px)">`. 3.8 MB, 1280×720, ~1 Mbps, same settings. |
 | `assets/hero-poster.jpg` | Frame-0 still (1280×720, 129 KB) shown before playback and for reduced motion. |
+| `hero-scallop.js` | Scalloped frame around the landing hero (5 bumps across, pointed dips 0.25 × bump deep, SVG mask). Loaded in `<head>` so the height is set before first paint; without CSS mask support the hero keeps its rounded corners. |
 | `events.js` | Upcoming nights + ticket catalogue (edit here for new dates) |
 | `app.js` | Booking sheet, validation, Apps Script submit, `startPayment()` |
 | `apps-script/Code.gs` | Google Apps Script: Sheet tabs, organizer notify, one attendee confirmation per booking |
