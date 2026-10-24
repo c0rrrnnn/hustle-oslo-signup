@@ -3439,7 +3439,10 @@ a.bk-btn {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
+  /* 42px tall, same as the Apple Pay / Google Pay buttons (buttonHeight 42), so wallets are never smaller. */
+  padding: 7px 14px;
+  min-height: 42px;
+  box-sizing: border-box;
   border: 1px solid #2a2a2e;
   border-radius: 12px;
   margin-top: 8px;

@@ -2027,7 +2027,9 @@
         amazonPay: "never",
         klarna: "never",
       },
-      buttonHeight: 48,
+      // Brand-guideline plain buttons (no "Buy with"), white, 42px tall: the logo renders ~16px.
+      buttonHeight: 42,
+      buttonType: { applePay: "plain", googlePay: "plain" },
       buttonTheme: { applePay: "white", googlePay: "white" },
       layout: { maxColumns: 1, maxRows: 0, overflow: "never" },
     });
