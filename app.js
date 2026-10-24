@@ -825,10 +825,13 @@
       const type = dayEvents.some((ev) => ev.type === "class") ? "class" : "social";
       const kind = type === "class" ? "Class and social" : "Social only";
       const label = d + " " + MONTH_NAMES[m - 1] + " " + y + ", " + kind + (selected ? ", selected" : "");
+      // The ring marks only the date being viewed. A date with a pick that is
+      // not being viewed keeps just the grey fill, so earlier dates do not stay circled.
       cells +=
         '<button type="button" class="bk-day is-event' +
-        (selected || focused ? " is-selected" : "") +
-        '" data-action="focus-date" data-date="' + key + '" aria-pressed="' + (selected ? "true" : "false") +
+        (focused ? " is-selected" : selected ? " has-pick" : "") +
+        '" data-action="focus-date" data-date="' + key + '" aria-pressed="' + (selected ? "true" : "false") + '"' +
+        (focused ? ' aria-current="date"' : "") +
         '" aria-label="' + escapeHtml(label) + '"><span class="bk-day-num">' + d +
         '</span><span class="bk-day-dot bk-dot-' + type + '" aria-hidden="true"></span></button>';
     }
@@ -936,6 +939,35 @@
       const el = document.getElementById(activeId);
       if (el) el.focus();
     }
+  }
+
+  // Tapping the offer that is already chosen unselects it. Radios never fire
+  // "change" when clicked again, so this runs from the click on the input.
+  function clearTicket(eventId) {
+    const before = state.selections.length;
+    state.selections = state.selections.filter((s) => s.event.id !== eventId);
+    if (state.selections.length === before) return;
+    const activeId = document.activeElement && document.activeElement.id;
+    renderCalendar();
+    renderOptions();
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) el.focus({ preventScroll: true });
+    }
+  }
+
+  function isTicketInput(el) {
+    return !!(el && el.matches && el.matches('input[type="radio"][name^="ticket-"]'));
+  }
+
+  function onTicketClick(e) {
+    const input = e.target;
+    if (!isTicketInput(input)) return false;
+    const sel = selectionForEvent(input.dataset.eventId);
+    if (!sel || !sel.ticket || sel.ticket.id !== input.value) return false;
+    e.preventDefault();
+    clearTicket(input.dataset.eventId);
+    return true;
   }
 
   function removeNight(eventId) {
@@ -3085,6 +3117,16 @@
     const sheet = $("#book-sheet");
     if (!sheet || sheet.hidden) return;
     if (e.key === "Tab") sheet.classList.remove("bk-touch");
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+      const a = document.activeElement;
+      if (isTicketInput(a) && sheet.contains(a)) {
+        // Enter and Space both toggle an offer card. A checked radio ignores
+        // Space natively, so both keys go through the same click.
+        e.preventDefault();
+        if (!e.repeat) a.click();
+        return;
+      }
+    }
     if (e.key === "Enter" && onFormReturn(e)) return;
     if (onStudentChoiceKey(e)) return;
     if (e.key === "Escape") {
@@ -3130,6 +3172,7 @@
 
   function onSheetClick(e) {
     if (swallowStudentFollowup(e)) return;
+    if (onTicketClick(e)) return;
     const actionEl = e.target.closest("[data-action]");
     if (!actionEl || !$("#book-sheet").contains(actionEl)) return;
     const action = actionEl.dataset.action;
@@ -3240,6 +3283,10 @@
     const form = $("#bk-details-form");
     if (form) form.addEventListener("submit", onDetailsSubmit);
     document.addEventListener("keydown", onKeydown);
+    document.addEventListener("keyup", function (e) {
+      // Keydown already toggled the card; stop the native Space activation on keyup.
+      if ((e.key === " " || e.key === "Spacebar") && isTicketInput(document.activeElement)) e.preventDefault();
+    });
     if (typeof window.addEventListener === "function") {
       window.addEventListener("pagehide", function () {
         if (state.submitted || !state.selections.length) return;

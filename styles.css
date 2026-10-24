@@ -2869,6 +2869,16 @@ a.bk-btn {
   box-shadow: 0 0 0 2px #fff;
 }
 
+/* A date with a pick that is not being viewed: grey fill only, no ring. */
+.bk-day.has-pick,
+.bk-day.has-pick:focus,
+.bk-day.has-pick:active {
+  background: #3a3a40;
+  background-color: #3a3a40;
+  color: #fff;
+  box-shadow: none;
+}
+
 /* Keyboard: a circle, not the rectangular button outline. A tap sets
    .bk-touch and keeps only the selection circle. */
 .bk-sheet button.bk-day:focus-visible {
@@ -2975,6 +2985,13 @@ a.bk-btn {
   outline: 2px solid #fff;
   outline-offset: 2px;
   box-shadow: none;
+}
+
+/* A tap leaves focus on the card's hidden input. Without this the focus
+   outline would keep an unselected card looking chosen. Keyboard (Tab)
+   clears .bk-touch, so the outline still shows there. */
+.bk-sheet.bk-touch .bk-opt:focus-within {
+  outline: none;
 }
 
 .bk-rd {
