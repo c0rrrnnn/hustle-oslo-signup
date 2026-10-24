@@ -248,6 +248,26 @@
     return "20:00–21:00";
   }
 
+  // Chosen nights are always listed soonest first: date, then start time, then
+  // Beginners > Intermediate > Bundle > Social on the same night. Every list, the
+  // checkout payload and the saved cart read state.selections, so sort it in place.
+  const TICKET_ORDER = { beginners: 0, intermediate: 1, bundle: 2, social: 3 };
+
+  function compareSelections(a, b) {
+    const ae = (a && a.event) || {}, be = (b && b.event) || {};
+    const at = (a && a.ticket && a.ticket.id) || "", bt = (b && b.ticket && b.ticket.id) || "";
+    return String(ae.date || "").localeCompare(String(be.date || "")) ||
+      ticketTime(ae, at).localeCompare(ticketTime(be, bt)) ||
+      String(ae.start || "").localeCompare(String(be.start || "")) ||
+      (at in TICKET_ORDER ? TICKET_ORDER[at] : 9) - (bt in TICKET_ORDER ? TICKET_ORDER[bt] : 9) ||
+      String(ae.id || "").localeCompare(String(be.id || ""));
+  }
+
+  function sortSelections(list) {
+    if (Array.isArray(list)) list.sort(compareSelections);
+    return list;
+  }
+
   function ticketNote(ticket) {
     if (!ticket || ticket.id === "social") return "";
     if (ticket.id === "bundle") return "Includes beginner, intermediate class and social";
@@ -937,7 +957,7 @@
       sel.ticket = ticket;
       sel.priceTier = tierForTicket(ticket);
     }
-    state.selections.sort((a, b) => a.event.date.localeCompare(b.event.date) || a.event.id.localeCompare(b.event.id));
+    sortSelections(state.selections);
     const activeId = document.activeElement && document.activeElement.id;
     renderCalendar();
     renderOptions();
@@ -984,6 +1004,7 @@
   function renderConfirm() {
     const host = $("#bk-confirm-list");
     if (!host) return;
+    sortSelections(state.selections);
     if (!state.selections.length) {
       host.innerHTML = '<p class="bk-sub">No classes selected.</p>';
     } else {
@@ -1612,7 +1633,7 @@
   function renderCheckout() {
     const lines = $("#bk-order-lines");
     if (lines) {
-      lines.innerHTML = state.selections.map(orderLine).join("");
+      lines.innerHTML = sortSelections(state.selections).map(orderLine).join("");
     }
     const who = $("#bk-who");
     if (who) {
@@ -1625,7 +1646,7 @@
   function renderFailed() {
     const lines = $("#bk-fail-lines");
     if (lines) {
-      lines.innerHTML = state.selections.map(orderLine).join("");
+      lines.innerHTML = sortSelections(state.selections).map(orderLine).join("");
     }
   }
 
@@ -1801,7 +1822,7 @@
         email: person.email,
         phone: person.phone,
       },
-      nights: state.selections.map((sel) => ({
+      nights: sortSelections(state.selections).map((sel) => ({
         eventId: sel.event.id,
         ticketId: sel.ticket.id,
         priceTier: sel.priceTier,
@@ -2142,7 +2163,7 @@
       const ticket = list.find(function (item) { return item.id === night.ticketId; }) || night.ticket || null;
       if (!ticket || !ticket.id) return null;
       return { event: ev, ticket: ticket, priceTier: night.priceTier === "student" ? "student" : "standard" };
-    }).filter(Boolean);
+    }).filter(Boolean).sort(compareSelections);
   }
 
   function storeGet(key) {
@@ -2278,7 +2299,7 @@
       priceTier: state.priceTier,
       paymentMethod: state.paymentMethod,
       termsAcceptedAt: state.termsAcceptedAt,
-      nights: state.selections.map(nightSnapshot),
+      nights: sortSelections(state.selections).map(nightSnapshot),
     });
     storeSet(PAYMENT_SESSION_KEY, snapshot);
     saveDetailsDraft();
@@ -2530,7 +2551,7 @@
         email: $("#bk-email").value.trim().toLowerCase(),
         phone: $("#bk-phone").value.trim(),
       },
-      nights: state.selections.map((s) => ({
+      nights: sortSelections(state.selections).map((s) => ({
         eventId: s.event.id,
         eventDate: s.event.date,
         eventType: s.event.type,
@@ -2683,7 +2704,7 @@
 
   async function submitAllSignups() {
     const person = buildPersonFields();
-    const selections = state.selections.slice();
+    const selections = sortSelections(state.selections).slice();
     const results = [];
     let mocked = false;
     const succeededNights = [];
@@ -3101,7 +3122,7 @@
       return;
     }
     if (table) {
-      const nights = state.selections
+      const nights = sortSelections(state.selections)
         .map((s) => {
           const meta = formatCheckoutDate(s.event) + ", " + ticketTime(s.event, s.ticket.id);
           return "<li>" + escapeHtml(classLineName(s)) + '<span class="cf-night-meta">' + escapeHtml(meta) + "</span></li>";
