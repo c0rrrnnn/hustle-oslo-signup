@@ -75,7 +75,7 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.equal(invalid[0].includes("#ff8a8a"), false);
   assert.match(css, /\.bk-err\s*\{[^}]*color:\s*#ffb4b4/);
   assert.match(html, /id="btn-start"[^>]*aria-label="Register"/);
-  const landingIds = ["hero-video", "intro-heading", "landing-upcoming", "btn-start", "landing-about", "landing-details", "landing-schedule", "landing-prices", "landing-location"];
+  const landingIds = ["hero-video", "intro-heading", "landing-upcoming", "btn-start", "landing-about", "landing-schedule", "landing-prices", "landing-location", "landing-details"];
   landingIds.reduce((prev, id) => {
     const at = html.indexOf('id="' + id + '"');
     assert.ok(at > prev, id + " follows the landing order");

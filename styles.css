@@ -514,6 +514,66 @@ body.is-landing .site-footer a:hover {
   margin-top: 0.75em;
 }
 
+/* About hustle inline "… See more". about-toggle.js cuts the text at a word and
+   puts the ellipsis + button on the last visible line; without JS the full text
+   shows and the button stays hidden. */
+.about-body.is-animating {
+  overflow: hidden;
+  transition: max-height 0.28s ease;
+}
+
+.about-toggle {
+  position: relative;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Bigger tap area without changing the line box. */
+.about-toggle::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+.about-ellipsis {
+  color: #d6d6de;
+}
+
+.about-toggle[hidden] {
+  display: none;
+}
+
+.about-toggle:hover {
+  color: #e4e4e8;
+}
+
+.about-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-body.is-animating {
+    transition: none;
+  }
+}
+
 .price-card {
   background: #1c1c1f;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -554,7 +614,7 @@ body.is-landing .site-footer a:hover {
 .price-table thead th:nth-child(2),
 .price-table thead th:nth-child(3) {
   width: 5.4rem;
-  text-align: right;
+  text-align: left;
   white-space: nowrap;
 }
 
@@ -572,7 +632,7 @@ body.is-landing .site-footer a:hover {
 
 .price-table td {
   width: 5.4rem;
-  text-align: right;
+  text-align: left;
   font-weight: 500;
   color: #e4e4ea;
   font-variant-numeric: tabular-nums;
@@ -704,7 +764,7 @@ body.is-landing .site-footer a:hover {
 
 .upcoming-row {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.5rem;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: 0.1rem 0.05rem 0.45rem;
@@ -719,13 +779,15 @@ body.is-landing .site-footer a:hover {
 }
 
 .upcoming-card {
-  flex: 0 0 8.5rem;
+  flex: 0 0 auto;
+  min-width: 6.5rem;
   scroll-snap-align: start;
   background: #2a2a2e;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 0.9rem 0.8rem 0.85rem;
-  min-height: 5.5rem;
+  border-radius: 14px;
+  padding: 0.6rem 0.75rem 0.6rem;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .upcoming-date {
@@ -929,8 +991,8 @@ body.is-landing .site-footer a:hover {
 
   .upcoming-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
+    grid-template-columns: repeat(auto-fill, 7.25rem);
+    gap: 0.5rem;
     overflow: visible;
     scroll-snap-type: none;
     padding-bottom: 0;
@@ -938,7 +1000,6 @@ body.is-landing .site-footer a:hover {
 
   .upcoming-card {
     flex: none;
-    width: auto;
     min-width: 0;
     scroll-snap-align: unset;
   }
