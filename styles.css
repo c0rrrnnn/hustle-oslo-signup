@@ -3536,10 +3536,11 @@ a.bk-btn {
   margin: 8px 0 4px;
 }
 
-/* Same 42px shape as the plain wallet button; shown only while Stripe checks the wallet. */
+/* Same 42px shape and position as the plain wallet button; shown only while Stripe checks the wallet. */
 .bk-wallet-ph {
   display: none;
   height: 42px;
+  margin: 4px 0; /* Stripe's iframe is 50px: the 42px button plus 4px focus-ring room above and below */
   border-radius: 12px;
   background: linear-gradient(90deg, #2a2a2e 0%, #34343a 50%, #2a2a2e 100%);
   background-size: 200% 100%;

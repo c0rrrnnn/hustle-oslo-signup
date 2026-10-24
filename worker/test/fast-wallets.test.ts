@@ -106,6 +106,7 @@ test("wallet placeholder: 42px same shape, only where a wallet is likely, button
   assert.ok(ph);
   assert.match(ph[0], /height: 42px;/);
   assert.match(ph[0], /border-radius: 12px;/);
+  assert.match(ph[0], /margin: 4px 0;/); // 42 + 4 + 4 = the 50px Stripe iframe, so nothing shifts
   assert.match(css, /\.bk-wallet-host\.is-loading #bk-express-checkout \{[^}]*opacity: 0;/);
   assert.match(css, /#bk-express-checkout \{\s*transition: opacity/);
 
