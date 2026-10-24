@@ -104,7 +104,8 @@ test("checkout has no provider trust line and field errors keep the normal borde
   assert.match(narrow, /\.landing-nav\s*\{[^}]*background:\s*#121214;/);
   assert.match(narrow, /padding-top:\s*calc\(0\.7rem \+ env\(safe-area-inset-top, 0px\)\)/);
   assert.match(narrow, /scroll-margin-top:\s*var\(--landing-nav-sticky-h\)/);
-  assert.match(narrow, /body\.is-landing \.hero-visual\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*768\s*\/\s*576;/);
+  assert.match(narrow, /body\.is-landing \.hero-visual\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*16\s*\/\s*9;/);
+  assert.match(html, /<source src="assets\/hero-720\.mp4" type="video\/mp4" media="\(max-width: 700px\)" \/>\s*<source src="assets\/hero\.mp4" type="video\/mp4" \/>/);
   assert.match(narrow, /body\.is-landing \.hero-video\s*\{[^}]*width:\s*100%;\s*height:\s*auto;\s*object-fit:\s*contain;/);
   assert.match(css, /\.bk-sheet\s*\{[^}]*z-index:\s*80;/);
   const desk = css.slice(css.indexOf("@media (min-width: 960px)"));

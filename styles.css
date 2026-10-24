@@ -829,7 +829,7 @@ body.is-landing .site-footer a:hover {
     max-width: none;
     max-height: none;
     height: auto;
-    aspect-ratio: 768 / 576;
+    aspect-ratio: 16 / 9;
     margin-inline: 0;
   }
 
