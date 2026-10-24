@@ -591,6 +591,7 @@
       renderPayMethods();
     }
     if (view === "failed") {
+      state.reachedCheckout = true;
       renderFailed();
       renderPayMethods();
     }
@@ -2005,11 +2006,22 @@
     });
   }
 
+  function googlePayMode() {
+    // With "auto", Stripe shows Google Pay only when the shopper already has a card saved in Google
+    // Wallet and Chrome's "Allow sites to check if you have payment methods saved" is on, so most
+    // Android phones saw no button. "always" shows it on every Google Pay-capable browser (a card can be
+    // added in the Google Pay sheet). Apple devices keep "auto" so Safari shows Apple Pay on its own.
+    const ua = navigator.userAgent || "";
+    const appleTouch = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const desktopSafari = /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Android|Edg|OPR|SamsungBrowser|Firefox|FxiOS/.test(ua);
+    return appleTouch || desktopSafari ? "auto" : "always";
+  }
+
   function createWalletElement(elements) {
     const element = elements.create("expressCheckout", {
       paymentMethods: {
         applePay: "auto",
-        googlePay: "auto",
+        googlePay: googlePayMode(),
         link: "never",
         paypal: "never",
         amazonPay: "never",

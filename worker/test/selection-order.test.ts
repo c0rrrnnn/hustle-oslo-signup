@@ -77,3 +77,41 @@ test("experience copy: other styles without 'now'", () => {
   assert.match(app, /"other-styles": "I dance other styles \(salsa, swing, etc\.\)"/);
   assert.equal(/other styles now/.test(app + html), false);
 });
+
+test("removing or changing a class refreshes every total, drops the old payment and rewrites the saved cart", () => {
+  assert.match(body("function removeNight(", "function cartChanged("), /cartChanged\(\)/);
+  const changed = body("function cartChanged(", "function detailsComplete(");
+  assert.match(changed, /resetPaymentAttempt\(\)/);
+  assert.match(changed, /updatePayChrome\(\)/);
+  assert.match(changed, /renderConfirm\(\)/);
+  assert.match(changed, /savePaymentSession\("", true\)/);
+  assert.match(changed, /clearSavedCart\(\)/);
+});
+
+test("Confirm selection goes straight back to checkout after an edit when details are valid, with a truthful label", () => {
+  const next = body("function nextAfterConfirm(", "function syncConfirmNext(");
+  assert.match(next, /if \(!state\.priceTier\) return "student"/);
+  assert.match(next, /state\.reachedCheckout && detailsComplete\(\)\) return "checkout"/);
+  assert.match(next, /return "details"/);
+  assert.match(app, /"Continue to Payment" : "Continue"/);
+  assert.match(app, /if \(target === "checkout"\) state\.checkoutFrom = "confirm";/);
+  assert.match(app, /return go\(state\.checkoutFrom === "confirm" \? "confirm" : "details"\)/);
+  // Coming back from Vipps/Stripe to the failed screen counts as having reached checkout.
+  assert.match(app, /if \(view === "failed"\) \{\s*state\.reachedCheckout = true;/);
+});
+
+test("Google Pay is offered on any capable browser, not only with a card already saved", () => {
+  const mode = body("function googlePayMode(", "function createWalletElement(");
+  assert.match(mode, /\? "auto" : "always"/);
+  assert.match(app, /googlePay: googlePayMode\(\)/);
+  assert.match(app, /wallets: \{ applePay: "never", googlePay: "never", link: "never" \}/);
+  assert.match(app, /klarna: "never"/);
+  assert.match(app, /link: "never"/);
+});
+
+test("experience copy: other styles without 'now'", () => {
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  assert.match(html, /<option value="other-styles">I dance other styles \(salsa, swing, etc\.\)<\/option>/);
+  assert.match(app, /"other-styles": "I dance other styles \(salsa, swing, etc\.\)"/);
+  assert.equal(/other styles now/.test(app + html), false);
+});

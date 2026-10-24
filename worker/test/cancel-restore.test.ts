@@ -48,6 +48,6 @@ test("the return page rebuilds the cart from the Worker when there is no local c
 test("express checkout shows Apple Pay and Google Pay only", () => {
   const wallet = body("function createWalletElement(", "function walletPaymentFailed(");
   assert.match(wallet, /applePay: "auto"/);
-  assert.match(wallet, /googlePay: "auto"/);
+  assert.match(wallet, /googlePay: googlePayMode\(\)/);
   for (const key of ["link", "paypal", "amazonPay", "klarna"]) assert.match(wallet, new RegExp(key + ': "never"'));
 });
