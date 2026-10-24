@@ -2803,10 +2803,19 @@ a.bk-btn {
   margin: 0;
 }
 
-.bk-choice.is-on {
+/* .is-on = the chosen answer; .is-tapped = the 250 ms white moment after a tap before the date step
+   (a class, not :hover/:active, so iOS Safari never leaves a sticky state). */
+.bk-choice.is-on,
+.bk-choice.is-tapped {
   background: #fff;
   color: #121214;
   border-color: #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bk-choice {
+    transition: background-color 90ms ease-out, color 90ms ease-out, border-color 90ms ease-out;
+  }
 }
 
 .bk-cal {

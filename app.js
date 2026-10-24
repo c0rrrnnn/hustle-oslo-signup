@@ -634,6 +634,7 @@
   }
 
   function closeSheet() {
+    clearStudentFeedback();
     closeGcalList(false);
     paymentUi.resumeGen += 1;
     if (state.submitting) return;
@@ -734,12 +735,33 @@
     return studentAdvancedAt !== 0 && Date.now() - studentAdvancedAt < 500;
   }
 
+  // The tapped answer shows white for this long before the date step opens, so the tap is seen.
+  const STUDENT_FEEDBACK_MS = 250;
+  let studentFeedbackTimer = 0;
+
+  function clearStudentFeedback() {
+    if (studentFeedbackTimer) clearTimeout(studentFeedbackTimer);
+    studentFeedbackTimer = 0;
+    ["bk-student-yes", "bk-student-no"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.remove("is-tapped");
+    });
+  }
+
   function chooseStudent(tier) {
-    if (studentAdvanceLocked()) return;
+    // One answer per visit: taps (or Enter/Space) during the white moment or right after the advance are ignored.
+    if (studentFeedbackTimer || studentAdvanceLocked()) return;
     setTier(tier);
     if (state.view !== "student") return;
-    studentAdvancedAt = Date.now();
-    go("dates");
+    const btn = document.getElementById(state.priceTier === "student" ? "bk-student-yes" : "bk-student-no");
+    if (btn) btn.classList.add("is-tapped");
+    studentFeedbackTimer = setTimeout(() => {
+      studentFeedbackTimer = 0;
+      clearStudentFeedback();
+      if (state.view !== "student" || !state.sheetOpen) return;
+      studentAdvancedAt = Date.now();
+      go("dates");
+    }, STUDENT_FEEDBACK_MS);
   }
 
   function swallowStudentFollowup(e) {
@@ -3544,6 +3566,7 @@
     enterKeyHintFor: enterKeyHintFor,
     cartSelections: cartSelections,
     cartMatchesOrder: cartMatchesOrder,
+    STUDENT_FEEDBACK_MS: STUDENT_FEEDBACK_MS,
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
