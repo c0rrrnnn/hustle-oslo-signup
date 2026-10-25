@@ -3089,7 +3089,6 @@ a.bk-btn {
 
 .bk-opt:focus-within,
 .bk-return:focus-within,
-.bk-mrow:focus-within,
 .bk-choice:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
@@ -3524,8 +3523,25 @@ a.bk-btn {
   color: #f4f4f5;
 }
 
-.bk-mrow.is-on {
-  border-color: #fff;
+/* Selection is shown by the radio dot only, so the selected row keeps the normal
+   border. Keyboard focus gets a ring that follows the row's rounded corners;
+   :focus-visible keeps it off for mouse and tap selection. When the Card form
+   is open, the ring wraps the row and the form as one rounded block. */
+.bk-mrow:has(input:focus-visible) {
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Joined Card row + form: offset shadows that never extend across the join, so
+   no sub-pixel sliver of the ring shows between the row and the form. */
+.bk-pay-list:has(+ .is-open) .bk-mrow.is-on[data-method="card"]:has(input:focus-visible) {
+  box-shadow: 0 -2px 0 0 #fff, -2px 0 0 0 #fff, 2px 0 0 0 #fff,
+    -1.5px -1.5px 0 0 #fff, 1.5px -1.5px 0 0 #fff;
+}
+
+.bk-pay-list:has(.bk-mrow[data-method="card"] input:focus-visible) + #bk-card-slot.is-open,
+.bk-pay-list:has(.bk-mrow[data-method="card"] input:focus-visible) + #bk-fail-card-slot.is-open {
+  box-shadow: 0 2px 0 0 #fff, -2px 0 0 0 #fff, 2px 0 0 0 #fff,
+    -1.5px 1.5px 0 0 #fff, 1.5px 1.5px 0 0 #fff;
 }
 
 .bk-mrow input {
@@ -3583,10 +3599,13 @@ a.bk-btn {
 }
 
 .bk-it-vp {
-  background: #d2470e;
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.8rem;
+  background: #ff5b24;
+}
+
+.bk-it-vp svg {
+  width: 17px;
+  height: 15px;
+  margin-top: 2px;
 }
 
 .bk-it-cd {
@@ -3661,7 +3680,7 @@ a.bk-btn {
 
 #bk-card-slot.is-open,
 #bk-fail-card-slot.is-open {
-  border: 1px solid #fff;
+  border: 1px solid #2a2a2e;
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #1c1c1f;
